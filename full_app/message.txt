@@ -1,0 +1,284 @@
+Yes — the clean way is to store each VFX as a filter snippet, let the agent return a list of effect names, then convert that list into one FFmpeg `-vf` chain by joining the snippets with commas.
+
+Basic idea:
+
+```python
+GAMEPLAY_VFX = {
+    "light blur": "gblur=sigma=1.5",
+    "moderate blur": "gblur=sigma=3.0",
+    "heavy blur": "gblur=sigma=6.0",
+
+    "light sharpen": "unsharp=5:5:0.6:5:5:0.0",
+    "moderate sharpen": "unsharp=5:5:1.2:5:5:0.0",
+    "heavy sharpen": "unsharp=5:5:2.0:5:5:0.0",
+
+    "light saturation boost": "eq=saturation=1.15",
+    "moderate saturation boost": "eq=saturation=1.35",
+    "heavy saturation boost": "eq=saturation=1.70",
+
+    "light contrast pop": "eq=contrast=1.08",
+    "moderate contrast pop": "eq=contrast=1.18",
+    "heavy contrast pop": "eq=contrast=1.32",
+
+    "light film grain": "noise=alls=6:allf=t+u",
+    "moderate film grain": "noise=alls=12:allf=t+u",
+    "heavy film grain": "noise=alls=20:allf=t+u",
+}
+```
+
+Then if the agent outputs:
+
+```python
+chosen_vfx = [
+    "moderate blur",
+    "heavy saturation boost",
+    "light film grain",
+]
+```
+
+you build:
+
+```python
+vf_string = ",".join(GAMEPLAY_VFX[name] for name in chosen_vfx)
+print(vf_string)
+```
+
+That becomes:
+
+```python
+"gblur=sigma=3.0,eq=saturation=1.70,noise=alls=20:allf=t+u"
+```
+
+and you pass it to FFmpeg:
+
+```bash
+ffmpeg -i input.mp4 -vf "gblur=sigma=3.0,eq=saturation=1.70,noise=alls=20:allf=t+u" output.mp4
+```
+
+A better production version is to use a helper function with validation:
+
+```python
+GAMEPLAY_VFX = {
+    "light blur": "gblur=sigma=1.5",
+    "moderate blur": "gblur=sigma=3.0",
+    "heavy blur": "gblur=sigma=6.0",
+
+    "light sharpen": "unsharp=5:5:0.6:5:5:0.0",
+    "moderate sharpen": "unsharp=5:5:1.2:5:5:0.0",
+    "heavy sharpen": "unsharp=5:5:2.0:5:5:0.0",
+
+    "light saturation boost": "eq=saturation=1.15",
+    "moderate saturation boost": "eq=saturation=1.35",
+    "heavy saturation boost": "eq=saturation=1.70",
+
+    "light contrast pop": "eq=contrast=1.08",
+    "moderate contrast pop": "eq=contrast=1.18",
+    "heavy contrast pop": "eq=contrast=1.32",
+
+    "light film grain": "noise=alls=6:allf=t+u",
+    "moderate film grain": "noise=alls=12:allf=t+u",
+    "heavy film grain": "noise=alls=20:allf=t+u",
+}
+
+
+def build_vf_chain(vfx_list, vfx_dict=GAMEPLAY_VFX):
+    filters = []
+    unknown = []
+
+    for effect_name in vfx_list:
+        cmd = vfx_dict.get(effect_name)
+        if cmd is None:
+            unknown.append(effect_name)
+        else:
+            filters.append(cmd)
+
+    if unknown:
+        raise ValueError(f"Unknown VFX: {unknown}")
+
+    return ",".join(filters)
+```
+
+Usage:
+
+```python
+chosen_vfx = [
+    "moderate blur",
+    "heavy saturation boost",
+    "light film grain",
+]
+
+vf_chain = build_vf_chain(chosen_vfx)
+print(vf_chain)
+```
+
+If you want the agent to return a full edit object, that works even better:
+
+```python
+edit_plan = {
+    "vfx": [
+        "moderate blur",
+        "heavy saturation boost",
+        "light film grain",
+    ]
+}
+
+vf_chain = build_vf_chain(edit_plan["vfx"])
+```
+
+The one thing to watch is **order**. FFmpeg applies filters left to right, so:
+
+```python
+["moderate blur", "heavy sharpen"]
+```
+
+is not the same as:
+
+```python
+["heavy sharpen", "moderate blur"]
+```
+
+For gameplay edits, a good default order is:
+
+1. geometry/distortion effects
+2. blur/sharpen
+3. color effects
+4. grain/noise
+5. pixelation or destructive meme effects last
+
+So you may want to sort the chosen effects before joining them.
+
+Example with automatic ordering:
+
+```python
+GAMEPLAY_VFX = {
+    "light blur": {
+        "filter": "gblur=sigma=1.5",
+        "category": "blur",
+    },
+    "moderate blur": {
+        "filter": "gblur=sigma=3.0",
+        "category": "blur",
+    },
+    "heavy blur": {
+        "filter": "gblur=sigma=6.0",
+        "category": "blur",
+    },
+
+    "light sharpen": {
+        "filter": "unsharp=5:5:0.6:5:5:0.0",
+        "category": "sharpen",
+    },
+    "moderate sharpen": {
+        "filter": "unsharp=5:5:1.2:5:5:0.0",
+        "category": "sharpen",
+    },
+    "heavy sharpen": {
+        "filter": "unsharp=5:5:2.0:5:5:0.0",
+        "category": "sharpen",
+    },
+
+    "light saturation boost": {
+        "filter": "eq=saturation=1.15",
+        "category": "color",
+    },
+    "moderate saturation boost": {
+        "filter": "eq=saturation=1.35",
+        "category": "color",
+    },
+    "heavy saturation boost": {
+        "filter": "eq=saturation=1.70",
+        "category": "color",
+    },
+
+    "light film grain": {
+        "filter": "noise=alls=6:allf=t+u",
+        "category": "grain",
+    },
+    "moderate film grain": {
+        "filter": "noise=alls=12:allf=t+u",
+        "category": "grain",
+    },
+    "heavy film grain": {
+        "filter": "noise=alls=20:allf=t+u",
+        "category": "grain",
+    },
+}
+
+CATEGORY_ORDER = {
+    "distortion": 0,
+    "blur": 1,
+    "sharpen": 2,
+    "color": 3,
+    "grain": 4,
+    "pixelate": 5,
+}
+
+
+def build_ordered_vf_chain(vfx_list, vfx_dict=GAMEPLAY_VFX):
+    selected = []
+    for effect_name in vfx_list:
+        if effect_name not in vfx_dict:
+            raise ValueError(f"Unknown VFX: {effect_name}")
+        selected.append(vfx_dict[effect_name])
+
+    selected.sort(key=lambda x: CATEGORY_ORDER.get(x["category"], 999))
+    return ",".join(item["filter"] for item in selected)
+```
+
+So your agent can stay simple. It only returns names like:
+
+```python
+[
+    "moderate blur",
+    "heavy saturation boost",
+    "light film grain"
+]
+```
+
+and your pipeline does the rest.
+
+Best structure for your app is:
+
+* agent chooses VFX names only
+* backend validates names
+* backend sorts them in safe order
+* backend joins them into one `-vf` chain
+* FFmpeg applies the final chain
+
+That way the model never writes raw FFmpeg itself.
+
+A nice final pattern is this:
+
+```python
+def apply_vfx_list(input_path, output_path, vfx_list):
+    import subprocess
+
+    vf_chain = build_ordered_vf_chain(vfx_list)
+
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i", input_path,
+        "-vf", vf_chain,
+        output_path,
+    ]
+
+    subprocess.run(cmd, check=True)
+```
+
+Example:
+
+```python
+apply_vfx_list(
+    "input.mp4",
+    "output.mp4",
+    ["moderate blur", "heavy saturation boost", "light film grain"]
+)
+```
+
+If you want, I can write you a fuller version with:
+
+* VFX categories
+* incompatibility rules
+* deduping
+* per-clip timed VFX via `-filter_complex` rather than just one global `-vf` chain

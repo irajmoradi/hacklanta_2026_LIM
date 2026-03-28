@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Gameplay Clip Editor</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0a0a0a; color: #e0e0e0; min-height: 100vh; }
+  .app { max-width: 1000px; margin: 0 auto; padding: 2rem; }
+
+  h1 { font-size: 1.6rem; color: #8ab4f8; margin-bottom: 0.3rem; }
+  .subtitle { color: #666; font-size: 0.85rem; margin-bottom: 2rem; }
+  .badge { font-size: 0.75rem; background: #1e3a5f; padding: 0.15rem 0.5rem; border-radius: 4px; margin-left: 0.5rem; vertical-align: middle; }
+
+  /* Pipeline steps */
+  .step { background: #141414; border: 1px solid #222; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+  .step.disabled { opacity: 0.4; pointer-events: none; }
+  .step-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
+  .step-num { background: #1e3a5f; color: #8ab4f8; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 700; flex-shrink: 0; }
+  .step-num.done { background: #1b5e20; color: #81c784; }
+  .step-title { font-size: 1.1rem; font-weight: 600; }
+
+  /* Form elements */
+  .drop-zone { border: 2px dashed #333; border-radius: 10px; padding: 2rem; text-align: center; cursor: pointer; transition: border-color 0.2s; }
+  .drop-zone:hover, .drop-zone.dragover { border-color: #8ab4f8; }
+  .drop-zone input { display: none; }
+  .drop-zone p { color: #666; }
+  .file-info { color: #8ab4f8; margin-top: 0.5rem; font-size: 0.9rem; }
+
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 0.5rem; margin-top: 1rem; }
+  .meta-item { background: #1a1a1a; padding: 0.5rem 0.75rem; border-radius: 6px; }
+  .meta-label { font-size: 0.7rem; color: #666; text-transform: uppercase; }
+  .meta-value { font-size: 0.95rem; color: #e0e0e0; }
+
+  textarea, input[type="number"] { width: 100%; background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; border-radius: 8px; padding: 0.65rem; font-size: 0.85rem; font-family: inherit; resize: vertical; }
+  textarea:focus, input:focus { outline: none; border-color: #8ab4f8; }
+  textarea { min-height: 80px; }
+  label { display: block; font-size: 0.8rem; font-weight: 600; color: #999; margin-bottom: 0.3rem; margin-top: 0.75rem; }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+  button { background: #8ab4f8; color: #0a0a0a; border: none; padding: 0.65rem 1.5rem; border-radius: 8px; font-size: 0.95rem; font-weight: 600; cursor: pointer; margin-top: 0.75rem; }
+  button:hover { background: #aecbfa; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.secondary { background: #333; color: #e0e0e0; }
+  button.secondary:hover { background: #444; }
+
+  .status { color: #888; font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; }
+  .status.error { color: #f28b82; }
+
+  /* Clips cards */
+  .clips-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; max-height: 400px; overflow-y: auto; }
+  .clip-card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 8px; padding: 0.75rem; display: flex; align-items: center; gap: 0.75rem; }
+  .clip-type { font-size: 0.75rem; font-weight: 700; min-width: 3rem; text-align: center; padding: 0.2rem 0.4rem; border-radius: 4px; text-transform: uppercase; }
+  .clip-type.good { color: #81c784; background: #1b3a1b; }
+  .clip-type.bad { color: #f28b82; background: #3a1b1b; }
+  .clip-time { color: #8ab4f8; font-family: monospace; font-size: 0.85rem; white-space: nowrap; cursor: pointer; text-decoration: underline; text-decoration-style: dotted; }
+  .clip-time:hover { color: #aecbfa; }
+  .clip-desc { font-size: 0.85rem; color: #ccc; flex: 1; }
+  .clip-anchor { font-size: 0.75rem; color: #666; font-style: italic; }
+
+  /* Source video preview */
+  .source-preview { margin-top: 0.75rem; }
+  .source-preview video { max-width: 100%; border-radius: 8px; max-height: 300px; }
+  .preview-note { font-size: 0.75rem; color: #666; margin-top: 0.3rem; }
+
+  /* Edit plan JSON editor */
+  .json-editor { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8rem; min-height: 250px; }
+
+  /* Toggle button for raw JSON */
+  .toggle-raw { background: none; border: 1px solid #333; color: #888; font-size: 0.75rem; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; margin-top: 0.5rem; width: auto; }
+  .toggle-raw:hover { border-color: #8ab4f8; color: #8ab4f8; }
+  .raw-json { background: #111; border: 1px solid #222; border-radius: 8px; padding: 0.75rem; margin-top: 0.5rem; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.75rem; white-space: pre-wrap; max-height: 400px; overflow-y: auto; display: none; color: #aaa; }
+
+  /* Log viewer */
+  .log-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #111; border-top: 1px solid #222; z-index: 100; transition: height 0.2s; }
+  .log-bar .log-toggle { display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 1rem; cursor: pointer; color: #888; font-size: 0.8rem; }
+  .log-bar .log-toggle:hover { color: #8ab4f8; }
+  .log-content { max-height: 250px; overflow-y: auto; padding: 0 1rem 0.5rem; font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.75rem; white-space: pre-wrap; color: #999; display: none; }
+  .log-content.open { display: block; }
+
+  /* Download / preview */
+  video { max-width: 100%; border-radius: 8px; margin-top: 1rem; }
+  .download-btn { display: inline-block; background: #1b5e20; color: #81c784; text-decoration: none; padding: 0.65rem 1.5rem; border-radius: 8px; font-weight: 600; margin-top: 0.75rem; }
+  .download-btn:hover { background: #2e7d32; }
+
+  /* Bottom padding so log bar doesn't cover content */
+  .app { padding-bottom: 4rem; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>AI Gameplay Clip Editor <span class="badge" id="modelBadge"></span></h1>
+  <p class="subtitle">Upload gameplay footage → AI finds highlights → AI plans the edit → FFmpeg renders your montage</p>
+
+  <!-- ── Step 0: Upload ──────────────────────────────────────────────── -->
+  <div class="step" id="step0">
+    <div class="step-header">
+      <div class="step-num" id="step0num">1</div>
+      <div class="step-title">Upload Gameplay Video</div>
+    </div>
+    <div class="drop-zone" id="dropZone">
+      <p>Drop .mp4 here or click to browse</p>
+      <div class="file-info" id="fileInfo"></div>
+      <input type="file" id="fileInput" accept="video/mp4,video/*">
+    </div>
+    <div class="meta-grid" id="metaGrid" style="display:none"></div>
+    <div class="status" id="uploadStatus"></div>
+  </div>
+
+  <!-- ── Step 1: Analyze ─────────────────────────────────────────────── -->
+  <div class="step disabled" id="step1">
+    <div class="step-header">
+      <div class="step-num" id="step1num">2</div>
+      <div class="step-title">Find Highlight Clips (Gemini)</div>
+    </div>
+    <label>Additional prompt (optional)</label>
+    <textarea id="analyzePrompt" placeholder="e.g. Focus on kills and clutch plays, ignore downtime..."></textarea>
+    <div style="margin-top: 0.75rem; display: flex; align-items: center; gap: 1rem;">
+      <label style="margin: 0;">Split video into:</label>
+      <select id="splitSelect" style="background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; border-radius: 6px; padding: 0.4rem 0.8rem; font-size: 0.85rem;">
+        <option value="1">No split (whole video)</option>
+        <option value="2">2 halves</option>
+        <option value="3">3 thirds</option>
+        <option value="4" selected>4 quarters</option>
+      </select>
+    </div>
+    <button id="analyzeBtn" onclick="runAnalyze()">Find Clips</button>
+    <div class="status" id="analyzeStatus"></div>
+    <div class="source-preview" id="sourcePreview" style="display:none">
+      <video id="sourceVideo" controls></video>
+      <p class="preview-note">Click any clip timestamp to jump to that moment and verify it's correct. Adjust times in the edit plan JSON if needed.</p>
+    </div>
+    <div class="clips-list" id="clipsList"></div>
+    <button class="toggle-raw" id="toggleClipsJson" style="display:none" onclick="toggleRaw('clipsRaw')">Show Raw JSON</button>
+    <div class="raw-json" id="clipsRaw"></div>
+  </div>
+
+  <!-- ── Step 2: Plan Edit ───────────────────────────────────────────── -->
+  <div class="step disabled" id="step2">
+    <div class="step-header">
+      <div class="step-num" id="step2num">3</div>
+      <div class="step-title">Plan the Edit (Gemini)</div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Max output duration (seconds)</label>
+        <input type="number" id="maxDuration" value="180" min="10" max="600">
+      </div>
+      <div>
+        <label>Edit Style</label>
+        <select id="editStyle" style="width:100%; background: #1a1a1a; color: #e0e0e0; border: 1px solid #333; border-radius: 8px; padding: 0.65rem; font-size: 0.85rem;">
+        </select>
+      </div>
+    </div>
+    <label>Additional edit instructions (optional)</label>
+    <textarea id="planPrompt" rows="2" placeholder="e.g. Start with the most intense clip, use slow_motion for kills..."></textarea>
+    <button id="planBtn" onclick="runPlan()">Generate Edit Plan</button>
+    <div class="status" id="planStatus"></div>
+    <label>Edit Plan JSON <span style="font-weight:400;color:#666">(editable — modify before rendering)</span></label>
+    <textarea id="editPlanJson" class="json-editor" style="display:none"></textarea>
+  </div>
+
+  <!-- ── Step 3: Render ──────────────────────────────────────────────── -->
+  <div class="step disabled" id="step3">
+    <div class="step-header">
+      <div class="step-num" id="step3num">4</div>
+      <div class="step-title">Render with FFmpeg</div>
+    </div>
+    <button id="renderBtn" onclick="runRender()">Render Montage</button>
+    <div class="status" id="renderStatus"></div>
+    <div id="outputArea" style="display:none">
+      <video id="outputVideo" controls></video>
+      <br>
+      <a class="download-btn" id="downloadLink" href="#" download>Download Final Edit</a>
+    </div>
+  </div>
+</div>
+
+<!-- Log bar at bottom -->
+<div class="log-bar" id="logBar">
+  <div class="log-toggle" onclick="toggleLog()">
+    <span>Job Log</span>
+    <span id="logArrow">^</span>
+  </div>
+  <div class="log-content" id="logContent">No job started yet.</div>
+</div>
+
+<script>
+let jobId = null;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+fetch('/api/info').then(r => r.json()).then(d => {
+  document.getElementById('modelBadge').textContent = d.model;
+  // Populate edit style dropdown
+  if (d.edit_styles) {
+    const sel = document.getElementById('editStyle');
+    sel.innerHTML = Object.entries(d.edit_styles).map(([k, v]) =>
+      `<option value="${k}"${k === 'hype_montage' ? ' selected' : ''}>${v}</option>`
+    ).join('');
+  }
+});
+
+// ── Log & Raw JSON helpers ────────────────────────────────────────────────────
+function toggleRaw(id) {
+  const el = document.getElementById(id);
+  const btn = el.previousElementSibling;
+  if (el.style.display === 'block') {
+    el.style.display = 'none';
+    btn.textContent = btn.textContent.replace('Hide', 'Show');
+  } else {
+    el.style.display = 'block';
+    btn.textContent = btn.textContent.replace('Show', 'Hide');
+  }
+}
+
+function toggleLog() {
+  const content = document.getElementById('logContent');
+  content.classList.toggle('open');
+  document.getElementById('logArrow').textContent = content.classList.contains('open') ? 'v' : '^';
+  if (content.classList.contains('open') && jobId) refreshLog();
+}
+
+function refreshLog() {
+  if (!jobId) return;
+  fetch('/api/log/' + jobId).then(r => r.text()).then(t => {
+    document.getElementById('logContent').textContent = t;
+  });
+}
+
+// ── Step 0: Upload ────────────────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); if (e.dataTransfer.files.length) uploadFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => { if (fileInput.files.length) uploadFile(fileInput.files[0]); });
+
+async function uploadFile(file) {
+  const info = document.getElementById('fileInfo');
+  const status = document.getElementById('uploadStatus');
+  info.textContent = file.name + ' (' + (file.size / 1048576).toFixed(0) + ' MB)';
+  status.textContent = 'Uploading to server...';
+  status.className = 'status';
+
+  const t0 = Date.now();
+  const timer = setInterval(() => {
+    status.textContent = 'Uploading to server... (' + Math.round((Date.now() - t0) / 1000) + 's)';
+  }, 1000);
+
+  const form = new FormData();
+  form.append('video', file);
+
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: form });
+    clearInterval(timer);
+    const data = await resp.json();
+    if (data.error) { status.textContent = data.error; status.className = 'status error'; return; }
+
+    jobId = data.job_id;
+    status.textContent = 'Uploaded! Job ID: ' + jobId;
+    refreshLog();
+
+    // Show metadata
+    const meta = data.meta;
+    const grid = document.getElementById('metaGrid');
+    grid.style.display = 'grid';
+    grid.innerHTML = [
+      ['Duration', Math.round(meta.duration) + 's (' + (meta.duration/60).toFixed(1) + 'min)'],
+      ['Resolution', meta.width + 'x' + meta.height],
+      ['FPS', meta.fps],
+      ['Video', meta.video_codec],
+      ['Audio', meta.audio_codec],
+    ].map(([l,v]) => `<div class="meta-item"><div class="meta-label">${l}</div><div class="meta-value">${v}</div></div>`).join('');
+
+    document.getElementById('step0num').classList.add('done');
+    document.getElementById('step1').classList.remove('disabled');
+  } catch (e) {
+    clearInterval(timer);
+    status.textContent = 'Upload failed: ' + e.message;
+    status.className = 'status error';
+  }
+}
+
+// ── Step 1: Analyze ───────────────────────────────────────────────────────────
+async function runAnalyze() {
+  const btn = document.getElementById('analyzeBtn');
+  const status = document.getElementById('analyzeStatus');
+  btn.disabled = true;
+  status.className = 'status';
+
+  const splits = parseInt(document.getElementById('splitSelect').value) || 1;
+  const splitLabel = splits > 1 ? ' (' + splits + ' segments in parallel)' : '';
+
+  const t0 = Date.now();
+  const timer = setInterval(() => {
+    const s = Math.round((Date.now() - t0) / 1000);
+    status.textContent = s < 15
+      ? 'Uploading video to Gemini' + splitLabel + '... (' + s + 's)'
+      : 'Gemini is analyzing the video' + splitLabel + '... (' + s + 's) — this takes 1-2 min for long videos';
+  }, 1000);
+  status.textContent = 'Uploading video to Gemini' + splitLabel + '... (0s)';
+
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: jobId, prompt: document.getElementById('analyzePrompt').value, splits: splits }),
+    });
+    clearInterval(timer);
+    const data = await resp.json();
+    if (data.error) { status.textContent = data.error; status.className = 'status error'; btn.disabled = false; return; }
+
+    status.textContent = `Found ${data.clips.length} clips in ${data.elapsed}s`;
+    renderClips(data.clips);
+
+    // Show raw JSON toggle
+    document.getElementById('clipsRaw').textContent = JSON.stringify(data.clips, null, 2);
+    document.getElementById('toggleClipsJson').style.display = 'inline-block';
+
+    refreshLog();
+    document.getElementById('step1num').classList.add('done');
+    document.getElementById('step2').classList.remove('disabled');
+  } catch (e) {
+    clearInterval(timer);
+    status.textContent = 'Error: ' + e.message;
+    status.className = 'status error';
+  }
+  btn.disabled = false;
+}
+
+function renderClips(clips) {
+  // Show source video for preview
+  const preview = document.getElementById('sourcePreview');
+  preview.style.display = 'block';
+  document.getElementById('sourceVideo').src = '/api/stream/' + jobId;
+
+  const list = document.getElementById('clipsList');
+  list.innerHTML = clips.map((c, i) => {
+    const type = c.type || 'good';
+    const startSec = toSeconds(c.start_seconds || c.start);
+    const endSec = toSeconds(c.end_seconds || c.end);
+    const start = fmtTime(startSec);
+    const end = fmtTime(endSec);
+    return `<div class="clip-card">
+      <div class="clip-type ${type}">${type}</div>
+      <div class="clip-time" onclick="seekTo(${startSec})" title="Click to preview at ${start}">${start} → ${end}</div>
+      <div class="clip-desc">${c.description}</div>
+    </div>`;
+  }).join('');
+}
+
+function toSeconds(val) {
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string' && val.includes(':')) {
+    const parts = val.split(':');
+    return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+  }
+  return parseFloat(val) || 0;
+}
+
+function seekTo(seconds) {
+  const video = document.getElementById('sourceVideo');
+  video.currentTime = seconds;
+  video.play();
+  video.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function fmtTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = (s % 60).toFixed(1);
+  return m + ':' + sec.padStart(4, '0');
+}
+
+// ── Step 2: Plan ──────────────────────────────────────────────────────────────
+async function runPlan() {
+  const btn = document.getElementById('planBtn');
+  const status = document.getElementById('planStatus');
+  btn.disabled = true;
+  status.className = 'status';
+
+  const t0 = Date.now();
+  const timer = setInterval(() => {
+    status.textContent = 'Gemini is planning the edit... (' + Math.round((Date.now() - t0) / 1000) + 's)';
+  }, 1000);
+  status.textContent = 'Gemini is planning the edit... (0s)';
+
+  try {
+    const resp = await fetch('/api/plan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        job_id: jobId,
+        max_duration: parseInt(document.getElementById('maxDuration').value) || 180,
+        edit_style: document.getElementById('editStyle').value,
+        prompt: document.getElementById('planPrompt').value,
+      }),
+    });
+    clearInterval(timer);
+    const data = await resp.json();
+    if (data.error) { status.textContent = data.error; status.className = 'status error'; btn.disabled = false; return; }
+
+    status.textContent = `Edit plan ready: ${data.edit_plan.segments.length} segments (${data.elapsed}s)`;
+    const editor = document.getElementById('editPlanJson');
+    editor.value = JSON.stringify(data.edit_plan, null, 2);
+    editor.style.display = 'block';
+
+    refreshLog();
+    document.getElementById('step2num').classList.add('done');
+    document.getElementById('step3').classList.remove('disabled');
+  } catch (e) {
+    clearInterval(timer);
+    status.textContent = 'Error: ' + e.message;
+    status.className = 'status error';
+  }
+  btn.disabled = false;
+}
+
+// ── Step 3: Render ────────────────────────────────────────────────────────────
+async function runRender() {
+  const btn = document.getElementById('renderBtn');
+  const status = document.getElementById('renderStatus');
+  btn.disabled = true;
+  status.className = 'status';
+
+  // Parse edit plan from the editor (user may have modified it)
+  let editPlan;
+  try {
+    editPlan = JSON.parse(document.getElementById('editPlanJson').value);
+  } catch (e) {
+    status.textContent = 'Invalid JSON in edit plan editor';
+    status.className = 'status error';
+    btn.disabled = false;
+    return;
+  }
+
+  const t0 = Date.now();
+  const timer = setInterval(() => {
+    status.textContent = 'FFmpeg rendering... (' + Math.round((Date.now() - t0) / 1000) + 's) — each segment is extracted & processed';
+  }, 1000);
+  status.textContent = 'FFmpeg rendering... (0s)';
+
+  try {
+    const resp = await fetch('/api/render', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job_id: jobId, edit_plan: editPlan }),
+    });
+    clearInterval(timer);
+    const data = await resp.json();
+    if (data.error) { status.textContent = data.error; status.className = 'status error'; btn.disabled = false; return; }
+
+    status.textContent = `Rendered in ${data.elapsed}s!`;
+    refreshLog();
+    document.getElementById('step3num').classList.add('done');
+
+    const area = document.getElementById('outputArea');
+    area.style.display = 'block';
+    document.getElementById('outputVideo').src = data.download_url;
+    document.getElementById('downloadLink').href = data.download_url;
+  } catch (e) {
+    clearInterval(timer);
+    status.textContent = 'Error: ' + e.message;
+    status.className = 'status error';
+  }
+  btn.disabled = false;
+}
+</script>
+</body>
+</html>

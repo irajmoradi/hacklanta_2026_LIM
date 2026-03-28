@@ -1,0 +1,244 @@
+"""FFmpeg command builder and executor — extract segments, overlay SFX, concatenate.
+
+Uses NVENC GPU acceleration when available, falls back to libx264.
+Supports multiple VFX per clip via ordered filter chaining.
+"""
+
+import subprocess
+from pathlib import Path
+
+from models.effects import VIDEO_EFFECTS, SOUND_EFFECTS, build_vf_chain
+
+
+def _detect_nvenc() -> bool:
+    """Check if h264_nvenc is available."""
+    try:
+        r = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-f", "lavfi", "-i", "nullsrc=s=256x256:d=0.1",
+             "-c:v", "h264_nvenc", "-f", "null", "-"],
+            capture_output=True, text=True, timeout=10,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+HAS_NVENC = _detect_nvenc()
+
+
+class FFmpegRunner:
+    def __init__(self, workspace: Path, source: Path, width: int, height: int, fps: float):
+        self.workspace = workspace
+        self.source = source
+        self.width = width
+        self.height = height
+        self.fps = fps
+
+    def _encoder_args(self) -> list[str]:
+        """Return encoder args — NVENC if available, else libx264."""
+        if HAS_NVENC:
+            return ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "22"]
+        return ["-c:v", "libx264", "-crf", "22", "-preset", "veryfast", "-threads", "0"]
+
+    def _run(self, cmd: list[str], label: str = "") -> subprocess.CompletedProcess:
+        print(f"  [ffmpeg] {label}: {' '.join(cmd[:8])}...")
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"FFmpeg failed ({label}): {result.stderr[-500:]}")
+        return result
+
+    def extract_segment(self, index: int, start: float, end: float,
+                        video_effects: list[str] | str = "none",
+                        speed: float = 1.0) -> Path:
+        """Extract a clip from source with optional effects and speed change."""
+        output = self.workspace / f"seg_{index:03d}.mp4"
+
+        cmd = ["ffmpeg", "-y", "-i", str(self.source)]
+        cmd += ["-ss", f"{start:.3f}", "-to", f"{end:.3f}"]
+
+        # Normalize to list
+        if isinstance(video_effects, str):
+            vfx_list = [video_effects] if video_effects != "none" else []
+        else:
+            vfx_list = [v for v in video_effects if v != "none"]
+
+        # Build VFX chain
+        vf_extra, af_extra = build_vf_chain(vfx_list, self.width, self.height, int(self.fps))
+
+        vf_parts = ["setpts=PTS-STARTPTS"]
+        af_parts = ["asetpts=PTS-STARTPTS"]
+
+        # Apply speed
+        if speed != 1.0:
+            vf_parts.append(f"setpts={1.0/speed}*PTS")
+            s = speed
+            while s > 2.0:
+                af_parts.append("atempo=2.0")
+                s /= 2.0
+            while s < 0.5:
+                af_parts.append("atempo=0.5")
+                s *= 2.0
+            af_parts.append(f"atempo={s:.4f}")
+
+        # Append VFX chain (already ordered by category)
+        if vf_extra:
+            # chromatic_aberration uses complex filtergraph — handle separately
+            if ";" in vf_extra:
+                # Can't combine complex filter with simple -vf chain easily
+                # Apply as a separate pass
+                vf_parts.append(f"scale={self.width}:{self.height}:force_original_aspect_ratio=decrease")
+                vf_parts.append(f"pad={self.width}:{self.height}:(ow-iw)/2:(oh-ih)/2")
+                cmd += ["-vf", ",".join(vf_parts)]
+                cmd += ["-af", ",".join(af_parts)]
+                cmd += self._encoder_args()
+                cmd += ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
+                cmd += [str(output)]
+                self._run(cmd, f"extract seg {index} (pre-chromatic)")
+
+                # Second pass for complex filter
+                output2 = self.workspace / f"seg_{index:03d}_ca.mp4"
+                cmd2 = ["ffmpeg", "-y", "-i", str(output),
+                        "-filter_complex", vf_extra]
+                cmd2 += self._encoder_args()
+                cmd2 += ["-c:a", "aac", "-b:a", "192k", str(output2)]
+                self._run(cmd2, f"extract seg {index} (chromatic)")
+                output.unlink(missing_ok=True)
+                output2.rename(output)
+                return output
+            else:
+                vf_parts.append(vf_extra)
+
+        if af_extra:
+            af_parts.append(af_extra)
+
+        # Force consistent output resolution for concat
+        vf_parts.append(f"scale={self.width}:{self.height}:force_original_aspect_ratio=decrease")
+        vf_parts.append(f"pad={self.width}:{self.height}:(ow-iw)/2:(oh-ih)/2")
+
+        cmd += ["-vf", ",".join(vf_parts)]
+        cmd += ["-af", ",".join(af_parts)]
+        cmd += self._encoder_args()
+        cmd += ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
+        cmd += [str(output)]
+
+        self._run(cmd, f"extract seg {index}")
+        return output
+
+    def overlay_sfx(self, segment_path: Path, sfx_entries: list[dict], index: int) -> Path:
+        """Mix sound effect files into a segment at specified offsets."""
+        valid = []
+        for sfx in sfx_entries:
+            sfx_info = SOUND_EFFECTS.get(sfx.get("sfx_key", ""), {})
+            fpath = sfx_info.get("file")
+            if fpath and Path(fpath).exists():
+                valid.append({"file": fpath, "offset": sfx.get("offset_in_segment", 0.0)})
+
+        if not valid:
+            return segment_path
+
+        output = self.workspace / f"seg_{index:03d}_sfx.mp4"
+        cmd = ["ffmpeg", "-y", "-i", str(segment_path)]
+
+        filter_parts = []
+        for i, sfx in enumerate(valid, start=1):
+            cmd += ["-i", sfx["file"]]
+            delay_ms = int(sfx["offset"] * 1000)
+            filter_parts.append(
+                f"[{i}:a]adelay={delay_ms}|{delay_ms},volume=0.7[sfx{i}]"
+            )
+
+        sfx_labels = "".join(f"[sfx{i}]" for i in range(1, len(valid) + 1))
+        mix_count = 1 + len(valid)
+        filter_parts.append(
+            f"[0:a]{sfx_labels}amix=inputs={mix_count}:duration=first[outa]"
+        )
+
+        cmd += ["-filter_complex", ";".join(filter_parts)]
+        cmd += ["-map", "0:v", "-map", "[outa]"]
+        cmd += ["-c:v", "copy", "-c:a", "aac", "-b:a", "192k"]
+        cmd += [str(output)]
+
+        self._run(cmd, f"sfx overlay seg {index}")
+        return output
+
+    def apply_transition(self, segment_path: Path, transition: str, index: int) -> Path:
+        """Apply an entry transition (fade_in, flash_white) to a segment."""
+        if transition in ("cut", "none"):
+            return segment_path
+
+        output = self.workspace / f"seg_{index:03d}_tr.mp4"
+
+        if transition == "fade_in":
+            vf = "fade=t=in:st=0:d=0.5"
+            af = "afade=t=in:st=0:d=0.5"
+        elif transition == "flash_white":
+            vf = "fade=t=in:st=0:d=0.2:color=white"
+            af = "afade=t=in:st=0:d=0.2"
+        else:
+            return segment_path
+
+        cmd = ["ffmpeg", "-y", "-i", str(segment_path)]
+        cmd += ["-vf", vf, "-af", af]
+        cmd += self._encoder_args()
+        cmd += ["-c:a", "aac", "-b:a", "192k"]
+        cmd += [str(output)]
+
+        self._run(cmd, f"transition seg {index}")
+        return output
+
+    def concatenate(self, segment_paths: list[Path]) -> Path:
+        """Concatenate segments using the concat demuxer."""
+        concat_file = self.workspace / "concat_list.txt"
+        with open(concat_file, "w") as f:
+            for p in segment_paths:
+                f.write(f"file '{p.resolve()}'\n")
+
+        output = self.workspace / "final_edit.mp4"
+        cmd = [
+            "ffmpeg", "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", str(concat_file),
+            "-c", "copy",
+            str(output),
+        ]
+        self._run(cmd, "concatenate")
+        return output
+
+    def render(self, edit_plan: dict) -> Path:
+        """Full render pipeline: extract → sfx → transitions → concat."""
+        segments = edit_plan.get("segments", [])
+        if not segments:
+            raise ValueError("Edit plan has no segments")
+
+        encoder = "NVENC" if HAS_NVENC else "libx264"
+        print(f"[render] Using {encoder} encoder for {len(segments)} segments")
+
+        final_paths = []
+        for i, seg in enumerate(segments):
+            # Support both old single video_effect and new list video_effects
+            vfx = seg.get("video_effects", seg.get("video_effect", "none"))
+
+            print(f"[render] Segment {i+1}/{len(segments)}: "
+                  f"{seg['source_start']:.1f}s-{seg['source_end']:.1f}s "
+                  f"effects={vfx} speed={seg.get('speed', 1.0)}x")
+
+            # 1. Extract with effects + speed
+            path = self.extract_segment(
+                index=i,
+                start=seg["source_start"],
+                end=seg["source_end"],
+                video_effects=vfx,
+                speed=seg.get("speed", 1.0),
+            )
+
+            # 2. Overlay sound effects
+            path = self.overlay_sfx(path, seg.get("sound_effects", []), i)
+
+            # 3. Apply entry transition
+            path = self.apply_transition(path, seg.get("transition_in", "cut"), i)
+
+            final_paths.append(path)
+
+        # 4. Concatenate
+        print(f"[render] Concatenating {len(final_paths)} segments...")
+        return self.concatenate(final_paths)
