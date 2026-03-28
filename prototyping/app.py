@@ -13,6 +13,7 @@ Expects GEMINI_API_KEY in ../.env or environment.
 import json
 import os
 import re
+import shutil
 import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -35,18 +36,69 @@ MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
 client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 
 
+def _resolve_ffmpeg_tools() -> tuple[str | None, str | None]:
+    """Find ffmpeg/ffprobe from env, PATH, or imageio-ffmpeg if installed."""
+    ffmpeg = os.getenv("FFMPEG_PATH") or shutil.which("ffmpeg")
+    ffprobe = os.getenv("FFPROBE_PATH") or shutil.which("ffprobe")
+
+    if ffmpeg and ffprobe:
+        return ffmpeg, ffprobe
+
+    try:
+        import imageio_ffmpeg
+
+        ffmpeg = ffmpeg or imageio_ffmpeg.get_ffmpeg_exe()
+        ffprobe_candidate = Path(ffmpeg).with_name("ffprobe.exe")
+        if ffprobe_candidate.exists():
+            ffprobe = ffprobe or str(ffprobe_candidate)
+    except Exception:
+        pass
+
+    return ffmpeg, ffprobe
+
+
+FFMPEG_EXE, FFPROBE_EXE = _resolve_ffmpeg_tools()
+
+
+def _require_ffmpeg() -> str:
+    """Return discovered ffmpeg executable or raise a user-facing setup error."""
+    if not FFMPEG_EXE:
+        raise RuntimeError(
+            "FFmpeg is required for video splitting but was not found. "
+            "Install ffmpeg and add it to PATH, or set FFMPEG_PATH."
+        )
+    return FFMPEG_EXE
+
+
 def _get_duration(path: Path) -> float:
     """Get video duration in seconds via ffprobe."""
+    ffmpeg = _require_ffmpeg()
+
+    if FFPROBE_EXE:
+        result = subprocess.run(
+            [FFPROBE_EXE, "-v", "quiet", "-print_format", "json", "-show_format", str(path)],
+            capture_output=True, text=True,
+        )
+        info = json.loads(result.stdout)
+        return float(info["format"]["duration"])
+
     result = subprocess.run(
-        ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", str(path)],
-        capture_output=True, text=True,
+        [ffmpeg, "-i", str(path), "-f", "null", "-"],
+        capture_output=True,
+        text=True,
     )
-    info = json.loads(result.stdout)
-    return float(info["format"]["duration"])
+    match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", result.stderr)
+    if not match:
+        raise RuntimeError("Could not determine video duration from ffmpeg output.")
+    hours = int(match.group(1))
+    minutes = int(match.group(2))
+    seconds = float(match.group(3))
+    return hours * 3600 + minutes * 60 + seconds
 
 
 def _split_video(path: Path, n_splits: int) -> list[dict]:
     """Split video into n equal segments. Returns list of {path, start, end, index}."""
+    ffmpeg = _require_ffmpeg()
     duration = _get_duration(path)
     seg_dur = duration / n_splits
     segments = []
@@ -56,7 +108,7 @@ def _split_video(path: Path, n_splits: int) -> list[dict]:
         seg_path = path.parent / f"seg_{i}_{path.stem}.mp4"
         # Use -ss before -i for fast seek, re-encode to ensure clean cuts
         result = subprocess.run(
-            ["ffmpeg", "-y",
+            [ffmpeg, "-y",
              "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
              "-i", str(path),
              "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
@@ -355,5 +407,11 @@ def _fmt_time(seconds: float) -> str:
 
 if __name__ == "__main__":
     print(f"Using model: {MODEL}")
+    if FFMPEG_EXE:
+        print(f"Using ffmpeg: {FFMPEG_EXE}")
+    if FFPROBE_EXE:
+        print(f"Using ffprobe: {FFPROBE_EXE}")
+    if not FFMPEG_EXE:
+        print("FFmpeg not found. Split-video mode will return a setup error until ffmpeg is installed.")
     print("Open http://localhost:5000")
     app.run(debug=True, port=5000)
