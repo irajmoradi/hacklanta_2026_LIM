@@ -4,7 +4,11 @@
 
 Upload a gameplay video. Gemini AI finds the best kills and worst deaths. Pick a style. FFmpeg renders a montage with effects, text overlays, and sound — all in minutes.
 
-https://github.com/user-attachments/assets/placeholder
+### Example
+
+| Original Gameplay | AI-Edited Montage |
+|---|---|
+| [Full 31-min Valorant gameplay](https://drive.google.com/file/d/1plFVmIN3r1Shx7UXlOF1LszFt2iG_36M/view?usp=sharing) | [AI-generated highlight reel](https://drive.google.com/file/d/1pXARolaZy-on1HlEyjRBbADaI2eSUSsK/view?usp=sharing) |
 
 ## What It Does
 
