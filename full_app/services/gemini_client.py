@@ -64,3 +64,29 @@ class GeminiVideoClient:
             },
         )
         return json.loads(response.text)
+
+    def generate_thumbnail(self, image_path: str | Path, prompt: str,
+                           output_path: str | Path) -> Path:
+        """Generate a thumbnail image using Gemini image generation."""
+        output_path = Path(output_path)
+        with open(image_path, "rb") as f:
+            img_bytes = f.read()
+
+        response = self.client.models.generate_content(
+            model="gemini-3.1-flash-image-preview",
+            contents=[
+                types.Part.from_bytes(data=img_bytes, mime_type="image/jpeg"),
+                prompt,
+            ],
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+            ),
+        )
+
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, "inline_data") and part.inline_data:
+                with open(output_path, "wb") as f:
+                    f.write(part.inline_data.data)
+                return output_path
+
+        raise RuntimeError("Gemini did not return an image")

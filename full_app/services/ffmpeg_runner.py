@@ -5,6 +5,7 @@ Supports multiple VFX per clip via ordered filter chaining.
 """
 
 import subprocess
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from models.effects import VIDEO_EFFECTS, SOUND_EFFECTS, build_vf_chain
@@ -186,6 +187,39 @@ class FFmpegRunner:
         self._run(cmd, f"transition seg {index}")
         return output
 
+    def image_to_clip(self, image_path: Path, duration: float, label: str = "img") -> Path:
+        """Convert a static image into a video clip with silent audio."""
+        output = self.workspace / f"{label}.mp4"
+        cmd = [
+            "ffmpeg", "-y",
+            "-loop", "1", "-i", str(image_path),
+            "-f", "lavfi", "-i", f"anullsrc=r=48000:cl=stereo",
+            "-t", f"{duration:.2f}",
+            "-vf", f"scale={self.width}:{self.height}:force_original_aspect_ratio=decrease,"
+                   f"pad={self.width}:{self.height}:(ow-iw)/2:(oh-ih)/2,"
+                   f"fade=t=in:st=0:d=0.5,fade=t=out:st={duration-0.5:.2f}:d=0.5",
+            "-shortest",
+            "-pix_fmt", "yuv420p",
+            "-r", str(int(self.fps)),
+        ]
+        cmd += self._encoder_args()
+        cmd += ["-c:a", "aac", "-b:a", "192k", str(output)]
+        self._run(cmd, f"image_to_clip {label}")
+        return output
+
+    def extract_random_frame(self, timestamp: float) -> Path:
+        """Extract a single frame from the source video."""
+        output = self.workspace / f"frame_{int(timestamp)}.jpg"
+        cmd = [
+            "ffmpeg", "-y",
+            "-ss", f"{timestamp:.3f}",
+            "-i", str(self.source),
+            "-frames:v", "1", "-q:v", "2",
+            str(output),
+        ]
+        self._run(cmd, f"extract frame @{timestamp:.1f}s")
+        return output
+
     def concatenate(self, segment_paths: list[Path]) -> Path:
         """Concatenate segments using the concat demuxer."""
         concat_file = self.workspace / "concat_list.txt"
@@ -204,8 +238,31 @@ class FFmpegRunner:
         self._run(cmd, "concatenate")
         return output
 
+    def _render_one_segment(self, i: int, seg: dict) -> tuple[int, Path]:
+        """Render a single segment (extract + sfx + transition). Thread-safe."""
+        vfx = seg.get("video_effects", seg.get("video_effect", "none"))
+
+        print(f"[render] Segment {i+1}: "
+              f"{seg['source_start']:.1f}s-{seg['source_end']:.1f}s "
+              f"effects={vfx} speed={seg.get('speed', 1.0)}x")
+
+        path = self.extract_segment(
+            index=i,
+            start=seg["source_start"],
+            end=seg["source_end"],
+            video_effects=vfx,
+            speed=seg.get("speed", 1.0),
+        )
+        path = self.overlay_sfx(path, seg.get("sound_effects", []), i)
+        path = self.apply_transition(path, seg.get("transition_in", "cut"), i)
+        return i, path
+
     def render(self, edit_plan: dict) -> Path:
-        """Full render pipeline: extract → sfx → transitions → concat."""
+        """Full render pipeline: extract → sfx → transitions → concat.
+
+        Uses NVENC GPU for fast encoding. Segments processed sequentially
+        to avoid NVENC session limits, but each segment encodes fast on GPU.
+        """
         segments = edit_plan.get("segments", [])
         if not segments:
             raise ValueError("Edit plan has no segments")
@@ -215,30 +272,9 @@ class FFmpegRunner:
 
         final_paths = []
         for i, seg in enumerate(segments):
-            # Support both old single video_effect and new list video_effects
-            vfx = seg.get("video_effects", seg.get("video_effect", "none"))
-
-            print(f"[render] Segment {i+1}/{len(segments)}: "
-                  f"{seg['source_start']:.1f}s-{seg['source_end']:.1f}s "
-                  f"effects={vfx} speed={seg.get('speed', 1.0)}x")
-
-            # 1. Extract with effects + speed
-            path = self.extract_segment(
-                index=i,
-                start=seg["source_start"],
-                end=seg["source_end"],
-                video_effects=vfx,
-                speed=seg.get("speed", 1.0),
-            )
-
-            # 2. Overlay sound effects
-            path = self.overlay_sfx(path, seg.get("sound_effects", []), i)
-
-            # 3. Apply entry transition
-            path = self.apply_transition(path, seg.get("transition_in", "cut"), i)
-
+            idx, path = self._render_one_segment(i, seg)
             final_paths.append(path)
 
-        # 4. Concatenate
+        # Concatenate
         print(f"[render] Concatenating {len(final_paths)} segments...")
         return self.concatenate(final_paths)

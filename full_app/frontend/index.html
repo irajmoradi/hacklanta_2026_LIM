@@ -94,6 +94,20 @@
   <h1>AI Gameplay Clip Editor <span class="badge" id="modelBadge"></span></h1>
   <p class="subtitle">Upload gameplay footage → AI finds highlights → AI plans the edit → FFmpeg renders your montage</p>
 
+  <!-- ── API Key (shown only if not in .env) ──────────────────────── -->
+  <div class="step" id="apiKeySection" style="display:none; border-color:#b45309;">
+    <div class="step-header">
+      <div class="step-num" style="background:#78350f;color:#fbbf24;">!</div>
+      <div class="step-title">Gemini API Key Required</div>
+    </div>
+    <p style="color:#888; font-size:0.85rem; margin-bottom:0.75rem;">No API key found in server .env file. Enter your key to get started. Get one free at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:#8ab4f8;">aistudio.google.com/apikey</a></p>
+    <div style="display:flex; gap:0.5rem;">
+      <input type="password" id="apiKeyInput" placeholder="Enter Gemini API key..." style="flex:1; background:#1a1a1a; color:#e0e0e0; border:1px solid #333; border-radius:8px; padding:0.65rem; font-size:0.85rem;">
+      <button onclick="setApiKey()" style="width:auto; margin-top:0;">Set Key</button>
+    </div>
+  </div>
+  <div id="apiKeyDone" style="display:none; color:#81c784; font-size:0.85rem; margin-bottom:0.5rem;">API key set.</div>
+
   <!-- ── Step 0: Upload ──────────────────────────────────────────────── -->
   <div class="step" id="step0">
     <div class="step-header">
@@ -114,6 +128,11 @@
     <div class="step-header">
       <div class="step-num" id="step1num">2</div>
       <div class="step-title">Find Highlight Clips (Gemini)</div>
+    </div>
+    <label>Editing Attitude</label>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.75rem;">
+      <button type="button" id="attNice" onclick="setAttitude('nice')" style="padding:0.6rem; border-radius:8px; font-weight:600; font-size:0.95rem; cursor:pointer; border:2px solid #1b5e20; background:#1b3a1b; color:#81c784;">&#x1F60A; Nice — Hype Reel</button>
+      <button type="button" id="attMean" onclick="setAttitude('mean')" style="padding:0.6rem; border-radius:8px; font-weight:600; font-size:0.95rem; cursor:pointer; border:2px solid #333; background:transparent; color:#888;">&#x1F608; Mean — Roast Reel</button>
     </div>
     <label>Additional prompt (optional)</label>
     <textarea id="analyzePrompt" placeholder="e.g. Focus on kills and clutch plays, ignore downtime..."></textarea>
@@ -168,6 +187,12 @@
       <div class="step-num" id="step3num">4</div>
       <div class="step-title">Render with FFmpeg</div>
     </div>
+    <div style="margin-bottom: 0.75rem; display: flex; align-items: center; gap: 0.75rem;">
+      <label style="margin: 0; cursor: pointer; display: flex; align-items: center; gap: 0.4rem;">
+        <input type="checkbox" id="genThumbnails" checked style="accent-color: #8ab4f8; width: 16px; height: 16px;">
+        Generate AI intro & outro thumbnails
+      </label>
+    </div>
     <button id="renderBtn" onclick="runRender()">Render Montage</button>
     <div class="status" id="renderStatus"></div>
     <div id="outputArea" style="display:none">
@@ -189,6 +214,43 @@
 
 <script>
 let jobId = null;
+let currentAttitude = 'nice';
+let userApiKey = null;
+
+// Check if server has API key, show input if not
+fetch('/api/info').then(r => r.json()).then(d => {
+  if (!d.has_api_key) {
+    document.getElementById('apiKeySection').style.display = 'block';
+  }
+});
+
+function setApiKey() {
+  const input = document.getElementById('apiKeyInput');
+  if (input.value.trim()) {
+    userApiKey = input.value.trim();
+    document.getElementById('apiKeySection').style.display = 'none';
+    document.getElementById('apiKeyDone').style.display = 'block';
+  }
+}
+
+function getHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (userApiKey) h['X-API-Key'] = userApiKey;
+  return h;
+}
+
+function setAttitude(att) {
+  currentAttitude = att;
+  const nice = document.getElementById('attNice');
+  const mean = document.getElementById('attMean');
+  if (att === 'nice') {
+    nice.style.border = '2px solid #1b5e20'; nice.style.background = '#1b3a1b'; nice.style.color = '#81c784';
+    mean.style.border = '2px solid #333'; mean.style.background = 'transparent'; mean.style.color = '#888';
+  } else {
+    mean.style.border = '2px solid #b71c1c'; mean.style.background = '#3a1b1b'; mean.style.color = '#f28b82';
+    nice.style.border = '2px solid #333'; nice.style.background = 'transparent'; nice.style.color = '#888';
+  }
+}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 fetch('/api/info').then(r => r.json()).then(d => {
@@ -307,8 +369,8 @@ async function runAnalyze() {
   try {
     const resp = await fetch('/api/analyze', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: jobId, prompt: document.getElementById('analyzePrompt').value, splits: splits }),
+      headers: getHeaders(),
+      body: JSON.stringify({ job_id: jobId, prompt: document.getElementById('analyzePrompt').value, splits: splits, attitude: currentAttitude }),
     });
     clearInterval(timer);
     const data = await resp.json();
@@ -324,6 +386,9 @@ async function runAnalyze() {
     refreshLog();
     document.getElementById('step1num').classList.add('done');
     document.getElementById('step2').classList.remove('disabled');
+    // Auto-select edit style based on attitude
+    const sel = document.getElementById('editStyle');
+    if (sel) sel.value = currentAttitude === 'mean' ? 'meme_edit' : 'hype_montage';
   } catch (e) {
     clearInterval(timer);
     status.textContent = 'Error: ' + e.message;
@@ -391,7 +456,7 @@ async function runPlan() {
   try {
     const resp = await fetch('/api/plan', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getHeaders(),
       body: JSON.stringify({
         job_id: jobId,
         max_duration: parseInt(document.getElementById('maxDuration').value) || 180,
@@ -446,8 +511,8 @@ async function runRender() {
   try {
     const resp = await fetch('/api/render', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ job_id: jobId, edit_plan: editPlan }),
+      headers: getHeaders(),
+      body: JSON.stringify({ job_id: jobId, edit_plan: editPlan, generate_thumbnails: document.getElementById('genThumbnails').checked }),
     });
     clearInterval(timer);
     const data = await resp.json();

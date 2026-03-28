@@ -9,21 +9,53 @@ Your task is to identify **notable gameplay segments** where the player performs
 ### Player Perspective Requirements
 
 - The player must be **actively playing (alive and in control)** during the segment.
-- You must **strictly verify that the player is NOT spectating**.
-  - Look for on-screen indicators of spectating or death, such as:
-    - Text like "Spectating <playername>"
-    - "Killed by <enemy>"
-    - "Respawn in <X seconds>"
-    - Visible respawn timer/countdown
-    - Killcam overlays or death recap screens
-    - Camera behavior that follows another player instead of direct control
-    - UI elements that differ from normal gameplay HUD
-  - If ANY of these indicators are present -> DO NOT include that segment.
-- You must **strictly verify that the player is alive**.
-  - Look for: Full HUD (abilities, crosshair, ammo, health, etc.), first-person control and input responsiveness.
-  - If the player is dead, in a killcam, spectating, or on a respawn screen -> DO NOT include that segment.
-- If you are **uncertain whether the player is alive or spectating**, DISCARD the segment.
+- You must **strictly verify that the player is NOT spectating or dead**.
 - All highlights and lowlights must be based on **the player's own actions**, NOT teammates or enemies.
+- If you are **uncertain whether the player is alive or spectating**, DISCARD the segment.
+
+#### ALIVE = all of these are visible:
+- Crosshair/reticle in center of screen
+- Full ability bar / HUD at bottom of screen
+- Health bar showing a value
+- Ammo counter visible
+- Player has direct mouse-look control (camera moves with aim)
+
+#### DEAD / SPECTATING — reject if ANY of these are seen:
+
+**Valorant specific:**
+- RIGHT SIDE of screen shows "COMBAT REPORT" panel with damage breakdown (incoming/outgoing numbers)
+- "KILLED BY" text visible on the right side of the screen
+- Bottom-left shows a player name with "GHOST PLAYER" label — this means you are spectating
+- When spectating teammates: right side shows a panel listing alive teammates you can cycle through
+- The player may still appear in first-person view BUT the combat report panel on the right = DEAD
+- No crosshair or ability bar during spectating phase after combat report
+
+**Overwatch / Overwatch 2 specific:**
+- TOP-LEFT shows "ELIMINATED BY [player name]" / "KILLED BY" banner (may be in other languages e.g. "ELIMINADO POR")
+- TOP-RIGHT shows respawn countdown timer (e.g. "RESPAWN IN 5" / "Ressurgirá em 5") — large number in a colored box
+- BOTTOM-CENTER shows "KILL CAM" / "CÂMERA DE ABATES" label — this means you're watching the enemy's kill cam replay
+- "Press * to change hero" prompt visible at bottom
+- Camera shows the ENEMY's perspective during kill cam (not your POV)
+- Screen may have a slight yellow/sepia tint border effect during death
+- After kill cam, camera follows a teammate (spectating mode)
+- No crosshair, no ability cooldowns visible during death/spectating
+
+**Deadlock specific:**
+- BOTTOM-CENTER shows a red/salmon banner reading "Respawn in: XX" with a large countdown number (e.g. 70, 50, 30)
+- "Shop & Upgrade" prompt appears below the respawn timer
+- RIGHT SIDE of screen shows "INCOMING DAMAGE (LAST DEATH)" panel — a damage breakdown list with ability names and damage numbers
+- "Killing Blow" label highlighted on the lethal damage source
+- ENTIRE SCREEN goes GRAYSCALE / BLACK AND WHITE — this is the most obvious indicator
+- Player names at top-left may show red background for dead players
+- Ability bar at bottom is still visible but grayed out
+- Camera may follow another player if spectating after death
+
+**General (any game):**
+- Screen is grayed out, darkened, or has a death overlay
+- Kill feed shows the player's name on the RIGHT side (= they died)
+- Camera movement is smooth/cinematic instead of snappy FPS aim
+- Missing core HUD elements (no crosshair, no health, no ammo)
+- "Press X to respawn" or similar prompt visible
 
 ---
 
@@ -65,9 +97,9 @@ Find moments from EACH section. Late-game moments are often the most exciting �
 ### Segment Requirements
 
 Each detected moment must:
-- Be **at most 30 seconds long**
-- Include a **natural buildup -> climax -> resolution** (do NOT cut off the key moment)
-- Start slightly before the key event and end shortly after
+- Be **5-15 seconds long** (short and punchy — this is for TikTok/Reels style content)
+- Capture the KEY MOMENT tightly — start 1-2 seconds before the action, end 1-2 seconds after
+- Do NOT include long buildups or downtime — get straight to the action
 - Be self-contained and understandable
 - Use timestamps referring to the video timeline (00:00 = first frame)
 - NOT overlap with other segments

@@ -7,7 +7,41 @@ order before being joined into one FFmpeg -vf chain.
 Category order: speed → distortion → blur/sharpen → color → text → grain/noise → pixelate
 """
 
+import platform
 from pathlib import Path
+
+# ── Font Detection (cross-platform) ──────────────────────────────────────────
+
+def _find_font() -> str:
+    """Find a bold sans-serif font that works on the current OS."""
+    candidates = []
+    if platform.system() == "Windows":
+        candidates = [
+            "C\\:/Windows/Fonts/arialbd.ttf",
+            "C\\:/Windows/Fonts/impact.ttf",
+            "C\\:/Windows/Fonts/arial.ttf",
+        ]
+    elif platform.system() == "Darwin":  # macOS
+        candidates = [
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/Library/Fonts/Arial Bold.ttf",
+            "/System/Library/Fonts/SFNSDisplay-Bold.otf",
+        ]
+    else:  # Linux
+        candidates = [
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+            "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+        ]
+    for f in candidates:
+        # For Windows, the escaped colon path won't resolve with Path, check raw
+        raw = f.replace("\\:", ":")
+        if Path(raw).exists():
+            return f
+    # Fallback: let FFmpeg try its default
+    return candidates[0]
+
+FONT_PATH = _find_font()
 
 # ── Video Effects ─────────────────────────────────────────────────────────────
 
@@ -194,46 +228,58 @@ VIDEO_EFFECTS = {
         "audio_filter": None,
     },
 
-    # ── Text Overlays ──
+    # ── Text Overlays (LARGE — meant to be seen on mobile/TikTok) ──
     "text_highlight": {
-        "description": "Big 'HIGHLIGHT' text splash on screen",
-        "filter": "drawtext=text='HIGHLIGHT':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:fontsize=72:fontcolor=white:borderw=3:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,1.5)'",
+        "description": "Huge 'HIGHLIGHT' text splash on screen",
+        "filter": "drawtext=text='HIGHLIGHT':fontfile={fontpath}:fontsize=140:fontcolor=white:borderw=6:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,2)'",
         "category": "text",
         "audio_filter": None,
     },
     "text_fail": {
-        "description": "Big 'FAIL' text in red",
-        "filter": "drawtext=text='FAIL':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:fontsize=80:fontcolor=red:borderw=3:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,1.5)'",
+        "description": "Huge 'FAIL' text in red",
+        "filter": "drawtext=text='FAIL':fontfile={fontpath}:fontsize=160:fontcolor=red:borderw=6:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,2)'",
         "category": "text",
         "audio_filter": None,
     },
     "text_clutch": {
-        "description": "'CLUTCH' text in gold",
-        "filter": "drawtext=text='CLUTCH':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:fontsize=72:fontcolor=gold:borderw=3:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,1.5)'",
+        "description": "Huge 'CLUTCH' text in gold",
+        "filter": "drawtext=text='CLUTCH':fontfile={fontpath}:fontsize=140:fontcolor=gold:borderw=6:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,2)'",
         "category": "text",
         "audio_filter": None,
     },
     "text_rip": {
-        "description": "'RIP' text — death/fail moment",
-        "filter": "drawtext=text='RIP':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:fontsize=80:fontcolor=white:borderw=3:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,1.5)'",
+        "description": "Huge 'RIP' text — death/fail moment",
+        "filter": "drawtext=text='RIP':fontfile={fontpath}:fontsize=180:fontcolor=white:borderw=6:bordercolor=red:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,2)'",
         "category": "text",
         "audio_filter": None,
     },
     "text_nice": {
-        "description": "'NICE' text in green — clean play",
-        "filter": "drawtext=text='NICE':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:fontsize=72:fontcolor=lime:borderw=3:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,1.5)'",
+        "description": "Huge 'NICE' text in green — clean play",
+        "filter": "drawtext=text='NICE':fontfile={fontpath}:fontsize=160:fontcolor=lime:borderw=6:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,2)'",
         "category": "text",
         "audio_filter": None,
     },
     "text_bruh": {
-        "description": "'BRUH' meme text — dumb/funny fail",
-        "filter": "drawtext=text='BRUH':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:fontsize=80:fontcolor=white:borderw=3:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,1.5)'",
+        "description": "Huge 'BRUH' meme text — dumb/funny fail",
+        "filter": "drawtext=text='BRUH':fontfile={fontpath}:fontsize=180:fontcolor=yellow:borderw=6:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,2)'",
         "category": "text",
         "audio_filter": None,
     },
     "text_gg": {
-        "description": "'GG' text — round/match ending moment",
-        "filter": "drawtext=text='GG':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:fontsize=72:fontcolor=cyan:borderw=3:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,1.5)'",
+        "description": "Huge 'GG' text — round/match ending moment",
+        "filter": "drawtext=text='GG':fontfile={fontpath}:fontsize=180:fontcolor=cyan:borderw=6:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,2)'",
+        "category": "text",
+        "audio_filter": None,
+    },
+    "text_lol": {
+        "description": "Huge 'LOL' text — funny moment",
+        "filter": "drawtext=text='LOL':fontfile={fontpath}:fontsize=180:fontcolor=magenta:borderw=6:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,2)'",
+        "category": "text",
+        "audio_filter": None,
+    },
+    "text_oof": {
+        "description": "Huge 'OOF' text — painful fail",
+        "filter": "drawtext=text='OOF':fontfile={fontpath}:fontsize=180:fontcolor=orange:borderw=6:bordercolor=black:x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,0,2)'",
         "category": "text",
         "audio_filter": None,
     },
@@ -293,7 +339,7 @@ def build_vf_chain(vfx_list: list[str], width: int = 1920, height: int = 1080, f
     # Build filter string, templating in dimensions where needed
     filters = []
     for eff in selected:
-        f = eff["filter"].format(width=width, height=height, fps=fps)
+        f = eff["filter"].format(width=width, height=height, fps=fps, fontpath=FONT_PATH)
         filters.append(f)
 
     vf = ",".join(filters)

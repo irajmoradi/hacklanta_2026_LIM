@@ -10,6 +10,7 @@ Usage:
 
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -26,6 +27,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+# Check FFmpeg is available
+def _check_ffmpeg():
+    try:
+        subprocess.run(["ffmpeg", "-version"], capture_output=True, timeout=5)
+        return True
+    except FileNotFoundError:
+        return False
+
+if not _check_ffmpeg():
+    print("=" * 60)
+    print("ERROR: FFmpeg not found!")
+    print()
+    print("Install FFmpeg before running this app:")
+    print("  Windows:  winget install FFmpeg")
+    print("  macOS:    brew install ffmpeg")
+    print("  Linux:    sudo apt install ffmpeg")
+    print()
+    print("Or download from: https://ffmpeg.org/download.html")
+    print("=" * 60)
+    sys.exit(1)
+
 from services.probe import probe_video
 from services.gemini_client import GeminiVideoClient
 from services.ffmpeg_runner import FFmpegRunner
@@ -40,7 +62,25 @@ APP_DIR = Path(__file__).resolve().parent
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview")
 app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024 * 1024  # 2GB
 
-gemini = GeminiVideoClient(api_key=os.environ["GEMINI_API_KEY"], model=MODEL)
+# API key: use .env if available, otherwise require from frontend
+ENV_API_KEY = os.getenv("GEMINI_API_KEY", "")
+gemini = GeminiVideoClient(api_key=ENV_API_KEY, model=MODEL) if ENV_API_KEY else None
+
+
+def _get_gemini(req=None) -> GeminiVideoClient:
+    """Get a Gemini client — from .env or from the request header/body."""
+    global gemini
+    if gemini:
+        return gemini
+    # Try to get key from request
+    api_key = None
+    if req:
+        api_key = req.headers.get("X-API-Key")
+        if not api_key and req.is_json:
+            api_key = (req.json or {}).get("api_key")
+    if not api_key:
+        raise ValueError("No Gemini API key configured. Set GEMINI_API_KEY in .env or provide it via the app.")
+    return GeminiVideoClient(api_key=api_key, model=MODEL)
 
 # In-memory job store (fine for local single-user use)
 jobs = {}
@@ -134,7 +174,7 @@ SPLIT_LABELS = {
 }
 
 
-def _analyze_segment(seg: dict, prompt_template: str, part_label: str, user_prompt: str) -> dict:
+def _analyze_segment(seg: dict, prompt_template: str, part_label: str, user_prompt: str, client: GeminiVideoClient = None) -> dict:
     """Upload one segment to Gemini and return clips with timing info."""
     seg_dur = seg["end"] - seg["start"]
     seg_dur_mmss = f"{int(seg_dur)//60:02d}:{int(seg_dur)%60:02d}"
@@ -154,9 +194,10 @@ def _analyze_segment(seg: dict, prompt_template: str, part_label: str, user_prom
         f"Provide timestamps relative to the START of this segment (starting at 0:00)."
     )
 
+    g = client or gemini
     try:
-        uploaded = gemini.upload_video(str(seg["path"]))
-        clips = gemini.find_clips(uploaded, prompt)
+        uploaded = g.upload_video(str(seg["path"]))
+        clips = g.find_clips(uploaded, prompt)
 
         if isinstance(clips, list):
             for c in clips:
@@ -204,6 +245,7 @@ def info():
         "video_effects": {k: v["description"] for k, v in VIDEO_EFFECTS.items()},
         "sound_effects": {k: v["description"] for k, v in SOUND_EFFECTS.items() if v["file"] is not None},
         "edit_styles": {k: v["label"] for k, v in EDIT_STYLES.items()},
+        "has_api_key": bool(ENV_API_KEY),
     })
 
 
@@ -248,11 +290,27 @@ def upload():
 # ── Stage 1: Gemini Clip Finder ──────────────────────────────────────────────
 
 
+ATTITUDE_PROMPTS = {
+    "nice": (
+        "\n\nFOCUS: Emphasize GOOD gameplay — kills, clutches, multi-kills, outplays. "
+        "Still include some deaths for variety but keep the ratio at ~70% good / 30% bad. "
+        "This is a hype reel showing how good the player is."
+    ),
+    "mean": (
+        "\n\nFOCUS: Emphasize BAD gameplay — deaths, whiffs, embarrassing fails, getting destroyed. "
+        "Include some kills for contrast but keep the ratio at ~70% bad / 30% good. "
+        "This is a roast reel dunking on how bad the player is. Find the FUNNIEST deaths."
+    ),
+}
+
+
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
     data = request.json
     job_id = data.get("job_id")
     user_prompt = data.get("prompt", "")
+    attitude = data.get("attitude", "nice")
+    user_prompt += ATTITUDE_PROMPTS.get(attitude, ATTITUDE_PROMPTS["nice"])
     n_splits = max(1, min(4, int(data.get("splits", 1))))
 
     try:
@@ -264,6 +322,8 @@ def analyze():
     template = (PROMPTS_DIR / "clip_finder.txt").read_text()
 
     try:
+        g = _get_gemini(request)
+        job["_gemini_client"] = g  # store for later stages
         t0 = time.time()
 
         if n_splits == 1:
@@ -282,13 +342,13 @@ def analyze():
 
             job["status"] = "uploading_to_gemini"
             print(f"[{job_id}] Uploading video to Gemini...")
-            uploaded = gemini.upload_video(job["source"])
+            uploaded = g.upload_video(job["source"])
             upload_time = time.time() - t0
             print(f"[{job_id}] Upload + processing done in {upload_time:.1f}s")
 
             job["status"] = "analyzing"
             print(f"[{job_id}] Finding clips...")
-            clips = gemini.find_clips(uploaded, prompt)
+            clips = g.find_clips(uploaded, prompt)
 
             if isinstance(clips, list):
                 for c in clips:
@@ -313,7 +373,7 @@ def analyze():
                 futures = {
                     pool.submit(
                         _analyze_segment, seg, template,
-                        SPLIT_LABELS[n_splits][seg["index"]], user_prompt
+                        SPLIT_LABELS[n_splits][seg["index"]], user_prompt, g
                     ): seg
                     for seg in segments
                 }
@@ -340,6 +400,19 @@ def analyze():
             # Clean up segment files
             for seg in segments:
                 seg["path"].unlink(missing_ok=True)
+
+        # Post-filter: remove clips whose descriptions suggest spectating/death screen
+        SPECTATE_KEYWORDS = [
+            "spectating", "kill cam", "killcam", "respawn", "death screen",
+            "combat report", "incoming damage", "camera follows",
+        ]
+        before_count = len(clips)
+        clips = [
+            c for c in clips
+            if not any(kw in c.get("description", "").lower() for kw in SPECTATE_KEYWORDS)
+        ]
+        if len(clips) < before_count:
+            print(f"[{job_id}] Filtered {before_count - len(clips)} spectating/death screen clips")
 
         job["clips"] = clips
         job["status"] = "analyzed"
@@ -444,8 +517,9 @@ def plan():
         job["status"] = "planning"
         t0 = time.time()
 
+        g = job.get("_gemini_client") or _get_gemini(request)
         print(f"[{job_id}] Planning edit...")
-        edit_plan = gemini.plan_edit(prompt)
+        edit_plan = g.plan_edit(prompt)
 
         # Wrap if Gemini returns bare list
         if isinstance(edit_plan, list):
@@ -465,6 +539,76 @@ def plan():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Intro/Outro Thumbnail Generation ─────────────────────────────────────────
+
+TITLE_WORDS = {
+    "w1": ["gaming", "shooter", "gamer", "player", "character", "npc", "pov"],
+    "w2": ["maxer", "maxing", "slayer", "professional"],
+    "w3": ["compilation", "highlights", "reels", "montage", "edits"],
+}
+
+
+def _generate_title() -> str:
+    w1 = random.choice(TITLE_WORDS["w1"])
+    w2 = random.choice(TITLE_WORDS["w2"])
+    w3 = random.choice(TITLE_WORDS["w3"])
+    return f"{w1} {w2} {w3}"
+
+
+def _generate_intro_outro(runner: FFmpegRunner, duration: float, client: GeminiVideoClient = None) -> tuple[Path | None, Path | None]:
+    """Generate intro and outro thumbnail clips using Gemini image generation."""
+    intro_clip = None
+    outro_clip = None
+
+    try:
+        # Pick two random timestamps for frames (avoid first/last 10s)
+        safe_start = min(30.0, duration * 0.1)
+        safe_end = max(duration - 30.0, duration * 0.9)
+        intro_ts = random.uniform(safe_start, safe_end)
+        outro_ts = random.uniform(safe_start, safe_end)
+
+        # Extract frames
+        print(f"  [thumbnails] Extracting frames at {intro_ts:.0f}s and {outro_ts:.0f}s")
+        intro_frame = runner.extract_random_frame(intro_ts)
+        outro_frame = runner.extract_random_frame(outro_ts)
+
+        # Generate intro thumbnail
+        title = _generate_title()
+        print(f"  [thumbnails] Generating intro: '{title}'")
+        intro_prompt = (
+            f"Edit this gaming screenshot into a flashy TikTok thumbnail. "
+            f"Add bold dramatic text that says \"{title.upper()}\" in a gaming font style. "
+            f"Make it eye-catching and corny with bright colors, energy effects, and hype vibes. "
+            f"Keep the gameplay visible in the background."
+        )
+        g = client or gemini
+        intro_img = g.generate_thumbnail(intro_frame, intro_prompt,
+                                               runner.workspace / "intro_thumb.jpg")
+        intro_clip = runner.image_to_clip(intro_img, 4.0, "intro")
+        print(f"  [thumbnails] Intro clip ready: {title}")
+
+        # Generate outro thumbnail
+        print(f"  [thumbnails] Generating outro")
+        outro_prompt = (
+            "Edit this image into a meme-style outro screen. "
+            "Add big bold text that says \"THANKS FOR WATCHING\". "
+            "Add a random car and a fish somewhere in the image. "
+            "Make it look absurd and funny, like a shitpost meme. "
+            "Keep it colorful and ridiculous."
+        )
+        outro_img = g.generate_thumbnail(outro_frame, outro_prompt,
+                                               runner.workspace / "outro_thumb.jpg")
+        outro_clip = runner.image_to_clip(outro_img, 4.0, "outro")
+        print(f"  [thumbnails] Outro clip ready")
+
+    except Exception as e:
+        print(f"  [thumbnails] Failed (non-fatal): {e}")
+        import traceback
+        traceback.print_exc()
+
+    return intro_clip, outro_clip
+
+
 # ── Stage 3: FFmpeg Render ────────────────────────────────────────────────────
 
 
@@ -472,8 +616,8 @@ def plan():
 def render():
     data = request.json
     job_id = data.get("job_id")
-    # Allow passing a custom edit plan (e.g. user edited it in the UI)
     custom_plan = data.get("edit_plan")
+    generate_thumbnails = data.get("generate_thumbnails", True)
 
     try:
         job = get_job(job_id)
@@ -497,6 +641,36 @@ def render():
         )
 
         output_path = runner.render(edit_plan)
+
+        # Generate and prepend/append intro/outro
+        if generate_thumbnails:
+            job["status"] = "generating_thumbnails"
+            g = job.get("_gemini_client") or _get_gemini(request)
+            intro_clip, outro_clip = _generate_intro_outro(runner, job["meta"]["duration"], g)
+
+            if intro_clip or outro_clip:
+                parts = []
+                if intro_clip:
+                    parts.append(intro_clip)
+                parts.append(output_path)
+                if outro_clip:
+                    parts.append(outro_clip)
+
+                if len(parts) > 1:
+                    print(f"[{job_id}] Re-concatenating with intro/outro...")
+                    # Re-concatenate with intro/outro
+                    concat_file = Path(job["dir"]) / "final_concat.txt"
+                    with open(concat_file, "w") as f:
+                        for p in parts:
+                            f.write(f"file '{p.resolve()}'\n")
+                    final_output = Path(job["dir"]) / "final_with_thumbs.mp4"
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                         "-i", str(concat_file), "-c", "copy", str(final_output)],
+                        capture_output=True, text=True, check=True,
+                    )
+                    output_path = final_output
+
         job["output"] = str(output_path)
         job["status"] = "done"
         elapsed = round(time.time() - t0, 1)
