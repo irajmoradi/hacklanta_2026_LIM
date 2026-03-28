@@ -53,14 +53,22 @@ def _split_video(path: Path, n_splits: int) -> list[dict]:
     for i in range(n_splits):
         start = i * seg_dur
         end = min((i + 1) * seg_dur, duration)
-        seg_path = path.parent / f"{path.stem}_part{i}{path.suffix}"
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", str(path),
+        seg_path = path.parent / f"seg_{i}_{path.stem}.mp4"
+        # Use -ss before -i for fast seek, re-encode to ensure clean cuts
+        result = subprocess.run(
+            ["ffmpeg", "-y",
              "-ss", f"{start:.3f}", "-to", f"{end:.3f}",
-             "-c", "copy", "-avoid_negative_ts", "1",
+             "-i", str(path),
+             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+             "-c:a", "aac",
+             "-avoid_negative_ts", "1",
              str(seg_path)],
-            capture_output=True,
+            capture_output=True, text=True,
         )
+        if not seg_path.exists() or seg_path.stat().st_size == 0:
+            raise RuntimeError(
+                f"ffmpeg failed to create segment {i}: {result.stderr[-500:]}"
+            )
         segments.append({"path": seg_path, "start": start, "end": end, "index": i})
     return segments
 
