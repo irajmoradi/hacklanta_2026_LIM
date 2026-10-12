@@ -3,3 +3,8 @@ __pycache__/
 *.pyc
 prototyping/uploads/
 .venv
+# Extension sprint
+tools/runner_ip
+full_app/reaction_packs/
+full_app/workspace/
+.venv/
