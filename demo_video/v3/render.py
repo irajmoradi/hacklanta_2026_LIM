@@ -422,6 +422,10 @@ def make_audio(cache, out, blocks, total, source, reactions=None):
          "-filter_complex",graph,"-map","[a]","-t",total,"-c:a","pcm_s16le",out/"mix.wav"])
 
 
+class PendingReactions(ValueError):
+    pass
+
+
 def load_reactions(pack):
     """Re-read the delivered pack before every render; require all four people."""
     clips = read(pack / "pack.json")["clips"]
@@ -430,7 +434,7 @@ def load_reactions(pack):
                                    ("Stefanny", "bruh", 4), ("Mario", "funny", 6)):
         clip = next((c for c in clips if c["speaker"] == speaker and c["label"] == label), None)
         if clip is None:
-            raise ValueError(f"Reaction pack pending: {speaker}/{label}")
+            raise PendingReactions(f"Reaction pack pending: {speaker}/{label}")
         path = (pack / clip["file"]).resolve()
         if not path.is_relative_to(pack.resolve()):
             raise ValueError("Reaction path escapes pack")
@@ -440,6 +444,19 @@ def load_reactions(pack):
         selected.append({**clip, "path": str(path), "after_block": block,
                          "duration": float(metadata["format"]["duration"])})
     return selected
+
+
+def wait_for_reactions(pack, minutes):
+    deadline = time.monotonic() + minutes * 60
+    while True:
+        try:
+            load_reactions(pack)
+            return
+        except (PendingReactions, FileNotFoundError) as exc:
+            if time.monotonic() >= deadline:
+                raise
+            print(f"Waiting for complete team pack: {exc}", flush=True)
+            time.sleep(min(60, max(0, deadline-time.monotonic())))
 
 
 def reaction_frame(image, t, reactions, captures):
@@ -541,10 +558,12 @@ def main():
     p.add_argument("--wait-minutes",type=float,default=40)
     p.add_argument("--preview",action="store_true")
     p.add_argument("--pack",type=Path,default=Path("/srv/packs/team"))
+    p.add_argument("--wait-pack-minutes",type=float,default=40)
     p.add_argument("--out",type=Path,default=HERE/"out")
     args=p.parse_args()
     source=args.source or select_source(args.root,args.wait_minutes)
     print("Using",source,flush=True)
+    wait_for_reactions(args.pack,args.wait_pack_minutes)
     render(source,HERE/"cache",args.out,args.preview,args.pack)
 
 

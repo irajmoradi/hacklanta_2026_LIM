@@ -113,6 +113,25 @@ def test_partial_demo02_is_not_silently_replaced(tmp_path):
         r.select_source(tmp_path, wait_minutes=0)
 
 
+def test_reaction_wait_reloads_pack_and_honors_deadline(tmp_path, monkeypatch):
+    now = [0]
+    checks = []
+    monkeypatch.setattr(r.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(r.time, "sleep", lambda seconds: now.__setitem__(0, now[0]+seconds))
+    def pending(pack):
+        checks.append(now[0])
+        if now[0] < 120:
+            raise r.PendingReactions("Lance")
+        return []
+    monkeypatch.setattr(r, "load_reactions", pending)
+    r.wait_for_reactions(tmp_path, 3)
+    assert checks == [0, 60, 120]
+    now[0] = 0
+    with pytest.raises(r.PendingReactions):
+        r.wait_for_reactions(tmp_path, .5)
+    assert now[0] == 30
+
+
 def test_synthetic_media_timeline_frames_and_mix(tmp_path):
     cache = tmp_path / "cache"
     cache.mkdir()

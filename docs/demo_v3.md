@@ -5,6 +5,7 @@ sequence uses voice-aligned kinetic type, masked reveals, whip cuts, zoom punche
 BRUH glitches, measured pipeline counters, monitor/phone frames, an earlier/new
 edit wipe, UI evidence, and a repository end card. Beat lengths are 1–3 seconds.
 Every spoken phrase has a burned-in speaker caption and an SRT entry.
+The main script is 170 words, plus four short pack reactions.
 
 ## Script and voices
 
@@ -82,6 +83,8 @@ present locally. Collect outputs before any later sync.
 `--source /srv/demo_out/demo02` selects an explicit source; `--pack` selects an
 alternate complete pack. `--preview` generates the contact sheet and four full-size
 reaction stills without encoding. Rendering itself has no API access.
+The CLI waits up to forty minutes for all four reaction clips, checking every
+minute; `--wait-pack-minutes 0` makes missing inputs fail immediately.
 
 For a genuinely new authorized task with a fresh synthesis budget, the separate
 `narration.py --list` command lists only matching consented voices and the stock
@@ -105,3 +108,13 @@ placement and audio mixing. Verification fully decodes both final MP4s and check
 runtime, dimensions, codecs, captions, all four speakers and reactions, beat
 continuity and Discord size. Visual inspection of the actual contact sheet and
 reaction stills is also required after rendering.
+
+## Recorded run
+
+DEMO-02 evidence read on 2026-10-12: 83 candidate windows, 40 Gemini
+assessments. Measured seconds: signals **515.5394**, Gemini window scoring
+**223.1471**, planner **0.019**, render **194.87**, share kit **4.1352**.
+The counters display rounded values; the manifest preserves source precision.
+The 0.019-second planner measurement describes this recorded run, not an AI API
+latency claim. The older DEMO-01 cut and share-kit UI remain explicitly identified
+as source media in the manifest.
