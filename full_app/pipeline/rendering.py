@@ -84,7 +84,7 @@ def _render_job(pipeline, job, key):
     renderer = pipeline.hook('render.engine', 'Renderer', job)
     # Legacy source-size output and thumbnail generation retain their old contract.
     if renderer is None or options.get('generate_thumbnails') or options.get('legacy_dimensions'):
-        skipped = [name for name in ('cards', 'transitions', 'captions', 'music', 'reactions', 'sam', 'sam_reframe') if options.get(name)]
+        skipped = [name for name in ('cards', 'ai_cards', 'transitions', 'captions', 'music', 'reactions', 'sam', 'sam_reframe') if options.get(name)]
         if skipped:
             pipeline.warn(job, 'Legacy rendering cannot apply requested v2 features: ' + ', '.join(skipped))
     if renderer is None:
@@ -155,6 +155,9 @@ def _render_job(pipeline, job, key):
                         pipeline.warn(job, 'SAM subject tracking unavailable or degraded; using fallback crop')
                     segment['sam'] = {**(segment.get('sam') or {}), 'subject_track': [dict(time=max(0, t-start)/segment.get('speed', 1), x=x, y=y)
                                                        for t, x, y, *_ in points][::max(1, len(points)//499 + 1)]}
+        if options.get('ai_cards') and options.get('cards', True):
+            plan['intro'] = dict(text='AI INTRO', duration=3.5)
+            plan['outro'] = dict(text='THANKS FOR WATCHING', duration=3.5)
         validated = RenderPlan.model_validate(plan)
         pack = os.getenv('REACTION_PACK')
         selector, apply = None, None
@@ -186,6 +189,13 @@ def _render_job(pipeline, job, key):
         clip_metadata = [metadata(SimpleNamespace(**s)) for s in original_segments]
         top = sorted(range(len(validated.segments)),
                      key=lambda i: clip_metadata[i].get('score', .5), reverse=True)[:3]
+        if options.get('ai_cards') and options.get('cards', True):
+            from cards import generate_cards, install_cards
+            with pipeline.stage(job, 'ai_cards'):
+                assets = generate_cards(job, source, plan['segments'],
+                    lambda: pipeline.client(job, key), lambda message: pipeline.warn(job, message),
+                    top_index=top[0])
+                renderer = install_cards(renderer, assets)
 
         def finish_segment(path, index, segment, duration, directory):
             if spotlight and index in top:
