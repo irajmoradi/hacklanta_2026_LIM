@@ -12,7 +12,7 @@ footage: moving targets/crosshair, HUD boxes, health/ammo, elimination feed, ACE
 PENTAKILL, KILLED BY banners, gunfire-like bursts and harmonic voice-like tones.
 There are no downloaded assets, intelligible speech, real faces, or copyrighted
 sound effects. A generated colored face with an animated mouth and a beep supplies
-the synthetic reaction pack. The demo does not read a key or need an account.
+the synthetic reaction pack. The demo does not load `.env`, use a key, or need an account.
 It blocks SDK client creation and Python socket connections; optional modules
 must also run locally without spawning network/download tools.
 
@@ -91,7 +91,7 @@ This makes missed ACE/PENTAKILL events fail coverage. The mock is an oracle for
 integration testing, **not evidence of VLM or detection accuracy**. Ground-truth
 coverage is computed from the final plan's source intervals, independently of
 model-supplied labels. Tests additionally decode event-colored pixel bars from
-the actual landscape output, check both audio/video streams and aspect ratios,
+both actual outputs, check audio/video streams and aspect ratios,
 decode all output frames, and verify exact download bytes. Current clean-plan
 timing assertions assume no v2 intro/outro or transition duration changes; such
 features require updating the output timeline adapter.
@@ -112,3 +112,20 @@ generated in pytest temporary directories, and networking is prohibited in every
 test. Unit checks also cover future module dispatch, unavailable APIs, error
 propagation, invalid fixture durations, coverage, budget enforcement and SDK blocking.
 Do not use this harness as a live smoke test; there is no live mode.
+
+Validated on the Linux runner on 2026-10-12:
+
+- `tools/remote_run.sh "cd full_app && python -m pytest tests/e2e -q -ra"`:
+  **19 passed in 13.59s**, remote exit **0**.
+- `tools/remote_run.sh "bash full_app/demo/run_demo.sh --output full_app/demo/demo_out"`:
+  default **150-second** input, both montage downloads produced, remote exit **0**.
+- Final visual-check run of the same demo followed by
+  `ffmpeg -v error -y -ss 65 -i full_app/demo/demo_out/fixture/gameplay.mp4 -frames:v 1 full_app/demo/demo_out/preview.png`:
+  remote exit **0**; demo took **17.731s**, both montages measured **7.354362s**
+  against the 12-second budget, at **640x360** and **360x640**. The extracted
+  frame was visually inspected for HUD, crosshair and ACE announcement placement.
+- No live API calls. Optional sprint modules were absent and explicitly reported
+  as skipped. A separate test installs contract stand-ins to verify the complete
+  optional-stage handoff, including prepared media, audio/planner inputs, native
+  render plans, generated reaction assets and share-kit/download paths. Those
+  stand-ins do not establish correctness of the unmerged implementations.

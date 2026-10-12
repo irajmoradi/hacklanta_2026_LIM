@@ -8,7 +8,6 @@ import inspect
 import json
 from pathlib import Path
 import shutil
-import socket
 import time
 from unittest.mock import patch
 
@@ -206,6 +205,7 @@ def run(output, duration=150, budget=12):
                 prepared = plain(prepared)
                 source = Path(prepared["path"])
                 job["source"] = str(source)
+                job["meta"] = backend.probe_video(source)
             candidates = progress.optional("signals", "signals", ["detect_candidates"],
                                            {"video_path": source, "profile": "auto"})
             if candidates is None:
