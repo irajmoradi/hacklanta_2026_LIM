@@ -72,6 +72,9 @@ def render_job(pipeline, job, key):
 
 def _render_job(pipeline, job, key):
     options = job['options']
+    for version_key in ('version', 'render_version'):
+        if version_key in job['edit_plan'] and job['edit_plan'][version_key] != 2:
+            raise ValueError(f'Unsupported {version_key}')
     renderer = pipeline.hook('render.engine', 'Renderer', job)
     # Legacy source-size output and thumbnail generation retain their old contract.
     if renderer is None:
@@ -102,7 +105,7 @@ def _render_job(pipeline, job, key):
                     for s in plan['segments']])
     plan['preset'] = options.get('preset', plan.get('preset', 'landscape'))
     if options.get('captions'):
-        plan['captions'] = {**plan.get('captions', {}), 'enabled': True, 'transcribe': True}
+        plan['captions'] = {'transcribe': True, **plan.get('captions', {}), 'enabled': True}
     elif 'captions' in options:
         plan['captions'] = {**plan.get('captions', {}), 'enabled': False}
     scratch = Path(job['dir']) / 'render_tmp'

@@ -37,9 +37,10 @@ def rank_merge(candidates, scored, whole):
             clip.update(score=.35 * clip['score'] + .65 * c['hype'] / 10,
                         type='bad' if c['kind'] == 'lowlight' else 'good',
                         label=c['reaction'], suggested_reaction_label=c['reaction'],
-                        source='signals+vlm')
+                        source='signals+vlm', score_provenance='atan_signal+hype')
         pool.append(clip)
-    pool.extend({**c, 'score': c.get('score', .5), 'source': 'whole_video'} for c in whole)
+    pool.extend({**c, 'score': c.get('score', .5), 'score_scale': 'unit',
+                 'score_provenance': 'provider_unit', 'source': 'whole_video'} for c in whole)
     ranked = []
     for clip in sorted(pool, key=lambda c: (-c['score'], c['start_seconds'])):
         if any(overlap(clip, veto) > 0 for veto in vetoes):

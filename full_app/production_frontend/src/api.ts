@@ -68,7 +68,8 @@ export function normalizeClip(value: unknown, i: number): ReviewClip {
     start: seconds(c.start_seconds ?? c.start),
     end: seconds(c.end_seconds ?? c.end),
     caption: text(c.caption) ?? text(c.description) ?? "Untitled moment",
-    score: number(c.score) * (c.score_scale === "percent" ? 1 : 100),
+    score: c.score_scale === "raw_signal" ? (0.5 + Math.atan(number(c.score)) / Math.PI) * 100
+      : number(c.score) * (c.score_scale === "percent" ? 1 : 100),
     reaction: text(c.suggested_reaction_label) ?? text(c.reaction_label) ?? text(c.reaction) ?? text(c.label) ?? "None",
     keep: c.keep !== false,
     thumbnail: text(c.thumbnail_url) ?? text(c.thumbnail),
@@ -87,7 +88,7 @@ export function normalizeJob(value: unknown): Job {
         ? Math.max(0, Math.min(100, j.progress * 100))
         : undefined,
     clips: list(j.clips).map(normalizeClip),
-    candidates: list(j.candidates).map(normalizeClip),
+    candidates: list(j.candidates).map((value, i) => normalizeClip({score_scale: "raw_signal", ...object(value)}, i)),
     interest: list(j.interest_curve ?? j.interest).map(value => ({time: number(object(value).time), score: number(object(value).score)})),
     source_url: text(j.source_url),
     download_url: text(j.download_url),
@@ -277,6 +278,8 @@ export class EditorApi {
         ...c,
         start_seconds: c.start,
         end_seconds: c.end,
+        score: c.score / 100,
+        score_scale: "unit",
         order,
       })),
     });
@@ -332,7 +335,7 @@ export class EditorApi {
       preset, style: options.style,
       captions: options.captions, reactions: options.reactions, sam: options.sam,
       ...this.extended(options),
-      ...(reviewed && this.planningStyles.get(id) === options.style
+      ...(reviewed && (!this.planningStyles.has(id) || this.planningStyles.get(id) === options.style)
         ? {
             edit_plan: {
               ...plan,

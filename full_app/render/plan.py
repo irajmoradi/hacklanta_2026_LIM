@@ -1,4 +1,4 @@
-"""Planner-facing schema. All timestamps are seconds; tracks are clip-local."""
+"""Renderer input: source cuts in seconds; placements and tracks in output-local seconds."""
 
 from typing import Literal
 from .contracts import Preset
@@ -89,7 +89,7 @@ class Segment(Model):
             times = [p.time for p in self.sam.subject_track]
             if any(b <= a for a, b in zip(times, times[1:])):
                 raise ValueError("Track times must be strictly increasing")
-        # Speed effects change the timeline; use explicit source cuts in v2.
+        # Playback speed is explicit; placement clocks are already output-local.
         from models.effects import VIDEO_EFFECTS
         for placement in [*self.timed_effects, *self.texts, *self.reactions]:
             if placement.start + placement.duration > self.duration + .001:

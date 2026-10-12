@@ -2,7 +2,7 @@
 from .models import RenderPlan as PlannerPlan
 from render.plan import RenderPlan
 
-from render.contracts import ASPECT_PRESETS, STYLE_IDS
+from render.contracts import ASPECT_PRESETS
 ADAPTER_VERSION = 1
 
 

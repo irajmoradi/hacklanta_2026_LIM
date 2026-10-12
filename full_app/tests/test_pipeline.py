@@ -235,3 +235,39 @@ def test_legacy_fade_chromatic_speed_audio_and_geometry(source, tmp_path, perf):
                             '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], capture_output=True, check=True).stdout
     assert len(frame) == 160*90*3
     assert np.frombuffer(frame, dtype=np.uint8).mean() < 35
+
+
+@pytest.mark.parametrize('version_key', ['version', 'render_version'])
+def test_pipeline_rejects_unknown_plan_versions_before_rendering(tmp_path, version_key):
+    from pipeline.rendering import _render_job
+    job = dict(options={}, edit_plan={version_key: 3, 'segments': []})
+    with pytest.raises(ValueError, match='Unsupported'):
+        _render_job(Pipeline(), job, None)
+
+
+def test_unknown_reaction_preset_before_media_io():
+    from reactions.render import render_overlay, layout
+    with pytest.raises(ValueError, match='preset'):
+        layout(1080, 1080, 'typo')
+    with pytest.raises(ValueError, match='preset'):
+        render_overlay('missing.mp4', None, 'typo')
+
+
+def test_explicit_caption_options_survive_toggle(source, tmp_path, monkeypatch):
+    from render.engine import Renderer
+    original = Renderer.render
+    seen = []
+    def capture(self, plan):
+        seen.append(plan)
+        return original(self, plan)
+    monkeypatch.setattr(Renderer, 'render', capture)
+    job = job_for(source, tmp_path, dict(captions=True, reactions=False, privacy=False))
+    job['edit_plan'] = dict(render_version=2, resolution=720, fps=20, reframe='blur',
+                           captions=dict(transcribe=False, mask_profanity=True),
+                           segments=[dict(source_start=0, source_end=.3, title='Edited')])
+    Pipeline().render(job, None)
+    assert seen[0].captions.enabled is True
+    assert seen[0].captions.transcribe is False
+    assert seen[0].captions.mask_profanity is True
+    assert seen[0].fps == 20 and seen[0].reframe == 'blur'
+    assert not job['warnings']

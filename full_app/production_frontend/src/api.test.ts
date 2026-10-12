@@ -209,13 +209,27 @@ it("preserves explicit v2 settings and maps editable text to titles", async () =
   const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({})});
   vi.stubGlobal("fetch", fetcher);
   const api = new EditorApi("jobs");
-  await api.analyze("abc", options);
   await api.render("abc", "square", {...options, captions: true}, [demoClips[0]],
     {render_version: 2, fps: 24, transition: "flash", music: {path: "licensed.wav"}, segments: []});
-  expect(JSON.parse(fetcher.mock.calls[1][1].body).edit_plan).toMatchObject({render_version: 2, fps: 24,
+  expect(JSON.parse(fetcher.mock.calls[0][1].body).edit_plan).toMatchObject({render_version: 2, fps: 24,
     transition: "flash", music: {path: "licensed.wav"}, segments: [{title: demoClips[0].caption}]});
 });
 it("normalizes unit scores and actual fusion reaction fields", () => {
   expect(normalizeJob({id: "a", clips: [{score: .8, suggested_reaction_label: "clutch"}]}).clips[0])
     .toMatchObject({score: 80, reaction: "clutch"});
+});
+
+it("saves unit scores so review round trips cannot multiply scores", async () => {
+  const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({})});
+  vi.stubGlobal("fetch", fetcher);
+  const api = new EditorApi("jobs");
+  const wire = {id: "a", clips: [{id: "1", start_seconds: 0, end_seconds: 1, score: .8, score_scale: "unit"}]};
+  const job = normalizeJob(wire);
+  await api.save("a", job.clips);
+  const saved = JSON.parse(fetcher.mock.calls[0][1].body);
+  expect(saved.clips[0]).toMatchObject({score: .8, score_scale: "unit"});
+  expect(normalizeJob({id: "a", clips: saved.clips}).clips[0].score).toBe(80);
+  const candidates = normalizeJob({id: "a", candidates: [{score: 2}, {score: 8}]}).candidates;
+  expect(candidates[1].score).toBeGreaterThan(candidates[0].score);
+  expect(candidates[1].score).toBeLessThan(100);
 });
