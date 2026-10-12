@@ -113,7 +113,7 @@ def test_unavailable_features_are_reported_and_silent_video_has_word_fallback(vi
         options=dict(captions=True, reactions=True, sam=True, narration=True, privacy=False),
         edit_plan=dict(render_version=2, resolution=720, segments=[dict(source_start=0, source_end=.6, title='Editorial fallback')]))
     Pipeline().render(job, None)
-    assert job['render_plan']['segments'][0]['words']
+    assert not job['render_plan']['segments'][0]['words']  # no fake per-word transcript from editorial text
     assert any('no speech words' in w for w in job['warnings'])
     assert any('REACTION_PACK' in w for w in job['warnings'])
     assert any('SAM model unavailable' in w for w in job['warnings'])

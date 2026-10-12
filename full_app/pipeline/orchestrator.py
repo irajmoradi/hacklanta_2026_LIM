@@ -70,7 +70,7 @@ class Pipeline:
         if provider in ('local', 'local_vlm'):
             from .providers import LocalClient
             return LocalClient(api_key=key, budget=budget)
-        client = GeminiVideoClient(api_key=key, model=os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview'))
+        client = GeminiVideoClient(api_key=key, model=os.getenv('GEMINI_MODEL', 'gemini-3.5-flash-lite'))
         client.budget = budget
         client.auto_proxy = True
         if os.getenv('GEMINI_ATTEMPTS'):

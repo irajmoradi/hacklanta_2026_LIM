@@ -150,14 +150,9 @@ class Renderer:
                     words = transcribe(path, plan.captions.model) if has_audio else []
                     if not words:
                         import warnings
-                        warnings.warn('Word captions: no speech words available; using timed editorial text', RuntimeWarning)
-                        from .plan import Word
-                        # Editorial captions are explicitly identified as a fallback, never a transcript.
-                        content = segment.title or ' '.join(t.content for t in texts)
-                        tokens = content.split()[:100]
-                        span = min(duration, max(1, len(tokens)*.3))
-                        words = [Word(start=i*span/len(tokens), end=(i+1)*span/len(tokens), text=t)
-                                 for i, t in enumerate(tokens)]
+                        # Gameplay without commentary has no speech: keep the editorial lines whole rather than
+                        # flashing them one word at a time as if they were a transcript.
+                        warnings.warn('Word captions: no speech words available; keeping editorial text lines', RuntimeWarning)
                     segment.words = words
                     if words:
                         texts = []

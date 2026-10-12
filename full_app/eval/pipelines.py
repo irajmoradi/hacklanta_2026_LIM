@@ -92,7 +92,7 @@ class GeminiOnly:
         try:
             provider = GeminiVideoClient(client=guarded, vertexai=vertex, agentic=False,
                 config=ProviderConfig(attempts=1, chunk_seconds=600, overlap_seconds=0),
-                model=os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite-preview"))
+                model=os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite"))
             def timestamp(seconds):
                 return f"{int(seconds) // 60:02d}:{int(seconds) % 60:02d}"
             template = (Path(__file__).resolve().parents[1] / "prompts" / "clip_finder.txt").read_text(encoding="utf-8")

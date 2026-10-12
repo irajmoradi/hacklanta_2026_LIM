@@ -126,7 +126,7 @@ def create_app(config=None, pipeline=None):
     def info():
         from .capabilities import frontend_capabilities
         from services.provider_config import gemini_credentials
-        return jsonify(frontend_capabilities=frontend_capabilities(), model=os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview'),
+        return jsonify(frontend_capabilities=frontend_capabilities(), model=os.getenv('GEMINI_MODEL', 'gemini-3.5-flash-lite'),
                        has_api_key=bool(gemini_credentials()[0]),
                        video_effects={k: v['description'] for k, v in VIDEO_EFFECTS.items()},
                        sound_effects={k: v['description'] for k, v in SOUND_EFFECTS.items() if v['file']},
