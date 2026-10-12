@@ -4,6 +4,7 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import subprocess
+import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
 from budget import Budget
@@ -32,6 +33,25 @@ def test_budget_concurrent(tmp_path):
             return 0
     with ThreadPoolExecutor(max_workers=10) as pool:
         assert sorted(pool.map(reserve, range(10))) == [0]*7 + [1, 2, 3]
+
+
+def test_baseline_generic_profile_contract():
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'full_app'))
+    from signals.ocr import regions_for
+    with pytest.raises(ValueError, match='unknown game profile: generic'):
+        regions_for('generic', None)
+
+
+def test_video_compositor_with_synthetic_media(tmp_path):
+    import assemble
+    assemble.EDIT = tmp_path
+    image = assemble.card('test', 'SYNTHETIC QA', 'Readable title', ['A synthetic test card.'])
+    output = assemble.still('card', image, .5)
+    metadata = assemble.probe(output)
+    video = next(s for s in metadata['streams'] if s['codec_type'] == 'video')
+    assert (video['width'], video['height'], video['codec_name']) == (1920, 1080, 'h264')
+    assert any(s['codec_type'] == 'audio' for s in metadata['streams'])
+    assert .45 <= float(metadata['format']['duration']) <= .6
 
 
 def test_real_api_adapter_offline(tmp_path, monkeypatch):

@@ -52,11 +52,50 @@ class DemoClient(GeminiVideoClient):
 
 
 class DemoPipeline(Pipeline):
+    def run_stage(self, stage, job, key, report):
+        try:
+            return super().run_stage(stage, job, key, report)
+        except Exception as error:
+            message = str(error)
+            for name in ('GOOGLE_API_KEY', 'GEMINI_API_KEY'):
+                if os.getenv(name):
+                    message = message.replace(os.environ[name], '[REDACTED]')
+            (OUT / 'pipeline_error.txt').write_text(f'{stage}: {type(error).__name__}: {message}')
+            raise
+
     def client(self, job, key):
         return DemoClient(key or os.environ['GOOGLE_API_KEY'])
 
     def hook(self, module, function, job):
         original = super().hook(module, function, job)
+        if module == 'profiles' and function == 'detect_game' and original:
+            def detect(source):
+                detected = original(source)
+                (OUT / 'profile_detection.json').write_text(json.dumps({'automatic': detected}))
+                if detected[0] == 'generic':
+                    self.warn(job, 'Auto detection inconclusive; DEMO-01 uses the supplied Valorant footage label')
+                    return 'valorant', 0.
+                return detected
+            return detect
+        if module == 'signals' and function == 'detect_candidates' and original:
+            def signals(source, **kwargs):
+                import signals.detector as detector
+                reader = detector.HUDReader
+                class BoundedOCR(reader):
+                    def __init__(self, *args, **options):
+                        super().__init__(*args, **options)
+                        self.next_sample = 0.
+                    def read(self, frame, timestamp):
+                        if timestamp < self.next_sample:
+                            return []
+                        self.next_sample = timestamp + 5.
+                        return super().read(frame, timestamp)
+                detector.HUDReader = BoundedOCR
+                try:
+                    return original(source, **kwargs, sample_fps=2)
+                finally:
+                    detector.HUDReader = reader
+            return signals
         if module == 'privacy' and function == 'sanitize' and original:
             def cached(source, output, payload):
                 # Exact source and options cache, shared only by this demo run.
