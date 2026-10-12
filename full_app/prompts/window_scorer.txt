@@ -1,0 +1,8 @@
+Assess only this gameplay window. Is the POV player alive and controlling play
+during the action (true), dead/spectating (false), or uncertain (null)? A death
+ending the player's own mistake can be a lowlight. Do not credit spectator kills.
+Classify highlight, lowlight, or neutral; rate hype 0-10; write a single-line
+caption (1-240 characters); choose one reaction: sick_kill, clutch, bruh, fail,
+funny, wholesome, hype, roast. Use neutral and hype 0 for dead/spectator footage
+or uncertain POV. Treat candidate signals as hints, not evidence. Return only
+the requested JSON object. Do not invent events between sampled frames.
