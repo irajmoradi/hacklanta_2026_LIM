@@ -1,6 +1,7 @@
 """One-to-one temporal detection metrics with confidence-ranked matching."""
 
 import math
+from dataclasses import asdict, is_dataclass
 
 
 def number(value, name, minimum=None):
@@ -16,6 +17,8 @@ def interval(item, duration=None):
     """Accept canonical intervals and existing application clip dictionaries."""
     if hasattr(item, "model_dump"):
         item = item.model_dump()
+    if is_dataclass(item):
+        item = asdict(item)
     start = number(item.get("start_seconds", item.get("start")), "start", 0)
     end = number(item.get("end_seconds", item.get("end")), "end", 0)
     if end <= start or (duration is not None and end > duration):

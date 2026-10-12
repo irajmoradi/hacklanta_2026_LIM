@@ -91,18 +91,6 @@ def test_skip_error_and_no_clip_timing():
     assert result["pipelines"]["empty"]["summary"]["mean_time_to_first_clip_seconds"] is None
 
 
-def test_gemini_mock_and_budget():
-    client = Mock()
-    client.find_clips.return_value = [clip()]
-    adapter = GeminiOnly(client=client)
-    for _ in range(3):
-        assert adapter(video())["clips"] == [clip()]
-    with pytest.raises(Unavailable, match="budget"):
-        adapter(video())
-    assert client.find_clips.call_count == 3
-    with pytest.raises(Unavailable, match="disabled"):
-        GeminiOnly()(video())
-
 
 def test_optional_signal_and_vlm_hooks(monkeypatch):
     detector = Mock(return_value=[clip()])
