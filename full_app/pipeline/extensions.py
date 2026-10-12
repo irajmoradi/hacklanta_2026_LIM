@@ -102,7 +102,7 @@ def extra_signals(pipeline, job):
         if start < end:
             job['candidates'].append({**r, 'start': start, 'end': end})
     # Bound paid scoring work; retain the strongest local evidence.
-    job['candidates'] = sorted(job['candidates'], key=lambda c: -c.get('score', 0))[:30]
+    job['candidates'] = sorted(job['candidates'], key=lambda c: -c.get('score', 0))[:500]
 
 
 def team_source(pipeline, job, scratch):
@@ -182,6 +182,8 @@ def planner_plan(pipeline, job):
     for c in job['clips']:
         if not c.get('keep', True):
             continue
+        if options.get('mode', 'nice') == 'nice' and c.get('nice_veto'):
+            continue
         evidence = c.get('signals', {})
         reaction = c.get('suggested_reaction_label', c.get('reaction_label', c.get('label')))
         signals = dict(clutch=evidence.get('clutch') is True or reaction == 'clutch',
@@ -190,13 +192,22 @@ def planner_plan(pipeline, job):
             value = evidence.get(name)
             if isinstance(value, (float, int)) and c['start_seconds'] <= value < c['end_seconds']:
                 signals[name] = value
+        # Detector event anchors give the trim a real pre-roll and aftermath.
+        for event in c.get('events', []):
+            time = event.get('time')
+            if isinstance(time, (float, int)) and c['start_seconds'] <= time < c['end_seconds']:
+                name = 'kill_time' if event.get('type') == 'kill' else 'fail_time' if event.get('type') == 'death' else 'action_time'
+                signals.setdefault(name, time)
         clips.append(dict(id=c['id'], start=c['start_seconds'], end=c['end_seconds'],
                           score=c.get('score', .5), label='lowlight' if c.get('type') == 'bad' else 'highlight',
                           caption=c.get('caption', c.get('description', ''))[:240],
                           signals=signals, game_profile=job.get('game', 'generic')))
+    if not clips:
+        raise ValueError('No eligible clips for this mode')
     result = plan_edit(clips, mode=options.get('mode', 'nice'),
                        style={v: k for k, v in STYLE_IDS.items()}[options.get('style', 'hype_montage')],
-                       target_length=options.get('max_duration', 180),
+                       target_length=options.get('max_duration', 30 if options.get('preset') == 'vertical' else 60),
+                       fill_target=True, max_clip_length=10,
                        min_clip_length=min(1, min(c['end']-c['start'] for c in clips)),
                        aspect={v: k for k, v in ASPECT_PRESETS.items()}[options.get('preset', 'landscape')])
     native = candidate_dict(result)

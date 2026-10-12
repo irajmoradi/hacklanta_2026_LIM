@@ -107,7 +107,7 @@ def _decorate(plan: RenderPlan, sources: dict[str, RankedClip]) -> None:
 def plan_edit(
     clips: Iterable[RankedClip | dict], *, mode="nice", style="hype montage",
     target_length=30, aspect="16:9", min_clip_length=1, max_clip_length=6,
-    refiner=None,
+    refiner=None, fill_target=False,
 ) -> RenderPlan:
     """Plan a montage; a higher score means a stronger moment of either label.
 
@@ -115,7 +115,8 @@ def plan_edit(
     An optional refiner receives a prompt and returns caption-only JSON patches.
     """
     options = PlannerOptions(mode=mode, style=style, target_length=target_length,
-        aspect=aspect, min_clip_length=min_clip_length, max_clip_length=max_clip_length)
+        aspect=aspect, min_clip_length=min_clip_length, max_clip_length=max_clip_length,
+        fill_target=fill_target)
     # Revalidate models too: callers may have mutated an already validated input.
     ranked = [RankedClip.model_validate(c.model_dump() if isinstance(c, RankedClip) else c) for c in clips]
     sources = {c.id: c for c in ranked}
@@ -181,6 +182,22 @@ def plan_edit(
                     break
             else:
                 break
+        # Variety is a preference in stock pipeline plans, not an eight-second cap.
+        if options.fill_target and remaining >= minimum and candidates:
+            plan.notes.append("Relaxed variety to fill the requested duration from ranked evidence.")
+            for c in candidates:
+                if remaining < minimum:
+                    break
+                duration = min(_capacity(c, options), remaining)
+                selected.append((c, "fail" if c.label == "lowlight" and mode == "mean" else "highlight",
+                                 duration, _speed(c, options)))
+                remaining -= duration
+        # Absorb a sub-minimum remainder without inventing another tiny clip.
+        if options.fill_target and 0 < remaining < minimum:
+            for i, (c, phase, duration, speed) in enumerate(selected):
+                extra = min(remaining, _capacity(c, options) - duration)
+                selected[i] = (c, phase, duration + extra, speed)
+                remaining -= extra
         schedule.extend(ordered(selected))
         if mode == "nice" and len(schedule) > 1:
             c, _, duration, speed = schedule[1]

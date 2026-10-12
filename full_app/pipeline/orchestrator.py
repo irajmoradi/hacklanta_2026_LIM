@@ -92,6 +92,7 @@ class Pipeline:
                 detect = self.hook('signals', 'detect_candidates', job)
                 if detect:
                     kwargs = dict(profile=job['game'], ocr=True) if options.get('profiles') else {}
+                    kwargs['max_candidates'] = max(30, min(500, int(os.getenv('GEMINI_TOP_N', '30')) * 3))
                     job['candidates'] = [candidate_dict(c) for c in detect(source, curve_sink=lambda curve: job.update(interest_curve=curve), **kwargs)]
         extra_signals(self, job)
         client = self.client(job, key)
