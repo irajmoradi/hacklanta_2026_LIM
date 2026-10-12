@@ -190,3 +190,28 @@ def test_missing_output_and_external_paths(tmp_path):
     (tmp_path / "outside.mp4").write_bytes(b"not media")
     with pytest.raises(ValueError, match="inside"):
         build_share_kit(job, [], {"social": {"video_path": "../outside.mp4"}}, "Valorant")
+
+
+def test_real_montage_intro_offset(job, clips):
+    # Four seconds of actual video: 1s intro, a 2s clip accelerated to 1s,
+    # then a 2s clip. Source timestamps intentionally differ from output times.
+    plan = {"social": {"intro_duration": 1}, "segments": [
+        {"source_start": 0, "source_end": 2, "speed": 2},
+        {"source_start": 2, "source_end": 4},
+    ]}
+    kit = build_share_kit(job, clips, plan, "Valorant")
+    data = json.loads((kit / "metadata.json").read_text())
+    assert [entry["start"] for entry in data["chapters"]] == [0, 1, 2]
+    assert (kit / "chapters.txt").read_text().startswith("00:00 Intro\n00:01 Opening play\n")
+
+
+@pytest.mark.parametrize("option", ["source_path", "captions_path"])
+def test_explicit_missing_files_are_errors(job, clips, option):
+    with pytest.raises(ValueError, match="inside"):
+        build_share_kit(job, clips, {"social": {option: "missing.file"}}, "Valorant")
+    assert not (job.parent / "share" / job.name).exists()
+
+
+def test_text_wrap_preserves_words():
+    _, layout = render_thumbnail(Image.new("RGB", (640, 360)), "LAST SECOND SAVE", SIZES["youtube"])
+    assert " ".join(layout["text"].split()) == "LAST SECOND SAVE"

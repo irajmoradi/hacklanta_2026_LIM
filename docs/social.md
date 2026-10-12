@@ -44,6 +44,8 @@ The default video is `final_with_thumbs.mp4` if present, otherwise
 from the matching interval in the rendered montage. Override paths are relative
 to `job_dir`. The caller must supply the plan used for this render, since the
 package cannot infer edits from the finished video.
+Explicit source/caption overrides must exist; only missing default filenames
+trigger the montage-frame fallback or omission of an SRT.
 
 Clips accept application dictionaries or Pydantic models, with `start_seconds` /
 `end_seconds`, `start` / `end` (seconds or colon-delimited timestamps), or

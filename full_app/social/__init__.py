@@ -52,7 +52,7 @@ def _captions(job, plan, destination, duration):
             destination.write_text("\n".join(blocks), encoding="utf-8")
     else:
         name = plan.get("social", {}).get("captions_path", "captions.srt")
-        if (job / name).exists():
+        if "captions_path" in plan.get("social", {}) or (job / name).exists():
             shutil.copy2(_local_file(job, name), destination)
 
 
@@ -76,15 +76,20 @@ def build_share_kit(job_dir, clips, plan, game, *, client=None):
         raise FileNotFoundError("Render a final_edit.mp4 first, or set social.video_path")
     video = _local_file(job, video_name)
     duration = _duration(video)
-    intro = seconds(options.get("intro_duration", _duration(job / "intro.mp4") if video.name == "final_with_thumbs.mp4" and (job / "intro.mp4").is_file() else 0))
+    intro = options.get("intro_duration")
+    if intro is None:
+        intro = _duration(job / "intro.mp4") if video.name == "final_with_thumbs.mp4" and (job / "intro.mp4").is_file() else 0
+    intro = seconds(intro)
     entries = timeline(clips, plan, intro)
     if entries[-1]["end"] > duration + .25:
         raise ValueError("Plan timeline exceeds rendered video; check speed and intro_duration")
     chapters = chapter_text(entries, intro)
     metadata = build_metadata(entries, game, chapters, client if options.get("gemini_metadata") else None)
+    if intro:
+        metadata["chapters"].insert(0, {"start": 0, "title": "Intro"})
     top = max(entries, key=lambda entry: entry["score"])
     source_name = options.get("source_path", "source.mp4")
-    if (job / source_name).is_file():
+    if "source_path" in options or (job / source_name).is_file():
         source = _local_file(job, source_name)
         start, end = top["source_start"], top["source_end"]
         timebase = "source"

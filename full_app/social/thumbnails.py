@@ -68,14 +68,22 @@ def fit_text(draw, text, area):
     for size in range(104, 17, -2):
         font = _font(size)
         lines = [""]
-        # Character wrapping also handles a single very long word and CJK.
-        for char in text:
-            trial = lines[-1] + char
+        # Prefer word boundaries; split only oversized tokens (including CJK).
+        for word in text.split():
+            trial = (lines[-1] + " " + word).strip()
             box = draw.textbbox((0, 0), trial, font=font, stroke_width=4)
-            if box[2] - box[0] > width and lines[-1]:
-                lines.append(char.lstrip())
-            else:
+            if box[2] - box[0] <= width:
                 lines[-1] = trial
+                continue
+            if lines[-1]:
+                lines.append("")
+            for char in word:
+                trial = lines[-1] + char
+                box = draw.textbbox((0, 0), trial, font=font, stroke_width=4)
+                if box[2] - box[0] > width and lines[-1]:
+                    lines.append(char)
+                else:
+                    lines[-1] = trial
         wrapped = "\n".join(line.rstrip() for line in lines)
         box = draw.multiline_textbbox((0, 0), wrapped, font=font, spacing=10, stroke_width=4)
         if box[2] - box[0] <= width and box[3] - box[1] <= height:
@@ -112,8 +120,8 @@ def render_thumbnail(frame, text, size, subject_cutout=False):
     area = (int(width * .08), int(height * .12), int(width * .88), int(height * .38))
     overlay = Image.new("RGBA", size)
     draw = ImageDraw.Draw(overlay)
-    draw.rounded_rectangle((area[0] - 15, area[1] - 15, area[2] + 15, area[3] + 15), radius=20, fill=(0, 0, 0, 145))
     wrapped, font, position, box = fit_text(draw, text, area)
+    draw.rounded_rectangle((box[0] - 15, box[1] - 15, box[2] + 15, box[3] + 15), radius=20, fill=(0, 0, 0, 145))
     draw.multiline_text(position, wrapped, font=font, fill="white", stroke_width=4, stroke_fill="black", spacing=10)
     # Bright outlined arrow directs attention to the retained action area.
     arrow = [(int(width * .2), int(height * .65)), (int(width * .44), int(height * .54))]
