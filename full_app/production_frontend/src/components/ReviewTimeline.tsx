@@ -1,4 +1,4 @@
-import { useRef } from "react";
+﻿import { useRef } from "react";
 import type { ReviewClip, Job } from "../api";
 export function Timeline({
   job,
@@ -18,7 +18,7 @@ export function Timeline({
     <section className="timeline" aria-label="Review timeline">
       <div className="section-title">
         <h3>Interest timeline</h3>
-        <span>Source � {duration.toFixed(1)}s</span>
+        <span>Source - {duration.toFixed(1)}s</span>
       </div>
       <svg
         viewBox="0 0 100 100"
@@ -48,7 +48,7 @@ export function Timeline({
             aria-label={`Candidate: ${c.caption}`}
             title={c.caption}
           >
-            ?
+            &#9670;
           </button>
         ))}
       </div>
@@ -180,7 +180,7 @@ export function ClipEditor({
           </div>
           <div className="trims">
             <label>
-              In � {c.start.toFixed(1)}s
+              In - {c.start.toFixed(1)}s
               <input
                 aria-label={`Trim start ${i + 1}`}
                 type="range"
@@ -199,7 +199,7 @@ export function ClipEditor({
               />
             </label>
             <label>
-              Out � {c.end.toFixed(1)}s
+              Out - {c.end.toFixed(1)}s
               <input
                 aria-label={`Trim end ${i + 1}`}
                 type="range"
@@ -220,7 +220,7 @@ export function ClipEditor({
           </div>
           <div className="clip-actions">
             <button type="button" onClick={() => onPreview(c)}>
-              ? Preview range
+              Preview range
             </button>
             <button
               type="button"
@@ -228,7 +228,7 @@ export function ClipEditor({
               aria-label={`Move clip ${i + 1} up`}
               onClick={() => move(c.id, i - 1)}
             >
-              ?
+              &uarr;
             </button>
             <button
               type="button"
@@ -236,7 +236,7 @@ export function ClipEditor({
               aria-label={`Move clip ${i + 1} down`}
               onClick={() => move(c.id, i + 1)}
             >
-              ?
+              &darr;
             </button>
             <small>Drag to reorder</small>
           </div>

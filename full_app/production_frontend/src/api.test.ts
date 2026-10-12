@@ -34,19 +34,21 @@ describe("jobs API", () => {
     });
   });
   it("sends options, reviewed ordering and preset to jobs endpoints", async () => {
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({ id: "abc", meta: { duration: 60 } }),
-      });
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "abc", meta: { duration: 60 } }),
+    });
     vi.stubGlobal("fetch", fetcher);
     const api = new EditorApi("jobs");
     await api.create(new File(["x"], "video.mp4"));
     expect(fetcher.mock.calls[0][0]).toBe("/api/jobs");
     expect(fetcher.mock.calls[0][1].body.get("video").name).toBe("video.mp4");
     await api.analyze("abc", options);
-    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual(options);
+    const { game, profile, ...flags } = options;
+    expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({
+      ...flags,
+      prompt: `Game: ${game}. Profile: ${profile}.`,
+    });
     await api.save("abc", [demoClips[2], { ...demoClips[0], keep: false }]);
     expect(fetcher.mock.calls[2][1].method).toBe("PATCH");
     expect(JSON.parse(fetcher.mock.calls[2][1].body).clips[1]).toMatchObject({
@@ -58,16 +60,39 @@ describe("jobs API", () => {
     expect(JSON.parse(fetcher.mock.calls[3][1].body)).toEqual({
       preset: "vertical",
     });
+    await api.render(
+      "abc",
+      "square",
+      options,
+      [demoClips[2], { ...demoClips[0], keep: false }, demoClips[1]],
+      { segments: [{ source_start: 24, source_end: 31, speed: 0.5 }] },
+    );
+    expect(
+      JSON.parse(fetcher.mock.calls[4][1].body).edit_plan.segments,
+    ).toEqual([
+      { source_start: 42, source_end: 55, caption: demoClips[2].caption },
+      {
+        source_start: 24,
+        source_end: 31,
+        caption: demoClips[1].caption,
+        speed: 0.5,
+      },
+    ]);
+    expect(
+      normalizeJob({
+        id: "abc",
+        progress: 0.5,
+        warnings: ["Signals unavailable"],
+      }),
+    ).toMatchObject({ progress: 50, warnings: ["Signals unavailable"] });
   });
   it("surfaces structured server errors", async () => {
     vi.stubGlobal(
       "fetch",
-      vi
-        .fn()
-        .mockResolvedValue({
-          ok: false,
-          json: async () => ({ error: { message: "Provider unavailable" } }),
-        }),
+      vi.fn().mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: { message: "Provider unavailable" } }),
+      }),
     );
     await expect(new EditorApi("jobs").get("id")).rejects.toThrow(
       "Provider unavailable",
@@ -87,12 +112,10 @@ describe("jobs API", () => {
       }
     }
     vi.stubGlobal("EventSource", Events);
-    const fetcher = vi
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        json: async () => ({ id: "id", status: "analyzed", clips: demoClips }),
-      });
+    const fetcher = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: "id", status: "analyzed", clips: demoClips }),
+    });
     vi.stubGlobal("fetch", fetcher);
     const update = vi.fn(),
       connection = vi.fn();
@@ -126,4 +149,46 @@ describe("jobs API", () => {
     });
     expect(fetcher).not.toHaveBeenCalled();
   });
+});
+it("legacy adapter plans and renders only the reviewed ranges in reviewed order", async () => {
+  const requests: { path: string; body: any }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (path: string, init?: RequestInit) => {
+      const body =
+        typeof init?.body === "string" ? JSON.parse(init.body) : init?.body;
+      requests.push({ path, body });
+      const data =
+        path === "/api/upload"
+          ? { job_id: "old", meta: { duration: 60 } }
+          : path === "/api/analyze"
+            ? { clips: demoClips }
+            : path === "/api/plan"
+              ? {
+                  edit_plan: {
+                    segments: [{ source_start: 0, source_end: 60, speed: 1 }],
+                  },
+                }
+              : path === "/api/render"
+                ? { download_url: "/api/download/old" }
+                : { status: "done" };
+      return { ok: true, json: async () => data };
+    }),
+  );
+  const api = new EditorApi("legacy");
+  await api.create(new File(["x"], "legacy.mp4"));
+  await api.analyze("old", options);
+  await api.save("old", [
+    demoClips[2],
+    { ...demoClips[0], keep: false },
+    { ...demoClips[1], start: 25 },
+  ]);
+  await api.render("old", "landscape", options);
+  const render = requests.find((r) => r.path === "/api/render")!;
+  expect(render.body.generate_thumbnails).toBe(false);
+  expect(render.body.edit_plan.segments).toEqual([
+    { source_start: 42, source_end: 55, speed: 1 },
+    { source_start: 25, source_end: 31 },
+  ]);
+  expect((await api.get("old")).download_url).toBe("/api/download/old");
 });

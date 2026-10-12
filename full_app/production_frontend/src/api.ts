@@ -33,6 +33,8 @@ export interface Job {
   source_url?: string;
   download_url?: string;
   error?: string;
+  warnings?: string[];
+  plan?: legacy.EditPlan;
 }
 export type ApiMode = "jobs" | "mock" | "legacy";
 type Wire = Record<string, any>;
@@ -59,13 +61,18 @@ export function normalizeJob(raw: Wire): Job {
     id: String(j.id ?? j.job_id),
     status: j.status ?? "uploaded",
     duration: Number(j.duration ?? j.meta?.duration ?? 0),
-    progress: typeof j.progress === "number" ? j.progress : undefined,
+    progress:
+      typeof j.progress === "number"
+        ? Math.max(0, Math.min(100, j.progress * 100))
+        : undefined,
     clips: (j.clips ?? []).map(normalizeClip),
     candidates: (j.candidates ?? []).map(normalizeClip),
     interest: j.interest_curve ?? j.interest ?? [],
     source_url: j.source_url,
     download_url: j.download_url,
     error: typeof j.error === "string" ? j.error : j.error?.message,
+    warnings: j.warnings ?? [],
+    plan: j.plan ?? j.edit_plan ?? undefined,
   };
 }
 async function request(
@@ -180,11 +187,11 @@ export class EditorApi {
       };
       return;
     }
-    await request(
-      `/api/jobs/${encodeURIComponent(id)}/analyze`,
-      "POST",
-      options,
-    );
+    const { game, profile, ...flags } = options;
+    await request(`/api/jobs/${encodeURIComponent(id)}/analyze`, "POST", {
+      ...flags,
+      prompt: `Game: ${game}. Profile: ${profile}.`,
+    });
   }
   async save(id: string, clips: ReviewClip[]): Promise<void> {
     if (this.mode !== "jobs") {
@@ -200,7 +207,13 @@ export class EditorApi {
       })),
     });
   }
-  async render(id: string, preset: Preset, options: Options): Promise<void> {
+  async render(
+    id: string,
+    preset: Preset,
+    options: Options,
+    reviewed?: ReviewClip[],
+    plan?: legacy.EditPlan,
+  ): Promise<void> {
     if (this.mode === "mock") {
       this.cached = { ...this.cached!, status: "done", progress: 100 };
       return;
@@ -236,6 +249,25 @@ export class EditorApi {
     }
     await request(`/api/jobs/${encodeURIComponent(id)}/render`, "POST", {
       preset,
+      ...(reviewed
+        ? {
+            edit_plan: {
+              segments: reviewed
+                .filter((c) => c.keep)
+                .map((c) => {
+                  const original = plan?.segments.find(
+                    (s) => s.source_start < c.end && s.source_end > c.start,
+                  );
+                  return {
+                    ...original,
+                    source_start: c.start,
+                    source_end: c.end,
+                    caption: c.caption,
+                  };
+                }),
+            },
+          }
+        : {}),
     });
   }
   download(id: string) {

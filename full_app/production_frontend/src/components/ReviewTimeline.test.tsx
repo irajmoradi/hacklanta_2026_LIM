@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
@@ -110,7 +110,7 @@ describe("clip edits", () => {
       "team",
       "clutch",
     ]);
-    fireEvent.click(screen.getAllByText("? Preview range")[1]);
+    fireEvent.click(screen.getAllByText("Preview range")[1]);
     expect(preview).toHaveBeenCalledWith(demoClips[1]);
   });
   it("locks editing during processing", () => {

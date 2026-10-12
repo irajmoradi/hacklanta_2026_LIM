@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import {
   EditorApi,
   type ApiMode,
@@ -42,6 +42,7 @@ export default function App() {
   const [saved, setSaved] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const rangeEnd = useRef<number>();
+  const lastPlan = useRef<Job["plan"]>();
   const dirtyRef = useRef(false);
   const working =
     busy ||
@@ -67,6 +68,7 @@ export default function App() {
       job.id,
       (next) => {
         setJob(next);
+        if (next.plan) lastPlan.current = next.plan;
         if (!dirtyRef.current) setClips(next.clips);
       },
       setConnection,
@@ -104,6 +106,7 @@ export default function App() {
       setSaved(false);
       setClips([]);
       setJob(next);
+      lastPlan.current = undefined;
       setSource(URL.createObjectURL(file));
       setFilename(file.name);
     });
@@ -111,6 +114,7 @@ export default function App() {
   const refresh = async () => {
     const next = await api.get(job!.id);
     setJob(next);
+    if (next.plan) lastPlan.current = next.plan;
     if (!dirtyRef.current) setClips(next.clips);
   };
   const edit = (next: ReviewClip[]) => {
@@ -148,8 +152,8 @@ export default function App() {
         <a href="/" className="brand">
           LIM<span> / STUDIO</span>
         </a>
-        <span className="session-label">GAMEPLAY ? GREAT MOMENTS</span>
-        <span className="connection">? {connection}</span>
+        <span className="session-label">GAMEPLAY / GREAT MOMENTS</span>
+        <span className="connection">&#9679; {connection}</span>
       </header>
       <main>
         <div className="intro">
@@ -168,13 +172,13 @@ export default function App() {
         </div>
         {mode === "mock" && (
           <p className="notice">
-            Demo mode � Fixture analysis and simulated export. Upload your own
+            Demo mode - Fixture analysis and simulated export. Upload your own
             video for playback; no backend calls.
           </p>
         )}
         {mode === "legacy" && (
           <p className="notice">
-            Classic backend � Landscape export only. Signals, captions,
+            Classic backend - Landscape export only. Signals, captions,
             reactions, spotlight and provider selection require the jobs API.
           </p>
         )}
@@ -188,6 +192,11 @@ export default function App() {
             >
               Dismiss
             </button>
+          </div>
+        )}
+        {!!job?.warnings?.length && (
+          <div className="notice" role="status">
+            {job.warnings.join(" ")}
           </div>
         )}
         <div className="workspace">
@@ -205,9 +214,9 @@ export default function App() {
                   upload(e.dataTransfer.files[0]);
                 }}
               >
-                <span className="upload-icon">?</span>
+                <span className="upload-icon">&#8613;</span>
                 <strong>{filename || "Drop your gameplay here"}</strong>
-                <small>or choose a video � up to 2 GB</small>
+                <small>or choose a video - up to 2 GB</small>
                 <input
                   aria-label="Upload gameplay"
                   type="file"
@@ -247,8 +256,8 @@ export default function App() {
                     option("mode", e.target.value as Options["mode"])
                   }
                 >
-                  <option value="nice">Nice � Hype reel</option>
-                  <option value="mean">Mean � Roast reel</option>
+                  <option value="nice">Nice - Hype reel</option>
+                  <option value="mean">Mean - Roast reel</option>
                 </select>
               </label>
               <label>
@@ -307,7 +316,7 @@ export default function App() {
                   })
                 }
               >
-                {clips.length ? "Analyze again" : "Find my moments"} ?
+                {clips.length ? "Analyze again" : "Find my moments"} &rarr;
               </button>
             </fieldset>
             <p className="hint">Review every cut before you export.</p>
@@ -319,7 +328,7 @@ export default function App() {
               </h2>
               <span className="status" role="status">
                 {busy
-                  ? "Working�"
+                  ? "Working..."
                   : job?.status?.replace(/_/g, " ") || "Awaiting footage"}
               </span>
             </div>
@@ -355,7 +364,7 @@ export default function App() {
                 />
               ) : (
                 <div className="empty-player">
-                  <span>?</span>
+                  <span>&#9655;</span>
                   <h3>Your best plays belong here.</h3>
                   <p>Upload gameplay to start building your reel.</p>
                 </div>
@@ -400,7 +409,7 @@ export default function App() {
             </h2>
             <p>
               {dirty
-                ? "Unsaved edits � saved automatically before rendering"
+                ? "Unsaved edits - saved automatically before rendering"
                 : saved
                   ? "Edits saved"
                   : "Choose your canvas and export your reel."}
@@ -413,9 +422,9 @@ export default function App() {
               disabled={working || mode === "legacy"}
               onChange={(e) => setPreset(e.target.value as Preset)}
             >
-              <option value="landscape">Landscape � 16:9</option>
-              <option value="vertical">Vertical � 9:16</option>
-              <option value="square">Square � 1:1</option>
+              <option value="landscape">Landscape - 16:9</option>
+              <option value="vertical">Vertical - 9:16</option>
+              <option value="square">Square - 1:1</option>
             </select>
           </label>
           <button
@@ -430,12 +439,18 @@ export default function App() {
             onClick={() =>
               void run(async () => {
                 await save();
-                await api.render(job!.id, preset, options);
+                await api.render(
+                  job!.id,
+                  preset,
+                  options,
+                  clips,
+                  job?.plan ?? lastPlan.current,
+                );
                 await refresh();
               })
             }
           >
-            Render reel ?
+            Render reel &#8599;
           </button>
         </section>
         {job?.status === "done" && (
@@ -459,7 +474,7 @@ export default function App() {
                   href={job.download_url || api.download(job.id)}
                   download
                 >
-                  Download montage ?
+                  Download montage &darr;
                 </a>
               </>
             )}
