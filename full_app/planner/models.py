@@ -15,9 +15,15 @@ class Model(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
+class Event(Model):
+    kind: Literal["kill", "headshot", "multikill", "clutch", "death", "whiff", "ability", "play"]
+    time: float = Field(ge=0)
+
+
 class Signals(Model):
     """Event timestamps are absolute source seconds, not clip-relative offsets."""
 
+    events: list[Event] = Field(default_factory=list, max_length=100)
     action_time: float | None = None
     kill_time: float | None = None
     fail_time: float | None = None
@@ -42,13 +48,15 @@ class RankedClip(Model):
     def source_bounds(self):
         if self.end <= self.start:
             raise ValueError("clip end must follow start")
-        for time in (self.signals.action_time, self.signals.kill_time, self.signals.fail_time):
+        for time in (self.signals.action_time, self.signals.kill_time, self.signals.fail_time, *[e.time for e in self.signals.events]):
             if time is not None and not self.start <= time < self.end:
                 raise ValueError("event timestamps must be inside the source clip")
         return self
 
 
 class PlannerOptions(Model):
+    chaos: float = Field(default=.35, ge=0, le=1)
+    seed: int = 0
     fill_target: bool = False
     mode: Mode = "nice"
     style: Style = "hype montage"
@@ -126,6 +134,8 @@ class Music(Model):
 
 
 class RenderPlan(Model):
+    chaos: float = Field(default=.35, ge=0, le=1)
+    seed: int = 0
     fill_target: bool = False
     version: Literal[2] = 2
     mode: Mode

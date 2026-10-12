@@ -74,14 +74,9 @@ def test_effects_speed_peak_trims_and_styles(style):
         assert c.speed == 0.5 and "slow_motion" in names
     else:
         assert c.speed == 1 and "slow_motion" not in names
-    if style in ("hype montage", "meme edit"):
-        assert {"flash_white", "zoom_in_center"} <= names
-        flash = next(e for e in plan.effects if e.name == "flash_white" and e.clip_id == c.id)
-        assert flash.start == pytest.approx(c.peak)
-    if style == "clean edit":
-        assert not plan.effects and not plan.sfx
-    if style == "cinematic":
-        assert "vignette" in names
+    # FX-2 replaces fixed style effects with rich, seeded stacks in every style.
+    assert 1 <= len(names) <= 4
+    assert 2 <= len([s for s in plan.sfx if s.clip_id == c.id]) <= 5
     assert all(r.position == "top_right" for r in plan.reactions)
     assert plan.reactions[-1].start == pytest.approx(c.peak)
     assert all(e.name in VIDEO_EFFECTS for e in plan.effects)
@@ -122,8 +117,11 @@ def test_event_at_source_start_and_end_trims_stay_in_bounds():
 def test_kill_timing_is_distinct_from_action_timing():
     plan = plan_edit([clip(0, kill_time=8.2)], target_length=8)
     c = plan.clips[-1]
-    flash = next(e for e in plan.effects if e.clip_id == c.id and e.name == "flash_white")
-    assert flash.start == pytest.approx(c.start + (8.2 - c.source_start) / c.speed)
+    from planner.stacks import events_for
+    from planner.models import RankedClip
+    events = events_for(c, RankedClip.model_validate(clip(0, kill_time=8.2)))
+    assert ('kill', pytest.approx(c.start + (8.2-c.source_start)/c.speed)) in events
+
 
 
 def test_empty_short_budget_and_missing_label():

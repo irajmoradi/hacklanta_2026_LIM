@@ -1,0 +1,35 @@
+import subprocess
+from types import SimpleNamespace
+import pytest
+
+from models.effects import VIDEO_EFFECTS
+from render.placements import effects_graph
+from render.audio import sfx_graph
+from render.plan import Sound, TimedEffect
+
+
+@pytest.mark.parametrize('name', sorted(VIDEO_EFFECTS.keys()-{'none','slow_motion','speed_2x'}))
+def test_every_registered_timed_effect_runs(name):
+    # Late placement catches legacy text gates; rendering catches unsupported filters.
+    graph = '[0:v]null[placement_input]'+effects_graph(
+        [TimedEffect(name=name, start=2.1, duration=.3)], (160,90), 20, 2.5)
+    subprocess.run(['ffmpeg','-v','error','-filter_complex_threads','1','-f','lavfi','-i',
+                    'testsrc2=s=160x90:r=20:d=2.5','-filter_complex',graph,
+                    '-map','[v]','-t','2.5','-f','null','-'], check=True, capture_output=True)
+
+
+def test_all_overlapping_sounds_are_mixed_and_ducked(tmp_path):
+    sounds = [Sound(sfx_key=n, offset_in_segment=.2, duration=.5, gain=.3+i*.1)
+              for i,n in enumerate(['bass_drop','anime_wow','another_one','impact_hit','taco_bell'])]
+    args, graph = sfx_graph(sounds, 1, 1)
+    assert 'amix=inputs=6' in graph and 'normalize=0' in graph and 'alimiter=' in graph
+    assert "volume='if(gt(" in graph
+    assert graph.count('adelay=200') == 5
+    subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i','sine=frequency=400:duration=1',
+                    *args,'-filter_complex','[0:a]anull[baseaudio]'+graph,'-map','[outa]',
+                    '-t','1',str(tmp_path/'mixed.wav')], check=True, capture_output=True)
+
+
+def test_unknown_sound_is_not_silently_skipped():
+    with pytest.raises(ValueError, match='Unknown'):
+        sfx_graph([Sound(sfx_key='missing')],1,1)

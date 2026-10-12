@@ -94,6 +94,13 @@ class Segment(Model):
         for placement in [*self.timed_effects, *self.texts, *self.reactions]:
             if placement.start + placement.duration > self.duration + .001:
                 raise ValueError('Placement exceeds segment duration')
+        from models.effects import SOUND_EFFECTS
+        for sound in self.sound_effects:
+            if sound.sfx_key not in SOUND_EFFECTS or sound.sfx_key == 'none':
+                raise ValueError('Unknown SFX')
+            if sound.offset_in_segment >= self.duration or (sound.duration is not None and
+                    sound.offset_in_segment+sound.duration > self.duration+.001):
+                raise ValueError('Sound exceeds segment duration')
         for effect in self.timed_effects:
             if effect.name not in VIDEO_EFFECTS or effect.name in ('slow_motion', 'speed_2x'):
                 raise ValueError('Timed speed effects must use segment speed')
@@ -139,6 +146,8 @@ class Card(Model):
 
 
 class RenderPlan(Model):
+    chaos: float = Field(default=.35, ge=0, le=1)
+    seed: int = 0
     render_version: Literal[2] = 2
     segments: list[Segment] = Field(min_length=1, max_length=100)
     preset: Preset = "landscape"
