@@ -73,6 +73,7 @@ def create_app(config=None, pipeline=None):
                         else IsolatedPipeline(resources))
     queue = JobQueue(store, pipeline if pipeline is not None else default_pipeline,
                      app.config['JOB_WORKERS'], app.config['JOB_CAPACITY'], lease)
+    queue.editor_model_factory = app.config.get('EDITOR_AGENT_MODEL_FACTORY')
     streams = threading.BoundedSemaphore(app.config['SSE_MAX_SUBSCRIBERS'])
     uploads = threading.BoundedSemaphore(app.config['MAX_UPLOADS'])
     queue.start_retention(resources, app.config['RETENTION_INTERVAL'])
@@ -181,6 +182,8 @@ def create_app(config=None, pipeline=None):
                 metadata(path)
                 sources.append(str(path))
             job = dict(id=job_id, _owner=g.owner, dir=str(directory), source=str(source), meta=meta,
+                       source_filename=Path(video.filename.replace('\\', '/')).name,
+                       source_size=source.stat().st_size,
                        sources=sources, source_count=len(sources),
                        status='uploaded', stage='upload', progress=1, completed=['upload'],
                        options={'privacy': False, **({'multipov': True} if len(sources) > 1 else {})}, clips=None, candidates=[], edit_plan=None, output=None,
@@ -237,6 +240,25 @@ def create_app(config=None, pipeline=None):
         data = body()
         data.setdefault('preset', 'landscape')
         return start(job_id, 'render', data)
+
+    @app.put('/api/jobs/<job_id>/plan')
+    def import_plan(job_id):
+        data = body()
+        if set(data) != {'edit_plan', 'max_duration'}:
+            raise ValueError('Provide edit_plan and max_duration')
+        options = options_valid({'max_duration': data['max_duration']}, EDIT_STYLES)
+        with queue.lock:
+            job = owned(job_id)
+            if job_id in queue.active:
+                raise Conflict('Job is busy')
+            validated = plan_valid(data['edit_plan'], job['meta']['duration'], options['max_duration'])
+            queue.invalidate(job, 'render')
+            job.update(edit_plan=validated, status='planned', stage='plan', error=None, _custom_plan=True)
+            job['options'].update(options)
+            if 'plan' not in job['completed']:
+                job['completed'].append('plan')
+            store.save(job)
+            return jsonify(public(job))
 
     @app.post('/api/jobs/<job_id>/agent')
     def agent(job_id):

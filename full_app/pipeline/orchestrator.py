@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 LOG = logging.getLogger(__name__)
 REPORT = ContextVar('pipeline_report', default=None)
+RUNTIME_KEY = ContextVar('pipeline_runtime_key', default=None)
 
 
 class Pipeline:
@@ -176,7 +177,8 @@ class Pipeline:
         with self.stage(job, 'edit_plan'):
             from .experience import enrich
             job['edit_plan'] = enrich(job, self.plan_edit(job, key))
-            job['planning_settings'] = {k: job['options'].get(k) for k in ('mode', 'style', 'planner', 'max_duration')}
+            job['planning_settings'] = {k: job['options'].get(k) for k in
+                ('mode', 'style', 'planner', 'max_duration', 'editing_instructions', 'plan_refinement', 'preset')}
 
     def plan_edit(self, job, key):
         """Selected/ranked clips in, validated plan out."""
@@ -186,7 +188,7 @@ class Pipeline:
         if options.get('planner') or job.get('_local_replan'):
             from .extensions import planner_plan
             try:
-                planned = planner_plan(self, job)
+                planned = planner_plan(self, job, key)
                 if planned:
                     return plan_valid(planned, job['meta']['duration'])
             except (ImportError, ValueError):
@@ -198,7 +200,7 @@ class Pipeline:
             max_duration=options.get('max_duration', 180),
             clips_json=json.dumps([c for c in job['clips'] if c.get('keep', True)]),
             video_effects=effects_for_prompt(), sound_effects=sfx_for_prompt(),
-            edit_style=style['label'], style_instructions=style['instructions'], user_prompt=options.get('prompt', ''))
+            edit_style=style['label'], style_instructions=style['instructions'], user_prompt=options.get('editing_instructions', options.get('prompt', '')))
         client = self.client(job, key)
         try:
             try:
@@ -220,8 +222,12 @@ class Pipeline:
 
     def render(self, job, key):
         from .rendering import render_job
-        with self.stage(job, 'render'):
-            render_job(self, job, key)
+        token = RUNTIME_KEY.set(key)
+        try:
+            with self.stage(job, 'render'):
+                render_job(self, job, key)
+        finally:
+            RUNTIME_KEY.reset(token)
 
     def legacy_render(self, job, key, plan=None):
         # Only this disposable directory contains intermediate render assets.

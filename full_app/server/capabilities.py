@@ -6,9 +6,9 @@ def frontend_capabilities():
     modules = {name: find_spec(name) is not None for name in
                ('profiles', 'audio_ai', 'planner', 'vjepa', 'social', 'ingest', 'fx',
                 'narration', 'privacy', 'multipov', 'music', 'perf', 'sam', 'reactions', 'signals')}
-    controls = {'profiles': ['game', 'profiles'], 'planner': ['planner_v2', 'planner', 'chaos', 'seed'],
+    controls = {'profiles': ['game', 'profiles'], 'planner': ['planner_v2', 'planner', 'chaos', 'seed', 'plan_refinement'],
                 'reactions': ['reactions', 'reaction_size', 'clean'],
-                'privacy': ['privacy_blur', 'privacy'], 'social': ['share_kit', 'social'],
+                'privacy': ['privacy_blur', 'privacy'], 'social': ['share_kit', 'social', 'gemini_image'],
                 'sam': ['sam', 'sam_reframe'], 'multipov': ['multipov', 'team_mode']}
     options = ['window_scoring', 'captions', 'full_experience', 'beat_sync', 'transitions', 'cards', 'narration_persona', 'music_mood']
     for module, available in modules.items():

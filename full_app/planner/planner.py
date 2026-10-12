@@ -150,48 +150,40 @@ def plan_edit(
             kinds = [_kind(best), *[_kind(item[0]) for item in ordered(items)], _kind(best)]
             return not any(a == b == c for a, b, c in zip(kinds, kinds[1:], kinds[2:]))
 
-        # Prefer high scores for selection, then play them in ascending order.
-        candidates = sorted((c for c in preferred if c.id != best.id), key=_rank)
-        if mode == "mean":
-            setups = sorted((c for c in eligible if c.label == "highlight" and c.id != best.id), key=_rank)
-            for setup in setups:
-                if remaining < minimum:
+        # Allocate output seconds, including the preferred hook and climax,
+        # toward 70/30. Never invent missing evidence to satisfy a quota.
+        preferred_label = "highlight" if mode == "nice" else "lowlight"
+        minority = sorted((c for c in eligible if c.label != preferred_label and c.id != best.id), key=_rank)
+        candidates = sorted((c for c in eligible if c.label == preferred_label and c.id != best.id), key=_rank)
+        minority_budget = min(remaining, options.target_length * .3)
+        unused = []
+        for pool, quota in ((minority, minority_budget), (candidates, remaining)):
+            spent = 0.
+            pool = list(pool)
+            while pool and remaining >= minimum and quota - spent >= minimum:
+                for c in pool:
+                    duration = min(_capacity(c, options), remaining, quota - spent)
+                    phase = "setup" if c.label != preferred_label else ("fail" if mode == "mean" else "highlight")
+                    item = (c, phase, duration, _speed(c, options))
+                    if options.fill_target or varied([*selected, item]):
+                        selected.append(item)
+                        remaining -= duration
+                        spent += duration
+                        pool.remove(c)
+                        break
+                else:
                     break
-                duration = min(_capacity(setup, options), remaining, 3)
-                item = (setup, "setup", duration, _speed(setup, options))
-                if varied([item]):
-                    selected.append(item)
-                    remaining -= duration
-                    break
-        selected_ids = {item[0].id for item in selected}
-        candidates = [c for c in candidates if c.id not in selected_ids]
-        # Reconsider rejected candidates after a different kind creates space.
-        while remaining >= minimum:
-            for c in candidates:
-                duration = min(_capacity(c, options), remaining)
-                item = (c, "fail" if mode == "mean" else "highlight", duration, _speed(c, options))
-                if varied([*selected, item]):
-                    selected.append(item)
-                    remaining -= duration
-                    candidates.remove(c)
-                    break
-            else:
-                break
-        # If fails are scarce, use honest highlight context instead of inventing
-        # more failures. Only lowlight-labelled sources receive roast decoration.
-        if options.fill_target and mode == "mean":
-            used = {best.id, *(item[0].id for item in selected), *(c.id for c in candidates)}
-            candidates.extend(sorted((c for c in eligible if c.id not in used), key=_rank))
-        # Variety is a preference in stock pipeline plans, not an eight-second cap.
-        if options.fill_target and remaining >= minimum and candidates:
-            plan.notes.append("Relaxed variety to fill the requested duration from ranked evidence.")
-            for c in candidates:
+            unused.extend(pool)
+        if options.fill_target and remaining >= minimum:
+            for c in sorted(unused, key=_rank):
                 if remaining < minimum:
                     break
                 duration = min(_capacity(c, options), remaining)
                 selected.append((c, "fail" if c.label == "lowlight" and mode == "mean" else "highlight",
                                  duration, _speed(c, options)))
                 remaining -= duration
+        if options.fill_target and not varied(selected):
+            plan.notes.append("Relaxed variety to fill the requested duration from ranked evidence.")
         # Absorb a sub-minimum remainder without inventing another tiny clip.
         if options.fill_target and 0 < remaining < minimum:
             for i, (c, phase, duration, speed) in enumerate(selected):
@@ -216,6 +208,9 @@ def plan_edit(
             peak=cursor + (_peak(clip) - start) / speed))
         cursor += duration
     plan.duration = cursor
+    preferred_seconds = sum(c.duration for c in plan.clips if c.label == ("highlight" if mode == "nice" else "lowlight"))
+    if cursor and abs(preferred_seconds / cursor - .7) > .05:
+        plan.notes.append("70/30 mix limited by available labels, clip lengths, variety or the hook/climax budget.")
     if cursor < options.target_length - 1e-6:
         plan.notes.append("Under budget: available footage, clip limits, or variety constraints limit duration.")
     if len(plan.clips) == 2:
