@@ -1,5 +1,6 @@
 """Application factory and compatible HTTP adapters."""
 import atexit
+import json
 import os
 import shutil
 import time
@@ -236,6 +237,22 @@ def create_app(config=None, pipeline=None):
         data.setdefault('preset', 'landscape')
         return start(job_id, 'render', data)
 
+    @app.post('/api/jobs/<job_id>/agent')
+    def agent(job_id):
+        from .editor import submit
+        data = body()
+        instruction = data.get('instruction')
+        if set(data) != {'instruction'} or not isinstance(instruction, str) or not instruction.strip() or len(instruction) > 8000:
+            raise ValueError('Provide a nonempty instruction of at most 8000 characters')
+        result = submit(queue, job_id, instruction, app.config.get('EDITOR_AGENT_MODEL_FACTORY'),
+                        app.config.get('EDITOR_AGENT_CHAT_STEPS', 8), app.config.get('EDITOR_AGENT_CALL_BUDGET')).result()
+        return jsonify(result)
+
+    @app.post('/api/jobs/<job_id>/agent/undo')
+    def agent_undo(job_id):
+        from .editor import undo
+        return jsonify(undo(queue, job_id))
+
     @app.post('/api/analyze')
     @app.post('/api/plan')
     @app.post('/api/render')
@@ -347,7 +364,8 @@ def create_app(config=None, pipeline=None):
                 rows = store.events(job_id, cursor)
                 for seq, data in rows:
                     cursor = seq
-                    yield f'id: {seq}\nevent: progress\ndata: {data}\n\n'
+                    event = 'agent_step' if json.loads(data).get('event') == 'agent_step' else 'progress'
+                    yield f'id: {seq}\nevent: {event}\ndata: {data}\n\n'
                 if not rows:
                     try:
                         store.get(job_id)
@@ -359,7 +377,7 @@ def create_app(config=None, pipeline=None):
                 except KeyError:
                     return
                 # Drain all replay pages, then close inactive/terminal jobs.
-                if len(rows) < 100 and current['status'] not in ('queued', 'analyzing', 'planning', 'rendering'):
+                if len(rows) < 100 and current['status'] not in ('queued', 'analyzing', 'planning', 'rendering', 'editing'):
                     return
                 time.sleep(min(app.config['SSE_INTERVAL'], max(0, deadline - time.monotonic())))
         response = Response(generate(), mimetype='text/event-stream',

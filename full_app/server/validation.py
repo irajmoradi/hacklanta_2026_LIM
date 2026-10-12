@@ -20,7 +20,7 @@ class LegacyPlan(RenderPlan):
 
 
 EXTENSION_FLAGS = {'profiles', 'audio_ai', 'planner', 'vjepa', 'social', 'ingest',
-                   'fx', 'narration', 'privacy', 'multipov', 'music', 'perf'}
+                   'fx', 'narration', 'privacy', 'multipov', 'music', 'perf', 'editor_agent'}
 
 
 def number(value, name, low=0, high=86400):

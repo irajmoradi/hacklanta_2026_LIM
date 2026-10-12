@@ -34,6 +34,10 @@ class JobQueue:
 
     def recover(self):
         for job in self.store.all():
+            if job['status'] == 'editing':
+                job.update(status='planned' if job.get('edit_plan') else 'analyzed',
+                           error='Interrupted editor run; starting plan retained')
+                self.store.save(job)
             # A cancelled job is never resurrected on restart.
             if job['status'] in ('queued', 'analyzing', 'planning', 'rendering'):
                 try:
@@ -68,7 +72,7 @@ class JobQueue:
             invalidate = None
             if changed & analysis_keys:
                 invalidate = 'analyze'
-            elif changed & {'mode', 'style', 'prompt', 'max_duration', 'planner', 'fx'}:
+            elif changed & {'mode', 'style', 'prompt', 'max_duration', 'planner', 'fx', 'editor_agent'}:
                 invalidate = 'plan'
             elif changed:
                 invalidate = 'render'
@@ -79,6 +83,8 @@ class JobQueue:
             if 'mode' in changed and invalidate != 'analyze' and job.get('clips'):
                 job['_local_replan'] = True
             job['options'].update(options)
+            if job['options'].get('editor_agent'):
+                job['options']['planner'] = True
             if custom_plan is not None and custom_plan != job['edit_plan']:
                 self.invalidate(job, 'render')
                 job['edit_plan'] = custom_plan
@@ -104,6 +110,8 @@ class JobQueue:
         if index <= 1:
             job['edit_plan'] = None
             job.pop('planner_plan', None)
+            for field in ('agent_versions', 'agent_result', 'agent_trace'):
+                job.pop(field, None)
         job['output'] = None
         for field in ('share_kit', 'team_candidates', 'team_alignments'):
             job.pop(field, None)
@@ -152,6 +160,10 @@ class JobQueue:
                     getattr(self.pipeline, stage)(job, self.keys.get(job_id))
                 if stage == 'plan':
                     plan_valid(job['edit_plan'], job['meta']['duration'], job['options'].get('max_duration', 180))
+                    if job['options'].get('editor_agent'):
+                        from .editor import run, apply_result
+                        result = run(self, job, job['options'].get('prompt') or 'Improve this draft and review its preview')
+                        apply_result(self, job, result)
                 with self.lock:
                     if self.store.get(job_id)['status'] == 'cancelled':
                         if stage == 'render' and job.get('output'):
