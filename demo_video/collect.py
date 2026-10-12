@@ -10,6 +10,7 @@ FILES = ['extension_demo.mp4', 'montage_landscape.mp4', 'montage_vertical.mp4',
          'combined_result.json', 'local_candidates.json', 'mean_editorial_input.json',
          'cold_analysis_timings.json', 'rejected_ranges.json',
          'editorial_selection.json',
+         'verification.json',
          'source_review', 'mean_review',
          'share_landscape', 'share_vertical', 'share_mean_vertical']
 

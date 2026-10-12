@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const OUT = '/srv/demo_out/demo01';
 const BASE = 'http://127.0.0.1:8011';
+const REPLAY = process.env.DEMO_UI_REPLAY === '1';
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function main() {
   const browser = await chromium.launch({headless:true, args:['--no-sandbox']});
@@ -59,7 +60,7 @@ async function main() {
       await wait(4500);
     });
     let data = await idle();
-    fs.writeFileSync(OUT+'/analysis.json',JSON.stringify(data,null,2));
+    if(!REPLAY) fs.writeFileSync(OUT+'/analysis.json',JSON.stringify(data,null,2));
     // Keep a concise editorial selection from the real analysis; preserve evidence.
     const editorial = JSON.parse(fs.readFileSync(path.join(__dirname,'editorial_selection.json')));
     const selected = editorial.nice.map(edit=>{
@@ -72,8 +73,11 @@ async function main() {
     const response = await context.request.patch(BASE+'/api/jobs/'+jobId+'/clips',{data:{clips:selected}});
     if(!response.ok()) throw new Error(await response.text());
     await wait(6500);
-    await scene('Real interest curve and why-this-clip evidence',async()=>{
+    await scene('Interest curve from real candidate scores',async()=>{
       await page.getByRole('region',{name:'Review timeline'}).scrollIntoViewIfNeeded().catch(()=>page.locator('.timeline').scrollIntoViewIfNeeded());
+    });
+    await scene('Why this clip: real audio evidence',async()=>{
+      await page.locator('.clip-card').nth(1).scrollIntoViewIfNeeded();
     });
     await scene('Trim and reorder before export',async()=>{
       const slider = page.getByLabel('Trim start 1',{exact:true});
@@ -86,9 +90,11 @@ async function main() {
       await page.getByRole('button',{name:/Render reel/}).click();
     });
     data = await idle();
-    fs.writeFileSync(OUT+'/landscape.json',JSON.stringify(data,null,2));
-    fs.copyFileSync(OUT+'/jobs/'+jobId+'/output.mp4',OUT+'/montage_landscape.mp4');
-    fs.cpSync(OUT+'/jobs/'+jobId+'/share',OUT+'/share_landscape',{recursive:true});
+    if(!REPLAY) {
+      fs.writeFileSync(OUT+'/landscape.json',JSON.stringify(data,null,2));
+      fs.copyFileSync(OUT+'/jobs/'+jobId+'/output.mp4',OUT+'/montage_landscape.mp4');
+      fs.cpSync(OUT+'/jobs/'+jobId+'/share',OUT+'/share_landscape',{recursive:true});
+    }
     await scene('Share kit / covers / posting copy',async()=>{
       await page.getByRole('region',{name:'Share kit',exact:true}).scrollIntoViewIfNeeded();
     });
@@ -102,9 +108,11 @@ async function main() {
       await page.getByRole('button',{name:/Render reel/}).click();
     });
     data = await idle();
-    fs.writeFileSync(OUT+'/vertical.json',JSON.stringify(data,null,2));
-    fs.copyFileSync(OUT+'/jobs/'+jobId+'/output.mp4',OUT+'/montage_vertical.mp4');
-    fs.cpSync(OUT+'/jobs/'+jobId+'/share',OUT+'/share_vertical',{recursive:true});
+    if(!REPLAY) {
+      fs.writeFileSync(OUT+'/vertical.json',JSON.stringify(data,null,2));
+      fs.copyFileSync(OUT+'/jobs/'+jobId+'/output.mp4',OUT+'/montage_vertical.mp4');
+      fs.cpSync(OUT+'/jobs/'+jobId+'/share',OUT+'/share_vertical',{recursive:true});
+    } else fs.writeFileSync(OUT+'/ui_replay.json',JSON.stringify(data,null,2));
     await page.screenshot({path:OUT+'/frontend.png',fullPage:true});
   } finally {
     fs.writeFileSync(OUT+'/ui_scenes.json',JSON.stringify(scenes,null,2));

@@ -6,6 +6,7 @@ only. This starts an explicitly marked LIVE smoke test with a three-call cap.
 import json
 from pathlib import Path
 import subprocess
+import sys
 
 
 def main():
@@ -18,7 +19,7 @@ def main():
     key = values['GOOGLE_API_KEY']
     remote = '''import json,os,subprocess,sys
 payload=json.load(sys.stdin)
-env=dict(os.environ,GOOGLE_API_KEY=payload['key'],GOOGLE_GENAI_USE_VERTEXAI='true')
+env=dict(os.environ,GOOGLE_API_KEY=payload['key'],GOOGLE_GENAI_USE_VERTEXAI='true',DEMO_REPLAY_EXPORTS=str(payload.get('replay_exports',False)).lower())
 os.makedirs('/srv/demo_out/demo01',exist_ok=True)
 with open('/srv/demo_out/demo01/backend.log','ab') as log:
  p=subprocess.Popen(['/srv/lim/lim-demo01/.venv/bin/python','-u','demo_video/live_smoke_server.py'],cwd='/srv/lim/lim-demo01',env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=log,start_new_session=True)
@@ -29,7 +30,7 @@ print('Live smoke backend PID',p.pid)
     subprocess.run(['ssh', '-i', str(Path.home() / '.ssh/village_vultr'),
                     '-o', 'BatchMode=yes', 'root@104.207.133.47',
                     'python3 -c ' + shlex.quote(remote)],
-                   input=json.dumps({'key': key}), text=True, check=True)
+                   input=json.dumps({'key': key, 'replay_exports': '--replay-exports' in sys.argv}), text=True, check=True)
 
 
 if __name__ == '__main__':

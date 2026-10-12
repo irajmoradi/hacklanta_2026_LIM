@@ -61,7 +61,10 @@ These are in `demo_video/live_smoke_server.py`; none is a claimed core fix.
    while `share_kit` is a directory marker string rather than the UI's object.
    The adapter derives a sparse curve from actual candidate midpoint scores and
    exposes actual generated metadata, chapters, covers and download links.
-   This is candidate evidence, not a dense per-frame interest measurement.
+   This is candidate evidence, not a dense per-frame interest measurement. Raw
+   candidate scores can exceed 1; the adapter normalizes them by the positive
+   peak before sending 0–100 values, preventing the frontend clamp from flattening
+   the entire curve. A regression test covers this scale mismatch.
 4. **Privacy cost.** The core sanitizes the entire source before editing. The
    full-source attempt progressed only about 10 MB into the 1.34 GB input after
    roughly one minute, making three full-length passes impractical.
@@ -75,6 +78,8 @@ These are in `demo_video/live_smoke_server.py`; none is a claimed core fix.
    uploader's name. The original fallback also blankets the center of gameplay.
    This demo explicitly restricts masks to kill feed, chat and party voice.
    Scoreboard/nameplate coverage is **not demonstrated**. Review before publishing.
+   The UI source preview and old-version comparison are raw footage; these masks
+   apply to the new montage exports, not every frame of the demonstration.
 5. **Mode changes invalidate analysis.** Changing `mode` clears clips and
    candidates. An explicit local mean-mode plan avoids another paid analysis;
    the prior selected-clip evidence is retained in `mean_editorial_input.json`.
@@ -120,6 +125,22 @@ ssh -i "$env:USERPROFILE/.ssh/village_vultr" root@104.207.133.47 "cd /srv/lim/li
 python demo_video/collect.py
 ```
 
+For the final UI recapture after visual QA, the exact additional commands were:
+
+```powershell
+python demo_video/launch_live.py --replay-exports
+ssh -i "$env:USERPROFILE/.ssh/village_vultr" root@104.207.133.47 "cd /srv/lim/lim-demo01 && DEMO_UI_REPLAY=1 node demo_video/record_ui.cjs"
+```
+
+This is a real backend export cache, not a mocked browser response. It refuses
+reuse unless the uploaded source SHA-256, full edit plan and export options
+match the already decoded/verified exports. It creates real job output/share
+files and returns normal API state; the original render timing snapshots remain
+unchanged. `ui_replay.json` on the runner records the cache-backed UI job.
+The original full render walkthrough also completed successfully before recapture.
+The editorial anchors are specific to this source and saved analysis; scripts
+fail explicitly if a different analysis no longer matches them.
+
 `launch_live.py` is explicitly a live smoke launcher. It reads only
 `GOOGLE_API_KEY` at runtime from `C:/Users/mourn/Downloads/hacklanta/.env` and
 passes it over SSH stdin into the backend process environment. No credential is
@@ -151,4 +172,109 @@ it does not copy the source gameplay, job workspaces or full-source privacy cach
 - `live_calls.json`: persistent attempt ledger; `output_manifest.json`: actual
   output durations, dimensions and sizes; `ui_scenes.json`: recording edit list.
 
-Final measured results and verification are filled in after the run completes.
+## Measured results
+
+| Local deliverable (`demo_video/out/`) | Duration | Video |
+| --- | ---: | --- |
+| `extension_demo.mp4` | 152.398 s (2:32) | 1920 × 1080, 30 fps |
+| `ui_walkthrough.mp4` | 34.397 s | 1920 × 1080, 30 fps |
+| `montage_landscape.mp4` | 53.421 s | 1920 × 1080, 30 fps |
+| `montage_vertical.mp4` | 53.421 s | 1080 × 1920, 30 fps |
+| `montage_mean_vertical.mp4` | 17.000 s | 1080 × 1920, 30 fps |
+
+All use H.264/AAC. `contact_sheet.jpg` is 1920 × 810. The five local MP4s were
+SHA-256 compared with their runner originals after collection: all matched;
+`SHA256SUMS` is included locally. The live backend was stopped after recording.
+
+There were **3 reserved generation attempts**, of which **2 reached Gemini and
+returned responses**. Attempt 2 failed locally during SDK schema construction;
+it still consumed a budget reservation. No provider calls occurred during tests,
+manual review, rendering, share-kit generation or UI recapture. SDK logs recorded
+297,287 total input tokens and 738 output tokens across the two responses. No
+dollar cost is inferred.
+
+| Stage | Measured seconds | Scope |
+| --- | ---: | --- |
+| Cold game-profile detection | 5.9374 | Inconclusive; supplied Valorant label used |
+| Cold full-match local signals | 294.1198 | 2 fps motion, OCR every 5 seconds |
+| Combined Gemini request stage | 78.2323 | Full-match clips + one candidate assessment |
+| Local story plan | 0.0375 | Nice analysis plan |
+| Landscape privacy/extraction | 91.7974 | Reviewed source intervals only |
+| Landscape render, total | 155.4656 | Includes privacy, reactions and share kit |
+| Landscape share kit | 4.7628 | Included in total |
+| Vertical render, total | 71.5030 | Privacy cache hit: 0.0082 seconds |
+| Vertical share kit | 6.9573 | Included in total |
+| Mean vertical render, total | 102.2539 | Includes 30.0561 seconds privacy and 19.5163 effects |
+| Mean share kit | 6.0809 | Included in total |
+
+The initial failed full-video stage, dominated by proxy encoding, took 266.7056
+seconds; later runs reused the proxy. Final cache-replay stage timings are
+separately retained in API snapshots. Timings are nested, so do not add every
+row. Backend snapshots retain older stage keys; mean mode executed reaction
+stages 0–3, while its inherited `reactions_4` value belongs to the earlier nice cut.
+
+30 candidate windows were produced. Positive signal values occurred in 30 motion,
+30 RMS, 30 onset, 29 sustained-audio and 25 scene windows; **OCR fired in 0**.
+The one assessed window was vetoed as player-not-alive. Two out-of-range model
+clips were rejected. The final five nice moments and three mean candidates were
+editor-reviewed, with a real UI trim of 212.5 → 212.6 seconds and a reorder.
+These are counts of positive candidate evidence, not verified kill counts.
+
+## Verification and task handoff
+
+All commands below ran on the Linux runner. Unit/integration tests use mocked
+providers or blocked transports and synthetic ffmpeg sources.
+
+```powershell
+bash tools/remote_run.sh "PYTHONPATH=full_app python -m pytest demo_video/test_demo.py full_app/tests/test_jobs.py -q && cd full_app/production_frontend && npm test && npm run build"
+# Exit 0: 35 Python tests, 21 Vitest tests, production build passed.
+
+bash tools/remote_run.sh "PYTHONPATH=full_app python -m pytest demo_video/test_demo.py full_app/tests/test_jobs.py -q && cd full_app/production_frontend && npm run build"
+# Exit 0 after curve/replay changes: 36 Python tests, production build passed.
+
+bash tools/remote_run.sh "python demo_video/verify_outputs.py"
+# Exit 0: all five videos fully decoded, expected H.264/AAC dimensions and 30 fps,
+# demo 2–3 minutes, UI under 90 seconds, audible montage tracks, contact-sheet size.
+```
+
+Both the full real-render recorder and final cache-backed UI recorder exited 0.
+`finish_run.py` and `assemble.py` completed successfully. The final assembly was
+also decoded again by `verify_outputs.py`; its measured results are delivered in
+`verification.json`. Visual QA inspected original candidate frames, three points
+per mean candidate, reaction overlays, the timeline recording and the contact
+sheet. Earlier recorder attempts exited 1 on the documented pipeline failures
+and an export-dropdown selector timeout (fixed in the recorder); slow OCR/full-
+source privacy attempts were intentionally stopped, not reported as passes.
+
+Changed files are confined to `docs/demo.md` and `demo_video/`: the runtime-only
+launcher, live backend adapter, persistent budget guard, Playwright recorder,
+editorial selection, source-frame reviewer, schema diagnostic, evidence-cache
+helper, mean renderer, assembler, output verifier, collector, tests and `.gitignore`.
+No production code, gameplay, reaction media, credentials or model weights are
+committed. Open `demo_video/out/extension_demo.mp4` to try the completed demo;
+the raw exports and share kits are alongside it. Core fixes listed above remain
+for the integrator; these adapters are intentionally limited to this demo.
+
+Tracked file inventory:
+
+```text
+demo_video/.gitignore
+demo_video/assemble.py
+demo_video/budget.py
+demo_video/cache_evidence.py
+demo_video/collect.py
+demo_video/diagnose_schema.py
+demo_video/editorial_selection.json
+demo_video/finish_run.py
+demo_video/launch_live.py
+demo_video/live_smoke_server.py
+demo_video/record_ui.cjs
+demo_video/review_frames.py
+demo_video/test_demo.py
+demo_video/verify_outputs.py
+docs/demo.md
+```
+
+Branch: `ext/DEMO-01`. Milestones before the final verified handoff:
+`1fddaa7`, `d359922`, `56b30b1`, `2d42249`. The final handoff commit is reported
+in the task completion message and is the branch tip.

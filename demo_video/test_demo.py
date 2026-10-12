@@ -77,6 +77,14 @@ def test_selected_privacy_timeline_preserves_speed_order_and_metadata():
     assert clips[0]['start_seconds'] == 19.
 
 
+def test_interest_curve_preserves_unbounded_signal_score_variation(tmp_path):
+    from live_smoke_server import wire_job
+    data = {'job_id':'offline','candidates':[{'start':0.,'end':2.,'score':2.},
+                                           {'start':4.,'end':6.,'score':4.}]}
+    result=wire_job(data,tmp_path)
+    assert result['interest_curve']==[{'time':1.,'score':50.},{'time':5.,'score':100.}]
+
+
 def test_video_compositor_with_synthetic_media(tmp_path):
     import assemble
     assemble.EDIT = tmp_path

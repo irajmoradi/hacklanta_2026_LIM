@@ -132,6 +132,20 @@ class DemoClient(GeminiVideoClient):
 
 class DemoPipeline(Pipeline):
     def render(self, job, key):
+        if os.getenv('DEMO_REPLAY_EXPORTS') == 'true':
+            preset = job['options'].get('preset', 'landscape')
+            saved = json.loads((OUT / (preset + '.json')).read_text())
+            with Path(job['source']).open('rb') as stream:
+                digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+            fingerprint = json.loads((OUT / 'local_candidates_source.json').read_text())['sha256']
+            if digest != fingerprint or job['edit_plan'] != saved['edit_plan'] or job['options'] != saved['options']:
+                raise ValueError('UI replay request does not match the verified source, plan and export options')
+            with self.stage(job, 'verified_export_cache'):
+                destination = Path(job['dir']) / 'output.mp4'
+                shutil.copy2(OUT / ('montage_' + preset + '.mp4'), destination)
+                shutil.copytree(OUT / ('share_' + preset), Path(job['dir']) / 'share', dirs_exist_ok=True)
+                job.update(output=str(destination), share_kit='share', demo_cached_render=True)
+            return
         original_clips = job.get('clips')
         try:
             return super().render(job, key)
@@ -246,8 +260,9 @@ def wire_job(data, workspace):
     if not isinstance(data, dict) or not data.get('job_id'):
         return data
     candidates = data.get('candidates', [])
+    scale = max([1., *[c['score'] for c in candidates]])
     data['interest_curve'] = sorted([{'time': (c['start'] + c['end']) / 2,
-                                     'score': c['score'] * 100} for c in candidates], key=lambda c: c['time'])
+                                     'score': max(0., c['score']) / scale * 100} for c in candidates], key=lambda c: c['time'])
     data['source_url'] = f"/api/stream/{data['job_id']}"
     if data.get('share_kit') == 'share':
         folder = Path(workspace) / data['job_id'] / 'share'
