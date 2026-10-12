@@ -118,3 +118,34 @@ The counters display rounded values; the manifest preserves source precision.
 The 0.019-second planner measurement describes this recorded run, not an AI API
 latency claim. The older DEMO-01 cut and share-kit UI remain explicitly identified
 as source media in the manifest.
+
+Final deliverables, rendered and verified on runner 1 on 2026-10-12:
+
+| File | Duration | Dimensions | Bytes |
+| --- | --- | --- | --- |
+| `extension_demo_v3.mp4` | 66 s | 1920×1080 | 17,140,076 |
+| `extension_demo_v3_discord.mp4` | 66 s | 1280×720 | 18,590,068 |
+
+Final command (PowerShell wrapper invokes `tools/remote_run.sh`):
+
+```powershell
+python demo_video/v3/runner.py sync 'python -m pytest -q demo_video/v3/test_v3.py && python -u demo_video/v3/render.py && python demo_video/v3/verify.py'
+python demo_video/v3/runner.py collect
+```
+
+Both commands exited **0**. Tests: **10 passed in 13.62 s**. Verification fully
+decoded both files, checked all four narration voices and all four pack reactions,
+caption coverage, continuous 1–3-second beats, audio/video duration and Discord
+size. Local collected MP4 hashes match the runner's verification manifest. The
+final contact sheet and four full-size reaction stills were visually inspected.
+
+The first real encode exited **1** on a reaction seek at the video/audio tail;
+the renderer now clamps to the last video frame, with a regression assertion at
+each synthetic reaction's final millisecond. The successful run above includes
+that fix. An earlier preview exited **1** while Lance's pack entry was pending;
+all four pack entries were present and re-read for the final render.
+
+No work remains for this task. Reproducibility requires retaining the ignored
+voice cache and the external source/pack assets. No media, voice audio, credentials
+or generated renders are committed. No paid calls were made during continuation;
+the existing ledger retains all ten historical synthesis attempts.
