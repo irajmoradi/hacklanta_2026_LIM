@@ -1,3 +1,251 @@
+# DEMO-02: full-match scoring and filled, reviewed cuts
+
+Run: October 12, 2026, branch `ext/DEMO-02`. The DEMO-01 and FIX-4 sections
+below are historical; this section describes the new stock-API run.
+
+## Result and evidence
+
+The original 1,871.970-second, 1920x1080/60 fps Valorant source was uploaded
+through the production UI to the stock Flask API. Job:
+`1e3bd20b407f46cb87f201dd3f1418f4`. No combined-response adapter, provider mock,
+forced game label, analysis replay, or demo-specific planner was used.
+
+- **83 local candidates**, **40 Gemini-scored windows**, **15 player-not-alive
+  vetoes**, **78 fused ranks**. Scored ranges span 24-1859 seconds, with ten
+  candidate midpoints in each quarter of the complete recording.
+- Window classifications: 19 highlights, four explicit lowlights, 17 neutral
+  after the provider's dead-player normalization. All 15 vetoes were `false`,
+  none unknown. Eleven death-caption candidates were recovered for mean-mode
+  consideration; this is heuristic evidence, not eleven verified deaths.
+- Retained provenance: 19 scored highlights, four explicit scored lowlights,
+  eleven inferred death windows, 43 unscored local fallbacks, one whole-video
+  observation. Two reviewed exclusions leave 76 candidates marked keep in the
+  final job. Unscored candidates remain available but the final nice cuts use
+  model-reviewed moments.
+- **44 completed generation attempts out of 80**: 40 windows plus four stock
+  whole-video chunks. Retries were disabled. Planning, revisions, all renders,
+  share kits and recording added **zero** paid calls, checked against the same
+  persistent SQLite ledger and `attempt_audit.json`.
+- Auto game detection returned **generic, confidence 0.0**. The run retained that
+  result and used the stock generic fallback. No supplied Valorant override was
+  applied. OCR produced **zero** positive candidate windows. Other positive
+  evidence: motion 82, RMS 79, onset 79, sustained audio 76, scene change 61.
+
+Measured standalone exports (H.264/AAC, 30 fps):
+
+| File in `demo_video/out/` | Duration | Dimensions | Bytes |
+| --- | ---: | --- | ---: |
+| `montage_landscape.mp4` | 60.000 s | 1920x1080 | 44,318,502 |
+| `montage_vertical.mp4` | 30.000 s | 1080x1920 | 19,857,390 |
+| `montage_mean_vertical.mp4` | 20.000 s | 1080x1920 | 14,064,905 |
+
+The landscape plan has six distinct moments plus its repeated teaser; vertical
+has three distinct moments plus teaser. Mean has a verified POV death, a failed
+Phoenix ultimate, and a highlight setup, plus the repeated death teaser.
+Reaction assets come from `/srv/packs/team`. Final reaction frames show team
+faces in the landscape bottom-right and portrait top-right positions.
+
+## Planner changes and source review
+
+Stock local plans enable target filling and ten-second clip limits. They try
+variety first, then relax repeated categories when needed to meet the target.
+This removes the previous all-`play` category failure that stopped at an
+eight-second teaser/climax pair. Reviewed observations precede unscored local
+fallbacks without changing recorded scores. Explicit lowlights precede inferred
+deaths; `editorial_review=True` can confirm a death while retaining its nice-mode
+veto. Deselected clips never return as filler. Library callers retain the old
+strict-variety default unless they request `fill_target=True`.
+
+Grounded kill/death times anchor pre-roll and aftermath. Otherwise the longest
+sustained-audio burst anchors a trim, with midpoint fallback. Early camera cuts
+or ability sounds no longer automatically become the peak. Clip limits, source
+bounds, playback speed and the requested output budget remain validated.
+Absent an explicit target, pipeline defaults are 60 seconds landscape and 30
+seconds vertical. Local detection retains up to three times the paid scoring
+count, bounded to 500; scoring remains independently budgeted.
+
+The initial automatic 60-second cut exposed real semantic/timing errors during
+source-frame QA. `demo_video/review_decisions_v2.json` records the complete
+source-specific intervention, applied through the ordinary clip PATCH API:
+
+1. Exclude 58-66 seconds: the model claimed a player highlight, but the combat
+   report and changing viewed agents show spectator footage.
+2. Exclude 358-372 seconds: caption recovery claimed a death while source frames
+   show the player alive at 100 health through the alleged event.
+3. Confirm the POV death in 125-143 seconds, with a reviewed peak at 136.0;
+   confirm the failed Phoenix ultimate in 256-273, peak 268.0. Supply accurate
+   gameplay roast captions rather than reuse misleading death descriptions.
+
+The final mean cut uses source ranges 134.7-136.7 (teaser), 1684.975-1686.475
+(highlight setup at 0.5x), 264.75-269.75 (ultimate failure), and 129.5-139.5
+(death climax). Source and output sheets are delivered under `out/review/`.
+Nice source sheets sample the start, selected anchor and end of every placement.
+These are reviewed exports, not a claim that all 78 fused observations are
+correct or that autonomous semantic accuracy is solved.
+
+## Actual stage timings
+
+| Stage | Seconds |
+| --- | ---: |
+| Auto profile detection | 19.1387 |
+| Full-match local signals | 515.5394 |
+| Forty window assessments | 223.1471 |
+| Whole-video pass, including stock chunk/proxy encoding | 1091.7843 |
+| Original local plan | 0.0389 |
+| Final landscape plan / selected-range privacy / total render | 0.0190 / 98.0761 / 194.8700 |
+| Final vertical plan / privacy / total render | 0.0210 / 11.0949 / 89.1758 |
+| Final mean plan / privacy / total render | 0.0239 / 41.9740 / 91.5862 |
+
+Timings are nested. The final revisions reused analysis and some privacy ranges.
+Older reaction stage keys persist in later snapshots; the final plans each have
+two reaction placements, rather than one new reaction for every inherited key.
+Full-source OCR and double encoding of ten-minute provider chunks remain costly.
+
+FIX-4's earlier 360-second smoke scored two windows using three calls and made
+8.021-second nice/mean exports against 30-second targets. This run analyzes the
+entire source and fills 60/30/20-second requests. The video comparison uses the
+owner's `/srv/demo_in/final_v3.mp4` alongside the new landscape export. Different
+budgets and reviewed inputs mean this is an illustrative comparison, not an
+accuracy or speed benchmark.
+
+## Stock API boundaries and remaining weaknesses
+
+The only demo hosting change is serving the unchanged production React build
+through Flask's `static_folder`. Source-specific review uses supported clip
+edits, not a backend/provider adapter. Each shorter export first calls `/plan`,
+then `/render`: `JobQueue.submit` currently validates the previous longer plan
+against a new render limit before invalidating it. A direct 60-to-30-second
+render therefore returned `Plan exceeds max_duration`. The queue is outside
+this task's allowed paths; the two stock calls avoid that issue.
+
+The UI walkthrough is the real first-pass upload/settings/progress/review/export
+capture, with long waits removed. It predates the source-review corrections;
+a card explicitly says so. Final comparison and montage sections use the reviewed
+exports. No browser routes or API responses are mocked. `frontend.png` is a
+frame from that actual review capture, not the empty resumed browser session.
+
+Remaining weaknesses: generic auto detection on this full match; no OCR kill
+recognition; model errors about viewpoint, death and clutch status; approximate
+acoustic timing when grounded events are absent; and center crops that may lose
+peripheral action. Mean-mode death-caption recovery is only fallback evidence.
+Default region blur covers selected HUD areas, not every nameplate, combat
+report or scoreboard, and does not promise uploader-name preservation. Source
+preview and old-version comparison footage are not the privacy-blurred exports.
+
+## Reproduce and inspect
+
+Runner inputs are `/srv/demo_in/valorant_phoenix_44k.mp4`,
+`/srv/demo_in/final_v3.mp4`, and `/srv/packs/team`. Runtime output root is
+`/srv/demo_out/demo02/`; the persistent job marker and budget must not be deleted
+to obtain a fresh call allowance. `launch_v2.py` reads only `GOOGLE_API_KEY` from
+the owner-specified dotenv at runtime, passes it over SSH stdin into the process
+environment, and selects Vertex Express with `gemini-3.5-flash-lite`. Credentials
+are never written into source, artifacts, logs or command arguments.
+
+```powershell
+bash tools/remote_run.sh 'cd full_app/production_frontend && npm ci --silent && npm run build && npx playwright install chromium'
+python demo_video/launch_v2.py
+# Optional independent, read-only ledger audit while the server is running:
+ssh -i "$env:USERPROFILE/.ssh/village_vultr" root@104.207.133.47 'cd /srv/lim/lim-demo02 && .venv/bin/python demo_video/audit_v2.py'
+# After the live driver has shut down:
+bash tools/remote_run.sh 'python demo_video/review_v2.py && python demo_video/assemble_v2.py && python demo_video/verify_v2.py'
+python demo_video/collect_v2.py
+```
+
+`preview_v2.py` and `review_v2.py --planned` permit local-plan source inspection
+from saved analysis with no paid calls. The review decisions are specific to this
+source. As in DEMO-01, sync/test before starting the live backend or after it has
+stopped: `remote_run.sh` replaces the disposable runner checkout. Tests and
+assembly can run together after live work because authoritative media/jobs are
+outside that checkout. All generated media, source sheets, snapshots, share kits,
+checksums and evidence are ignored by git under `demo_video/out/`.
+
+## Verified deliverables and test record
+
+Open `demo_video/out/extension_demo_v2.mp4` for the complete 1080p walkthrough,
+comparison and final cuts. `extension_demo_v2_discord.mp4` is the smaller share
+copy. Both include the complete 20-second mean excerpt so its final roast
+reaction is visible.
+
+| Deliverable | Duration | Dimensions | Bytes |
+| --- | ---: | --- | ---: |
+| `extension_demo_v2.mp4` | 120.455 s | 1920x1080 | 31,964,062 |
+| `extension_demo_v2_discord.mp4` | 120.467 s | 1280x720 | 5,973,940 |
+| `ui_walkthrough.mp4` | 19.454 s | 1920x1080 | 1,073,743 |
+| `comparison.mp4` | 18.000 s | 1920x1080 | 23,679,641 |
+
+The Discord copy is **5,973,940 bytes**, below 20,000,000. `contact_sheet.jpg` is
+1920x810. The three montage mean audio levels are -16.7, -16.2 and -19.9 dB.
+All seven videos fully decoded with FFmpeg, passed H.264/AAC/dimension/30 fps
+checks, and matched their runner SHA-256 after local collection. Files include
+`verification.json`, `SHA256SUMS`, `output_manifest.json`, `evidence.json`,
+per-clip CSV, original API analysis, export snapshots, source/output QA sheets,
+review decisions, the attempt audit and three share kits.
+
+Final Linux-runner verification:
+
+```powershell
+bash tools/remote_run.sh 'cd full_app && python -m pytest tests/test_planner_fill.py -q && python -m pytest -q && cd .. && PYTHONPATH=full_app python -m pytest demo_video/test_demo.py -q && cd full_app/production_frontend && npm test && npm run build'
+# Exit 0: 16 focused tests; 1025 full-suite tests passed, 21 skipped (582.31 s);
+# 8 demo tests; 27 Vitest tests; TypeScript check and production build passed.
+
+bash tools/remote_run.sh 'python demo_video/review_v2.py && python demo_video/assemble_v2.py && python demo_video/verify_v2.py'
+# Exit 0: source/output sheets, assembly and all seven media checks passed.
+
+python demo_video/collect_v2.py
+# Exit 0: allowlisted deliverables collected; all local video hashes matched.
+```
+
+Earlier commands and failures are retained here rather than reported as passes:
+
+- Initial focused planner/pipeline/FIX-4 regression command exited 0:
+  `bash tools/remote_run.sh 'cd full_app && python -m pytest tests/test_planner.py tests/test_planner_fill.py tests/test_planner_adapter.py tests/test_pipeline.py tests/test_pipeline_settings.py tests/test_fix4.py -q'`
+  ? 128 passed in 192.45 seconds, before later source-review refinements.
+- An earlier full verification passed 1,023 core tests with 21 skips, then
+  exited 1 in the demo suite (one failed, seven passed). The historical
+  `test_baseline_generic_profile_contract` still expected the generic-profile
+  exception already fixed in FIX-4. Its assertion now checks the safe mapping.
+- `python demo_video/launch_v2.py` first exited 1 at the shorter-render admission
+  issue described above, after analysis and an automatic landscape export. The
+  two resumed invocations exited 0, reused the same job/ledger, and produced the
+  revised exports. Exactly 44 calls were used across all invocations combined.
+- The first assembly command exited 1 during two-pass x264 Discord encoding
+  (`Incomplete MB-tree stats file`); final media verification had not run.
+  Packaging now uses a 30 fps CRF encode with a duration-derived bitrate cap and
+  headroom. The final command above exited 0 and verified the actual file size.
+
+Code milestones: `ce44698` (fill/death evidence), `27b14ad` (stock live/demo
+tooling), `51251bc` (reviewed selection and action anchors), `901dedd` (review
+provenance, stock replan flow and QA decisions). The final report commit adds
+this measured handoff and the verified packaging adjustment. No push or merge
+was performed.
+
+Changed files are limited to the task's allowed paths:
+
+```text
+full_app/planner/models.py
+full_app/planner/planner.py
+full_app/pipeline/extensions.py
+full_app/pipeline/orchestrator.py
+full_app/pipeline/ranking.py
+full_app/tests/test_planner_fill.py
+demo_video/assemble_v2.py
+demo_video/audit_v2.py
+demo_video/collect_v2.py
+demo_video/launch_v2.py
+demo_video/live_v2.py
+demo_video/preview_v2.py
+demo_video/record_v2.cjs
+demo_video/review_decisions_v2.json
+demo_video/review_v2.py
+demo_video/test_demo.py
+demo_video/verify_v2.py
+docs/demo.md
+docs/planner.md
+```
+
+---
+
 # DEMO-01: real Valorant walkthrough
 
 This run uses the `ext/DEMO-01` worktree, based on Extension commit `2a7c565`.

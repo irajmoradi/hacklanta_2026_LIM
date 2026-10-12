@@ -27,6 +27,7 @@ class Signals(Model):
 
 
 class RankedClip(Model):
+    validated: bool = False
     id: str = Field(min_length=1)
     start: float = Field(ge=0)
     end: float = Field(gt=0)
@@ -48,6 +49,7 @@ class RankedClip(Model):
 
 
 class PlannerOptions(Model):
+    fill_target: bool = False
     mode: Mode = "nice"
     style: Style = "hype montage"
     target_length: float = Field(default=30, gt=0)
@@ -124,6 +126,7 @@ class Music(Model):
 
 
 class RenderPlan(Model):
+    fill_target: bool = False
     version: Literal[2] = 2
     mode: Mode
     style: Style
@@ -180,6 +183,6 @@ class RenderPlan(Model):
             if self.clips[0].source_id != self.clips[-1].source_id:
                 raise ValueError("hook must tease the climax")
             for a, b, c in zip(self.clips, self.clips[1:], self.clips[2:]):
-                if a.similarity_key == b.similarity_key == c.similarity_key:
+                if not self.fill_target and a.similarity_key == b.similarity_key == c.similarity_key:
                     raise ValueError("three similar consecutive clips")
         return self

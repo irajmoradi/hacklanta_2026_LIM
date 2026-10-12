@@ -67,7 +67,7 @@ clips. The greedy selection is deterministic, not a global optimization solver.
 Durations are output seconds: `(source_end - source_start) / speed`. Clutches run
 at 0.5x in hype/cinematic styles, including that extra playback time in the budget;
 the usual teaser stays at 1x. Trims retain approximately 65% lead-in around the
-peak, clamped inside source bounds. The default output limits are 1–6 seconds per
+peak, clamped inside source bounds. The default output limits are 1ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ6 seconds per
 clip. Minimum length must fit the maximum, budget, and three-second hook limit.
 Short budgets combine hook and climax into one clip; insufficient footage or
 variety yields a shorter plan with notes. No qualifying footage yields a valid
@@ -167,3 +167,46 @@ variety including fallback cases, four styles, reaction timing, registry names,
 strict input and timeline validation, mocked Gemini success/failure and 200 seeded
 randomized inputs. These are planner-only tests: no synthetic video is needed,
 and they do not exercise a planner-to-renderer adapter.
+
+
+## DEMO-02 fill policy
+
+The stock pipeline now enables `fill_target=True` and a ten-second per-clip
+ceiling. The library default remains the strict variety policy for compatibility.
+Fill mode first tries varied candidates, then relaxes category repetition using
+the remaining ranked evidence. It never fabricates source footage or repeats
+extra IDs beyond the existing hook/climax pair. Insufficient eligible source
+material still produces an explicit under-budget note. Source event times anchor
+pre-roll (approximately 65%) and aftermath inside each candidate's bounds.
+
+Pipeline defaults, when `max_duration` is absent, are 60 seconds landscape and
+30 seconds vertical; explicit duration limits are respected. Unscored local
+candidates remain available as fallbacks. Up to 500 local candidates survive
+fusion input; `GEMINI_TOP_N` controls paid scoring separately (default 30).
+Candidate detection retains at least three times that scoring count, capped at
+500, so vetoes do not exhaust the local pool.
+
+Nice plans exclude dead-player vetoes. Mean plans prefer lowlights, including
+vetoed windows whose captions explicitly describe a death without spectator,
+killcam or death-screen language. This is a conservative caption heuristic,
+not proof that every veto is a death: uncertain POV and plain spectator footage
+remain excluded. The existing provider neutralizes dead-player hype scores,
+so recovered deaths retain their local signal score and explicit provenance.
+
+Reviewed (`validated=True`) inputs precede unreviewed candidates during selection;
+original scores remain unchanged in the plan. The pipeline marks VLM-scored and
+whole-video observations reviewed. This means model-reviewed, not human-verified.
+When lowlights cannot fill mean mode, remaining highlights supply honest context
+without failure captions or roast decoration.
+
+Grounded kill/death timestamps take precedence over heuristic acoustic anchors.
+Otherwise, the pipeline centers the trim on the longest sustained-audio burst
+inside the candidate, breaking ties by proximity to the candidate midpoint.
+Scene cuts alone do not define an action peak. This avoids treating an early
+ability sound or camera transition as the climax while cutting out later action.
+Without usable event/audio timing the library uses the candidate midpoint.
+
+Caption-inferred deaths are fallback evidence, below explicit model lowlights.
+A clip with `editorial_review=True` may be promoted after human/source review;
+its nice-mode veto still applies. Reviewed `signals.fail_time` or `kill_time`
+anchors the trim without making another provider call.

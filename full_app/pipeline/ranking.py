@@ -1,6 +1,7 @@
 """Normalize signal/provider outputs and fuse independent candidate sources."""
 from dataclasses import asdict, is_dataclass
 import math
+import re
 
 
 def candidate_dict(value):
@@ -18,7 +19,7 @@ def overlap(a, b):
 
 def rank_merge(candidates, scored, whole):
     assessments = {(c['start'], c['end']): c for c in scored}
-    pool, vetoes = [], []
+    pool, vetoes, lowlights = [], [], []
     for candidate in candidates:
         c = {**candidate, **assessments.get((candidate['start'], candidate['end']), {})}
         clip = dict(start_seconds=c['start'], end_seconds=c['end'],
@@ -31,6 +32,16 @@ def rank_merge(candidates, scored, whole):
             # Unknown viewpoint is unsafe to promote.
             if c['player_alive'] is not True:
                 vetoes.append(clip)
+                # The provider neutralizes dead-player scores. Recover explicit
+                # death evidence for roasting, never spectator kills or unknown POV.
+                caption = c.get('caption', '').lower()
+                death = c.get('kind') == 'lowlight' or (
+                    re.search(r'\b(dies|died|death|killed|eliminated)\b', caption)
+                    and not re.search(r'spectat|kill.?cam|death screen|combat report', caption))
+                if c['player_alive'] is False and death:
+                    lowlights.append({**clip, 'type': 'bad', 'source': 'signals+vlm',
+                        'label': 'roast', 'suggested_reaction_label': 'roast',
+                        'score_provenance': 'atan_signal+death_caption', 'nice_veto': True})
                 continue
             if c['kind'] == 'neutral':
                 continue
@@ -41,9 +52,10 @@ def rank_merge(candidates, scored, whole):
         pool.append(clip)
     pool.extend({**c, 'score': c.get('score', .5), 'score_scale': 'unit',
                  'score_provenance': 'provider_unit', 'source': 'whole_video'} for c in whole)
+    pool.extend(lowlights)
     ranked = []
     for clip in sorted(pool, key=lambda c: (-c['score'], c['start_seconds'])):
-        if any(overlap(clip, veto) > 0 for veto in vetoes):
+        if not clip.get('nice_veto') and any(overlap(clip, veto) > 0 for veto in vetoes):
             continue
         # Nonmaximum suppression retains complete beats without creating long unions.
         duplicate = next((old for old in ranked if overlap(clip, old) /
