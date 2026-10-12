@@ -4,6 +4,10 @@ from .queue import Conflict
 
 
 def apply_result(queue, job, result):
+    if result['fallback'] and job.get('edit_plan') is None and result['plan'] is not None:
+        job['edit_plan'] = result['plan']
+        if 'plan' not in job['completed']:
+            job['completed'].append('plan')
     if not result['fallback']:
         versions = job.setdefault('agent_versions', [])
         versions.append(dict(plan=deepcopy(job['edit_plan']), options=deepcopy(job['options'])))
@@ -52,7 +56,10 @@ def submit(queue, job_id, instruction, model_factory=None, max_steps=8, call_lim
                     if queue.store.get(job_id)['status'] == 'cancelled':
                         return dict(result, fallback=True, reason='cancelled', plan=job['edit_plan'])
                     apply_result(queue, job, result)
-                    job.update(status=previous_status if result['fallback'] else 'planned', stage='agent')
+                    status = previous_status if result['fallback'] else 'planned'
+                    if job.get('edit_plan') and previous_status == 'analyzed':
+                        status = 'planned'
+                    job.update(status=status, stage='agent')
                     queue.store.save(job)
                     return dict(result, version=job.get('agent_version', 0))
             finally:

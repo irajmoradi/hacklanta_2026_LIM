@@ -126,3 +126,55 @@ def test_proxy_render_synthetic(job, video):
     assert abs(float(info['format']['duration'])-2) < .2
     stream = next(s for s in info['streams'] if s['codec_type'] == 'video')
     assert stream['height'] == 360
+
+
+def test_critique_cannot_exceed_budget(job):
+    model = ScriptedModel(call('render_preview'), call('watch_preview'))
+    result = run_agent(job, 'review', model, call_limit=2, preview=lambda *_: Path('preview.mp4'))
+    assert result['fallback'] and result['calls_remaining'] == 0
+    assert model.watches == 0
+    assert result['trace'][-1]['tool'] == 'watch_preview'
+    assert result['trace'][-1]['error']
+
+
+def test_budget_includes_existing_analysis_calls(job):
+    budget = CallBudget(Path(job['dir'])/'gemini-budget.sqlite3', limit=12)
+    for _ in range(11):
+        budget.reserve()
+    result = run_agent(job, 'review', ScriptedModel(call('finish', summary='Keep the draft')))
+    assert not result['fallback'] and result['calls_remaining'] == 0
+
+
+def test_new_plan_from_planner_and_legacy_fallback(job):
+    job['edit_plan'] = None
+    job['options'].update(planner=True, style='clean_edit', max_duration=10)
+    result = run_agent(job, 'review', ScriptedModel(call('finish', summary='Good')))
+    assert not result['fallback'] and result['plan']['render_version'] == 2
+    job['edit_plan'] = dict(segments=[dict(source_start=0, source_end=4, transition_in='fade_in')])
+    result = run_agent(job, 'review', ScriptedModel())
+    assert result['fallback'] and result['plan'] == job['edit_plan']
+
+
+def test_cancel_during_model_does_not_execute_tool(job):
+    cancelled = [False]
+    class Cancel:
+        def next(self, context, feedback):
+            assert context['calls_remaining'] == 11 and context['steps_remaining'] == 16
+            cancelled[0] = True
+            return call('render_preview')
+    def no_preview(*_):
+        pytest.fail('Must not render after cancellation')
+    result = run_agent(job, 'review', Cancel(), cancelled=lambda: cancelled[0], preview=no_preview)
+    assert result['reason'] == 'cancelled'
+
+
+def test_critique_cache_survives_chat_requests(job):
+    artifact = Path(job['dir'])/'preview.mp4'
+    artifact.write_bytes(b'fake proxy for scripted model')
+    def review():
+        return ScriptedModel(call('render_preview'), call('watch_preview'), call('finish', summary='Reviewed'))
+    first, second = review(), review()
+    run_agent(job, 'review', first, preview=lambda *_: artifact)
+    result = run_agent(job, 'review again', second, preview=lambda *_: artifact)
+    assert not result['fallback'] and first.watches == 1 and second.watches == 0
+    assert result['calls_remaining'] == 5

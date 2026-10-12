@@ -169,7 +169,8 @@ class JobQueue:
                         if stage == 'render' and job.get('output'):
                             Path(job['output']).unlink(missing_ok=True)
                         return
-                    job['completed'].append(stage)
+                    if stage not in job['completed']:
+                        job['completed'].append(stage)
                     job['elapsed'] = round(time.monotonic() - started, 2)
                     self.store.save(job)
             with self.lock:

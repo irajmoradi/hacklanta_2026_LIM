@@ -1,6 +1,6 @@
 """Transactional tools. All times are seconds; clip references are current indices."""
 from copy import deepcopy
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from render.plan import RenderPlan
@@ -34,7 +34,7 @@ class Trim(Window, Clip):
 
 
 class Order(Args):
-    order: list[int] = Field(max_length=100)
+    order: list[Annotated[int, Field(strict=True)]] = Field(max_length=100)
 
 
 class Transition(Args):
@@ -56,7 +56,7 @@ class Reaction(Clip):
 
 
 class Music(Args):
-    enabled: bool
+    enabled: bool = Field(strict=True)
 
 
 class Finish(Args):
@@ -114,11 +114,12 @@ class EditorTools:
         if isinstance(a, Clip) and a.clip >= len(segments):
             raise ValueError('Unknown clip index')
         if name == 'list_candidates':
-            return [deepcopy(c) for c in candidates if a.filter.lower() in json.dumps(c).lower()][:500]
+            rows = self.job.get('clips') or candidates
+            return [deepcopy(c) for c in rows if a.filter.lower() in json.dumps(c).lower()][:500]
         if name == 'inspect_window':
             def overlapping(rows):
                 return [deepcopy(c) for c in rows if isinstance(c, dict) and bounds(c)[0] < a.t1 and bounds(c)[1] > a.t0]
-            return dict(candidates=overlapping(candidates),
+            return dict(candidates=overlapping(candidates), clips=overlapping(self.job.get('clips') or []),
                         scores=overlapping(self.job.get('window_scores') or []),
                         signals=deepcopy(self.job.get('audio_signals', {})),
                         transcript=overlapping(self.job.get('transcript') or []))

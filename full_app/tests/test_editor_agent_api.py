@@ -73,3 +73,29 @@ def test_busy_cancel_and_recovery(tmp_path):
         release.set()
         queue.close()
 
+
+def test_opt_in_pipeline_agent(tmp_path, monkeypatch):
+    import editor_agent.model
+    from server.validation import options_valid
+    from server.legacy import EDIT_STYLES
+    from server.queue import JobQueue
+    from server.store import JobStore
+    monkeypatch.setattr(editor_agent.model, 'GeminiEditor', lambda: ScriptedModel(call('finish', summary='Approved')))
+    class Pipeline:
+        def plan(self, job, key):
+            assert job['options']['planner']
+            job['edit_plan'] = dict(render_version=2, segments=[dict(source_start=0, source_end=4)])
+    store = JobStore(tmp_path/'jobs.sqlite3')
+    queue = JobQueue(store, Pipeline())
+    store.save(dict(id='c'*32, dir=str(tmp_path), meta={'duration': 10}, options={},
+                    clips=[{'id': 'clip'}], candidates=[], edit_plan=None, completed=['analyze'], status='analyzed', output=None))
+    try:
+        options = options_valid({'editor_agent': True}, EDIT_STYLES)
+        queue.submit('c'*32, 'plan', options).result(timeout=10)
+        job = store.get('c'*32)
+        assert job['status'] == 'planned' and not job['agent_result']['fallback']
+        assert job['completed'].count('plan') == 1
+        assert any('agent_step' in data for _, data in store.events(job['id'], 0))
+    finally:
+        queue.close()
+

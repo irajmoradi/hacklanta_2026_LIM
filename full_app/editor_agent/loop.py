@@ -50,12 +50,33 @@ def run_agent(job, instruction, model=None, *, max_steps=16, call_limit=None,
             from .preview import render_preview
             preview = lambda plan, settings: render_preview(job, plan, settings)
         def watch(path):
+            import hashlib
+            import json
+            from .model import Critique
             if cancelled():
                 raise RuntimeError('cancelled')
+            artifact = Path(path)
+            cache = None
+            if artifact.is_file():
+                digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+                cache = Path(job['dir']) / 'agent_critiques' / (digest + '.json')
+                if cache.is_file():
+                    try:
+                        return Critique.model_validate_json(cache.read_text()).model_dump()
+                    except ValueError:
+                        pass
             budget.reserve()
-            context['calls_remaining'] = budget.remaining
-            context['steps_remaining'] = max_steps-step
-            return model.critique(path)
+            try:
+                raw = model.critique(path)
+            except Exception as exc:
+                raise RuntimeError(f'Critique failed ({type(exc).__name__})') from None
+            critique = Critique.model_validate(raw).model_dump()
+            if cache:
+                cache.parent.mkdir(exist_ok=True)
+                temporary = cache.with_suffix('.part')
+                temporary.write_text(json.dumps(critique))
+                temporary.replace(cache)
+            return critique
         tools = EditorTools(job, draft, preview, watch)
         tools.validate()
         context = dict(instruction=instruction, brief=job.get('options', {}).get('prompt', ''),
@@ -72,7 +93,12 @@ def run_agent(job, instruction, model=None, *, max_steps=16, call_limit=None,
                 reason = 'budget_exhausted'
                 break
             budget.reserve()
+            context['calls_remaining'] = budget.remaining
+            context['steps_remaining'] = max_steps-step
             call = model.next(context, feedback)
+            if cancelled():
+                reason = 'cancelled'
+                break
             before = tools.snapshot()
             name, args = call.get('tool', ''), call.get('args', {})
             record = dict(step=step+1, tool=name, args=args,
@@ -95,6 +121,7 @@ def run_agent(job, instruction, model=None, *, max_steps=16, call_limit=None,
                 trace.append(record)
                 emit(deepcopy(record))
                 raise
+            record['result'] = result
             trace.append(record)
             emit(deepcopy(record))
             feedback.append(dict(tool=name, args=args, result=result))
