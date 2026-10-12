@@ -242,12 +242,12 @@ def test_default_pipeline_mocked_gemini_and_real_render(tmp_path, video, monkeyp
         job = upload(client, video)
         url = '/api/jobs/' + job
         assert client.post(url + '/analyze', json={'use_signals': True, 'reactions': True,
-                                                  'captions': True, 'sam': True, 'provider': 'optional'}).status_code == 202
+                                                  'captions': True, 'sam': True, 'provider': 'gemini'}).status_code == 202
         assert wait(app, job)['status'] == 'planned'
         assert client.post(url + '/render', json={'preset': preset}).status_code == 202
         result = wait(app, job)
         assert result['status'] == 'done', result
-        assert any('services.providers' in w for w in result['warnings'])
+        assert any('signals' in w for w in result['warnings'])
         assert 'render_v2' in result['timings']
         events = [json.loads(data) for _, data in app.extensions['job_store'].events(job, 0)]
         assert any(e.get('pipeline_stage') == 'rank_merge' for e in events)
