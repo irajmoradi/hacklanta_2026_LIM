@@ -21,6 +21,11 @@ def copy_cut(source, output, start, end):
     if not 0 <= start < end:
         raise ValueError("invalid cut interval")
     info = probe(source)
+    video = next(s for s in info["streams"] if s["codec_type"] == "video")
+    # Open GOPs / reordered frames require more than a keyframe timestamp check.
+    # Decline rather than risk leading/trailing pictures outside the requested cut.
+    if video.get("has_b_frames", 0):
+        return False
     duration = float(info["format"]["duration"])
     frames = json.loads(run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-skip_frame", "nokey",
                             "-show_frames", "-show_entries", "frame=best_effort_timestamp_time", "-of", "json", source]).stdout)

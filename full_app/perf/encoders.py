@@ -11,6 +11,10 @@ class Encoder:
     threads: int = 2
     device: str = "/dev/dri/renderD128"
 
+    def __post_init__(self):
+        if self.threads < 1:
+            raise ValueError("encoder threads must be positive")
+
     @property
     def hardware(self):
         return self.name != "libx264"

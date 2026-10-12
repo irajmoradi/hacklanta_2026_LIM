@@ -1,7 +1,5 @@
 import subprocess
-import threading
-import time
-from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -118,3 +116,46 @@ def test_silent_source_and_validation(source, tmp_path):
     clip.speed = 0
     with pytest.raises(ValueError):
         single_pass(clip)
+
+
+@pytest.mark.parametrize("speed,expected", [(2, .5), (.5, 2)])
+def test_source_timing(source, tmp_path, speed, expected):
+    clip = Clip(source, tmp_path / "retimed.mp4", .5, 1.5, 320, 180, 30, speed, timing="source")
+    render(clip, encoder=encoders.Encoder())
+    assert abs(float(probe(clip.output)["format"]["duration"]) - expected) < .08
+
+
+def test_multiple_complex_effects(source, tmp_path):
+    clip = Clip(source, tmp_path / "complex.mp4", 0, .5, 320, 180, 30)
+    render(clip, ["chromatic_aberration", "chromatic_aberration", "text_gg"], encoder=encoders.Encoder())
+    assert probe(clip.output)["streams"][0]["width"] == 320
+
+
+def test_nonzero_legacy_cut(source, tmp_path):
+    from services.ffmpeg_runner import FFmpegRunner
+    slow = FFmpegRunner(tmp_path, source, 320, 180, 30)
+    slow._encoder_args = lambda: encoders.Encoder().args()
+    old = slow.extract_segment(0, .5, 1.5, ["contrast_pop"])
+    new = render(Clip(source, tmp_path / "new.mp4", .5, 1.5, 320, 180, 30), ["contrast_pop"], encoder=encoders.Encoder())
+    assert abs(float(probe(old)["format"]["duration"]) - float(probe(new)["format"]["duration"])) < .08
+
+
+def test_shared_cache_concurrency(tmp_path):
+    cache = Cache(tmp_path)
+    calls = []
+    def build(out):
+        calls.append(out)
+        out.write_bytes(b"complete")
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        paths = list(pool.map(lambda _: cache.overlay([], {"text": "GG"}, build), range(8)))
+    assert len(set(paths)) == 1
+    assert len(calls) == 1
+
+
+def test_encoder_timeout(monkeypatch):
+    encoders.best.cache_clear()
+    def timeout(cmd, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, 10)
+    monkeypatch.setattr(encoders.subprocess, "run", timeout)
+    assert encoders.best().name == "libx264"
+    encoders.best.cache_clear()

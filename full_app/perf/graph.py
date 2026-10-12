@@ -1,5 +1,6 @@
 """Single-encode clip commands using the existing effect registry."""
 import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from models.effects import VIDEO_EFFECTS, CATEGORY_ORDER, FONT_PATH
@@ -60,7 +61,7 @@ def single_pass(clip, effects=(), sfx=(), preset="preview", *, encoder=None, cac
         cmd += ["-ss", str(clip.start), "-t", str(clip.end-clip.start)]
     cmd += ["-i", str(clip.source)]
     has_audio = any(s["codec_type"] == "audio" for s in probe(clip.source)["streams"])
-    # Explicit trim before setpts ensures source interval is unchanged by speed effects.
+    # Legacy output-time cuts remain the default; source mode trims before retiming.
     vf = [f"setpts=(PTS-STARTPTS)/{clip.speed}"]
     af = ["asetpts=PTS-STARTPTS", *tempo(clip.speed)]
     duration = (clip.end-clip.start) / clip.speed
@@ -71,7 +72,7 @@ def single_pass(clip, effects=(), sfx=(), preset="preview", *, encoder=None, cac
             duration /= 2
     if clip.timing == "legacy":
         duration = clip.end - clip.start
-    for name in effects:
+    for effect_index, name in enumerate(effects):
         eff = VIDEO_EFFECTS[name]
         if name == "fade_out":
             # Matches the current registry's no-op; do not silently change semantics.
@@ -81,7 +82,9 @@ def single_pass(clip, effects=(), sfx=(), preset="preview", *, encoder=None, cac
             if clip.cheap_blur and name in ("moderate_blur", "heavy_blur"):
                 radius = 2 if name == "moderate_blur" else 3
                 filt = f"scale={max(2, clip.width//4//2*2)}:{max(2, clip.height//4//2*2)},boxblur={radius}:1,scale={clip.width}:{clip.height}"
-            vf.append(filt.format(width=clip.width, height=clip.height, fps=clip.fps, fontpath=FONT_PATH))
+            filt = filt.format(width=clip.width, height=clip.height, fps=clip.fps, fontpath=FONT_PATH)
+            filt = re.sub(r"\[([a-zA-Z0-9_]+)\]", lambda m: f"[e{effect_index}_{m[1]}]", filt)
+            vf.append(filt)
         if eff.get("audio_filter"):
             af.append(eff["audio_filter"])
     if clip.timing == "legacy":
