@@ -242,3 +242,48 @@ def test_ffmpeg_formats_and_decode_errors(tmp_path):
     path.write_bytes(b"not audio")
     with pytest.raises(ValueError, match="Unable to decode"):
         read_audio(path)
+
+
+def test_manifest_ranking_and_empty_fallback(library, tmp_path):
+    path, data = library
+    for entry in data["tracks"]:
+        entry["styles"] = []
+        entry["modes"] = []
+    path.write_text(json.dumps(data))
+    tracks = load_manifest(path)
+    assert select_track(tracks, "energetic").path.name == "hype.wav"
+    assert select_track(tracks, "chill").path.name == "calm.wav"
+    path.write_text(json.dumps({"version": 1, "tracks": []}))
+    bed = pick_or_generate("chill", 3, 1, manifest=path, output_dir=tmp_path)
+    assert bed.source == "procedural"
+
+
+def test_decoder_missing_ffmpeg(tmp_path, monkeypatch):
+    path = tmp_path / "track.wav"
+    click_track(path)
+
+    def missing(*args, **kwargs):
+        raise FileNotFoundError("ffmpeg")
+
+    monkeypatch.setattr(subprocess, "run", missing)
+    with pytest.raises(RuntimeError, match="ffmpeg is required"):
+        read_audio(path)
+
+
+def test_music_bed_in_existing_renderer(video, tmp_path, monkeypatch):
+    from render import RenderPlan
+    from render.engine import probe
+    from services.ffmpeg_runner import FFmpegRunner
+
+    monkeypatch.setattr("services.ffmpeg_runner.HAS_NVENC", False)
+    bed = pick_or_generate("energetic", 2, 1, output_dir=tmp_path)
+    plan = RenderPlan(segments=[dict(source_start=0, source_end=2)],
+                      resolution=720, fps=10,
+                      music=dict(path=str(bed.path), beats=bed.beats, duck=True))
+    output = FFmpegRunner(tmp_path / "render", video, 160, 120, 10).render(plan.model_dump())
+    info = probe(output)
+    assert abs(float(info["format"]["duration"]) - 2) < .15
+    audio = next(s for s in info["streams"] if s["codec_type"] == "audio")
+    assert audio["codec_name"] == "aac"
+    assert audio["channels"] == 2
+    assert audio["sample_rate"] == "48000"

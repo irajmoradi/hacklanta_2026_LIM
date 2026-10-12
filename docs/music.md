@@ -41,6 +41,23 @@ An integrator can supply `str(bed.path)` as the renderer's music input, mix/duck
 against gameplay, and use the timing metadata for cuts. No renderer wiring is
 included because it is outside this task's allowed paths.
 
+For the existing opt-in renderer, pass the bed directly in a `RenderPlan`:
+
+```python
+from render import RenderPlan
+
+plan = RenderPlan(
+    segments=[dict(source_start=0, source_end=30)],
+    music=dict(path=str(bed.path), beats=bed.beats, duck=True),
+)
+# runner is an existing services.ffmpeg_runner.FFmpegRunner instance:
+# output_video = runner.render(plan.model_dump())
+```
+
+Generate the bed for the final montage duration and climax after accounting for
+transitions, speed changes, and title cards. Beat snapping is a separate renderer
+option and may change cut timing; providing a beat grid alone does not enable it.
+
 ## User library manifest
 
 Use a UTF-8 JSON file. Paths resolve relative to the manifest (absolute local paths
@@ -137,4 +154,24 @@ tools/remote_run.sh "cd full_app && python -m pytest -q"
 Tests synthesize all their audio, check actual waveform tempo and duration,
 climax alignment, section dynamics, deterministic output, library selection and
 provenance, input validation, ffmpeg decoding, and optional dependency fallbacks.
-They use no Gemini calls or external media.
+An integration test renders a synthetic video with a generated bed through the
+existing renderer and checks output duration and audio format. Tests use no Gemini
+calls or external media.
+
+### EXT-22 verification record (2026-10-12)
+
+All commands below ran on the Linux runner through `tools/remote_run.sh`:
+
+| Command argument | Result | Exit |
+| --- | --- | --- |
+| `cd full_app && python -m pytest -q tests/test_music.py` | 57 passed | 0 |
+| `cd full_app && python -m pytest -q` | 217 passed, 5 skipped, 4 failed | 1 |
+| `cd full_app && python -m pytest -q eval/test_app_smoke.py tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render --tb=short` | Same 4 failures independently of music tests | 1 |
+
+The unrelated failures are `eval/test_app_smoke.py::test_app_pipeline` (expects
+the removed `app.WORKSPACE` attribute) and three parametrizations in
+`tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render` (expects
+five warnings; the pipeline returns four). Their real render stages succeed.
+These existing tests/application code were not changed by EXT-22. The initial
+music-only run found two high-tempo autocorrelation failures; onset smoothing
+fixed them before the passing runs above. No paid/live calls were made.
