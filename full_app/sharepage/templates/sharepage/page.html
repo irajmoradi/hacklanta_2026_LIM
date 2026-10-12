@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ share.title }}</title>
+  <meta name="description" content="{{ share.description }}">
+  <link rel="canonical" href="{{ canonical }}">
+  <meta property="og:type" content="video.other">
+  <meta property="og:url" content="{{ canonical }}">
+  <meta property="og:title" content="{{ share.title }}">
+  <meta property="og:description" content="{{ share.description }}">
+  <meta property="og:image" content="{{ poster_url }}">
+  <meta property="og:image:alt" content="{{ share.title }}">
+  <meta property="og:video" content="{{ video_url }}">
+  <meta property="og:video:type" content="video/mp4">
+  <meta property="og:video:width" content="{{ share.width }}">
+  <meta property="og:video:height" content="{{ share.height }}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ share.title }}">
+  <meta name="twitter:description" content="{{ share.description }}">
+  <meta name="twitter:image" content="{{ poster_url }}">
+  <meta name="twitter:image:alt" content="{{ share.title }}">
+  <link rel="stylesheet" href="{{ url_for('sharepage.static', filename='page.css') }}">
+  <script defer src="{{ url_for('sharepage.static', filename='page.js') }}"></script>
+</head>
+<body>
+<main>
+  <p class="eyebrow">Gameplay highlights</p>
+  <h1>{{ share.title }}</h1>
+  {% if share.description %}<p class="description">{{ share.description }}</p>{% endif %}
+  <video id="montage" controls playsinline preload="metadata" poster="{{ poster_url }}"
+         width="{{ share.width }}" height="{{ share.height }}" aria-label="{{ share.title }}">
+    <source src="{{ video_url }}" type="video/mp4">
+    Your browser cannot play this montage. <a href="{{ video_url }}">Open the video</a>.
+  </video>
+  <section aria-labelledby="reaction-heading" id="reactions" data-url="{{ reaction_url }}">
+    <h2 id="reaction-heading">Send a reaction</h2>
+    <div class="reactions">
+    {% for emoji in emojis %}
+      <button type="button" data-emoji="{{ emoji }}" aria-label="React {{ emoji }}" disabled>
+        {{ emoji }} <span class="count">{{ counts[emoji] }}</span>
+      </button>
+    {% endfor %}
+    </div>
+    <p id="reaction-status" role="status" aria-live="polite"></p>
+  </section>
+  {% if share.chapters %}
+  <section aria-labelledby="chapter-heading">
+    <h2 id="chapter-heading">Chapters</h2>
+    <ol class="chapters">
+    {% for chapter in share.chapters %}
+      <li><a href="{{ video_url }}#t={{ chapter.start }}" data-start="{{ chapter.start }}">
+        <time>{{ chapter.timestamp }}</time> {{ chapter.title }}</a></li>
+    {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+  <noscript>The player works without JavaScript. Enable JavaScript to send reactions.</noscript>
+</main>
+</body>
+</html>
