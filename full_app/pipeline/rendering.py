@@ -57,7 +57,7 @@ def render_job(pipeline, job, key):
             source, job['edit_plan'] = team
             job['source'] = str(source)
             job['meta'] = probe_video(source)
-        elif job['options'].get('privacy', True):
+        elif job['options'].get('privacy', False):
             from .privacy_ranges import selected_source
             with pipeline.stage(job, 'privacy'):
                 source, job['edit_plan'], job['clips'] = selected_source(pipeline, job, scratch)
@@ -83,6 +83,10 @@ def _render_job(pipeline, job, key):
             raise ValueError(f'Unsupported {version_key}')
     renderer = pipeline.hook('render.engine', 'Renderer', job)
     # Legacy source-size output and thumbnail generation retain their old contract.
+    if renderer is None or options.get('generate_thumbnails') or options.get('legacy_dimensions'):
+        skipped = [name for name in ('cards', 'transitions', 'captions', 'music', 'reactions', 'sam', 'sam_reframe') if options.get(name)]
+        if skipped:
+            pipeline.warn(job, 'Legacy rendering cannot apply requested v2 features: ' + ', '.join(skipped))
     if renderer is None:
         fallback = copy.deepcopy(job['edit_plan'])
         fallback.pop('render_version', None)
@@ -109,6 +113,9 @@ def _render_job(pipeline, job, key):
         plan = dict(render_version=2, **{k: v for k, v in plan.items() if k in RenderPlan.model_fields and k not in ('render_version', 'segments')}, segments=[{k: v for k, v in s.items()
                     if k in {'source_start', 'source_end', 'video_effects', 'sound_effects', 'words', 'title', 'sam', 'fx'}}
                     for s in plan['segments']])
+    from .experience import enrich
+    if options.get('full_experience') and not job.get('_custom_plan'):
+        plan = enrich(job, plan)
     plan['preset'] = options.get('preset', plan.get('preset', 'landscape'))
     if options.get('captions'):
         plan['captions'] = {'transcribe': True, **plan.get('captions', {}), 'enabled': True}
@@ -132,16 +139,21 @@ def _render_job(pipeline, job, key):
             if generate:
                 with pipeline.stage(job, 'music'):
                     length = sum((s['source_end']-s['source_start']) / s.get('speed', 1) for s in plan['segments'])
-                    bed = generate('chill' if options.get('style') in ('clean_edit', 'cinematic') else 'energetic',
+                    bed = generate(options.get('music_mood', 'chill' if options.get('style') in ('clean_edit', 'cinematic') else 'energetic'),
                                    min(600, length), min(599, length*.8), output_dir=scratch)
-                    plan['music'] = dict(path=str(bed.path), beats=bed.beats, duck=True)
+                    plan['music'] = dict(path=str(bed.path), beats=bed.beats, duck=True, beat_sync=options.get('beat_sync', True))
+        applied_reactions, applied_sam = [], []
         with pipeline.stage(job, 'subject_track'):
             track = pipeline.hook('sam', 'subject_track', job) if options.get('sam_reframe') else None
             if track:
                 for segment in plan['segments']:
                     start, end = segment['source_start'], segment['source_end']
-                    points = track(source, start, end)
-                    segment['sam'] = {'subject_track': [dict(time=max(0, t-start)/segment.get('speed', 1), x=x, y=y)
+                    with warnings.catch_warnings(record=True) as track_warnings:
+                        warnings.simplefilter('always', RuntimeWarning)
+                        points = track(source, start, end)
+                    if track_warnings or not points:
+                        pipeline.warn(job, 'SAM subject tracking unavailable or degraded; using fallback crop')
+                    segment['sam'] = {**(segment.get('sam') or {}), 'subject_track': [dict(time=max(0, t-start)/segment.get('speed', 1), x=x, y=y)
                                                        for t, x, y, *_ in points][::max(1, len(points)//499 + 1)]}
         validated = RenderPlan.model_validate(plan)
         pack = os.getenv('REACTION_PACK')
@@ -152,10 +164,18 @@ def _render_job(pipeline, job, key):
                 factory = pipeline.hook('reactions', 'ReactionSelector', job)
                 apply = pipeline.hook('reactions', 'apply_reaction', job)
                 if load and factory and apply:
-                    selector = factory(load(pack), seed=0)
+                    try:
+                        selector = factory(load(pack), seed=0, cover_speakers=options.get('full_experience', False))
+                    except (OSError, ValueError, KeyError):
+                        pipeline.warn(job, 'REACTION_PACK unavailable or invalid; reactions skipped')
             else:
                 pipeline.warn(job, 'No REACTION_PACK configured; reactions disabled')
         spotlight = pipeline.hook('sam', 'render_effect', job) if options.get('sam') else None
+        if options.get('sam') or options.get('sam_reframe'):
+            config_factory = pipeline.hook('sam', 'Config', job)
+            if config_factory and config_factory.from_env().backend == 'fallback':
+                pipeline.warn(job, 'SAM model unavailable: spotlight skipped; subject crop uses motion/contrast fallback')
+                spotlight = None
         clips = job.get('clips') or []
         def metadata(segment):
             def overlap(c):
@@ -168,7 +188,25 @@ def _render_job(pipeline, job, key):
                      key=lambda i: clip_metadata[i].get('score', .5), reverse=True)[:3]
 
         def finish_segment(path, index, segment, duration, directory):
-            if selector and apply and 'reactions' not in original_segments[index]:
+            if spotlight and index in top:
+                from sam import clip_masks
+                masks = clip_masks(path, 0, duration)
+                if masks.degraded:
+                    pipeline.warn(job, 'SAM model failed or exhausted its budget; spotlight skipped')
+                else:
+                    with pipeline.stage(job, f'spotlight_{index}'):
+                        output = directory / f'spotlight_{index}.mp4'
+                        clip = clip_metadata[index]
+                        peak = clip.get('signals', {}).get('kill_time', clip.get('peak_time'))
+                        local_peak = ((peak-original_segments[index]['source_start']) / segment.speed
+                                      if isinstance(peak, (float, int)) else duration/2)
+                        local_peak = min(max(0, local_peak), max(0, duration-1/validated.fps))
+                        spotlight(path, output, 0, duration, effect='spotlight',
+                                  kill_time=local_peak, freeze_seconds=0)
+                        # Duration-preserving spotlight keeps beats, captions and narration aligned.
+                        path = output
+                        applied_sam.append(dict(segment=index, time=local_peak, effect='spotlight'))
+            if selector and apply and not segment.reactions and 'reactions' not in original_segments[index]:
                 with pipeline.stage(job, f'reactions_{index}'):
                     path = apply(path, clip_metadata[index], selector, validated.preset,
                                  enabled=True, mode=options.get('mode', 'nice'))
@@ -178,16 +216,12 @@ def _render_job(pipeline, job, key):
                     reaction = selector.select(event.label, clip_metadata[index].get('score', .5),
                                                options.get('mode', 'nice'), event.label)
                     if reaction:
+                        applied_reactions.append(dict(segment=index, id=reaction.id, speaker=reaction.speaker,
+                                                      label=reaction.label, start=event.start, duration=min(event.duration, reaction.duration)))
                         with pipeline.stage(job, f'reactions_{index}'):
                             path = render_overlay(path, reaction, validated.preset, peak_time=event.start,
                                                   max_duration=event.duration, position=event.position,
                                                   duck_gain=.25 if event.duck_game_audio else 1)
-            if spotlight and index in top:
-                with pipeline.stage(job, f'spotlight_{index}'):
-                    output = directory / f'spotlight_{index}.mp4'
-                    spotlight(path, output, 0, duration, effect='spotlight_freeze', freeze_seconds=.6)
-                    path = output
-                    duration = probe_video(path)['duration']
             return path, duration
 
         runner = FFmpegRunner(scratch, source, *validated.size, validated.fps, perf=options.get('perf'))
@@ -196,6 +230,18 @@ def _render_job(pipeline, job, key):
             engine = renderer(runner, segment_processor=finish_segment if selector or spotlight else None)
             output = engine.render(validated)
             job['subtitle_events'] = getattr(engine, 'caption_events', [])
+            executed = getattr(engine, 'executed_plan', validated)
+            job['render_plan'] = executed.model_dump(mode='json')
+            # Scratch music filenames must not be mistaken for reusable client assets.
+            if job['render_plan'].get('music'):
+                job['render_plan']['music']['path'] = 'generated music bed'
+            job['render_evidence'] = dict(filter_graphs=getattr(engine, 'filter_graphs', []),
+                timeline=getattr(engine, 'segment_timeline', []), reactions=applied_reactions, sam=applied_sam,
+                privacy=bool(options.get('privacy', False)), output=probe_video(output))
+            if options.get('reactions') and selector and not applied_reactions and all('reactions' in s for s in original_segments):
+                pipeline.warn(job, 'Reactions requested but no eligible pack events were rendered')
+        for warning in caught:
+            pipeline.warn(job, str(warning.message))
         if any('Automatic captions unavailable' in str(w.message) for w in caught):
             pipeline.warn(job, 'Automatic captions unavailable; install/cache faster-whisper or supply segment words')
         destination = Path(job['dir']) / 'output.mp4'

@@ -71,7 +71,7 @@ def main():
         data = snapshot()
         if 'analyze' not in data['completed']:
             response = client.post(url + '/analyze', json=dict(game='auto', planner_v2=True,
-                window_scoring=True, use_signals=True, privacy_blur=True, share_kit=True,
+                window_scoring=True, use_signals=True, privacy_blur=False, share_kit=True,
                 mode='nice', style='clean_edit', max_duration=30, captions=False, reactions=False))
             response.raise_for_status()
             data = wait()

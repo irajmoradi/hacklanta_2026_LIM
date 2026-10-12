@@ -263,3 +263,17 @@ it("does not send a stale reviewed plan when mode changes", async () => {
   expect(body.mode).toBe("mean");
   expect(body).not.toHaveProperty("edit_plan");
 });
+
+
+it("replans when full experience is selected after analysis but preserves director plans", async () => {
+  const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({})});
+  vi.stubGlobal("fetch", fetcher);
+  const api = new EditorApi("jobs");
+  api.capabilities.options = ["full_experience", "cards", "transitions", "planner_v2"];
+  const full = {...options, full_experience: true, cards: true, transitions: true, planner_v2: true};
+  const oldPlan = {render_version: 2, transition: "cut", segments: []};
+  await api.render("one", "vertical", full, demoClips, oldPlan);
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).not.toHaveProperty("edit_plan");
+  await api.render("one", "vertical", full, demoClips, oldPlan, true);
+  expect(JSON.parse(fetcher.mock.calls[1][1].body)).toHaveProperty("edit_plan");
+});

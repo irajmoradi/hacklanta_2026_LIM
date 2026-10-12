@@ -182,7 +182,7 @@ def create_app(config=None, pipeline=None):
             job = dict(id=job_id, _owner=g.owner, dir=str(directory), source=str(source), meta=meta,
                        sources=sources, source_count=len(sources),
                        status='uploaded', stage='upload', progress=1, completed=['upload'],
-                       options={'multipov': True} if len(sources) > 1 else {}, clips=None, candidates=[], edit_plan=None, output=None,
+                       options={'privacy': False, **({'multipov': True} if len(sources) > 1 else {})}, clips=None, candidates=[], edit_plan=None, output=None,
                        warnings=[], error=None, created_at=time.time(), target=None, elapsed=0)
             store.save(job)
         except Exception:
@@ -401,4 +401,6 @@ def create_app(config=None, pipeline=None):
             queue.keys.pop(job_id, None)
         return '', 204
 
+    from .library import install
+    install(app, store, workspace, owned)
     return app

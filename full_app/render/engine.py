@@ -28,6 +28,8 @@ class Renderer:
     def encode(self, arguments, output, directory):
         from services.ffmpeg_runner import HAS_NVENC
         arguments = list(arguments)
+        if hasattr(self, 'filter_graphs'):
+            self.filter_graphs.extend(arguments[i+1] for i, a in enumerate(arguments[:-1]) if a in ('-filter_complex', '-vf'))
         if "-filter_complex" in arguments:
             index = arguments.index("-filter_complex")
             graph_path = directory / f"{output.stem}.filters"
@@ -54,6 +56,9 @@ class Renderer:
 
     def render(self, plan):
         plan = RenderPlan.model_validate(plan)
+        self.filter_graphs = []
+        self.executed_plan = plan
+        self.segment_timeline = []
         info = probe(self.source)
         if not any(s["codec_type"] == "video" for s in info["streams"]):
             raise ValueError("Source must have a video stream")
@@ -124,7 +129,7 @@ class Renderer:
                 words = segment.words if plan.captions.enabled else []
                 texts = segment.texts if plan.captions.enabled else []
                 baked_captions = self.runner.perf and (words or segment.title or texts) and not (
-                    plan.captions.enabled and plan.captions.transcribe and not words and not texts and has_audio)
+                    plan.captions.enabled and plan.captions.transcribe and not words)
                 if baked_captions:
                     ass = directory / f'caption_{index}.ass'
                     write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title, texts=texts)
@@ -151,8 +156,21 @@ class Renderer:
                          "-t", str(duration)]
                 self.encode(args, path, directory)
                 words = segment.words if plan.captions.enabled else []
-                if plan.captions.enabled and plan.captions.transcribe and not words and not texts and has_audio:
-                    words = transcribe(path, plan.captions.model)
+                if plan.captions.enabled and plan.captions.transcribe and not words:
+                    words = transcribe(path, plan.captions.model) if has_audio else []
+                    if not words:
+                        import warnings
+                        warnings.warn('Word captions: no speech words available; using timed editorial text', RuntimeWarning)
+                        from .plan import Word
+                        # Editorial captions are explicitly identified as a fallback, never a transcript.
+                        content = segment.title or ' '.join(t.content for t in texts)
+                        tokens = content.split()[:100]
+                        span = min(duration, max(1, len(tokens)*.3))
+                        words = [Word(start=i*span/len(tokens), end=(i+1)*span/len(tokens), text=t)
+                                 for i, t in enumerate(tokens)]
+                    segment.words = words
+                    if words:
+                        texts = []
                 if (words or segment.title or texts) and not baked_captions:
                     ass = directory / f"caption_{index}.ass"
                     write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title, texts=texts)
@@ -183,6 +201,7 @@ class Renderer:
                 results = [render_segment(item) for item in work]
             cursor = sum(timeline) - overlap * len(timeline)
             for index, (path, duration) in enumerate(results):
+                self.segment_timeline.append(dict(start=cursor, duration=duration))
                 for event in segment_captions[index]:
                     self.caption_events.append(dict(start=cursor+event['start'],
                                                     end=cursor+min(event['end'], duration), text=event['text']))
@@ -209,6 +228,7 @@ class Renderer:
             if joined is None:
                 joined = self.encode(args, directory / "joined.mp4", directory)
             if plan.music:
+                self.filter_graphs.append(music_graph(plan.music.volume, plan.music.duck))
                 # Mix audio separately: old FFmpeg schedulers can stop amix early
                 # when an independently encoded video stream reaches output -t.
                 mixed = directory / "mixed.wav"

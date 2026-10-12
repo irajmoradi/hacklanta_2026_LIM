@@ -147,7 +147,7 @@ class RenderPlan(Model):
     reframe: Literal["crosshair", "motion", "blur"] = "crosshair"
     captions: Captions = Field(default_factory=Captions)
     music: Music | None = None
-    transition: Literal["cut", "fast_zoom", "whip", "flash", "glitch"] = "cut"
+    transition: Literal["cut", "fast_zoom", "whip", "flash", "glitch", "varied"] = "cut"
     transition_duration: float = Field(default=0.15, ge=0.05, le=1)
     intro: Card | None = None
     outro: Card | None = None

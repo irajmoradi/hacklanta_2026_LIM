@@ -174,7 +174,7 @@ def test_selected_privacy_cache_and_source_clocks(video, tmp_path, monkeypatch):
     monkeypatch.setattr(privacy, 'sanitize', sanitize)
     scratch = tmp_path / 'scratch'
     scratch.mkdir()
-    job = dict(dir=str(tmp_path), source=str(video), options={}, meta=probe_video(video), warnings=[],
+    job = dict(dir=str(tmp_path), source=str(video), options={'privacy': True}, meta=probe_video(video), warnings=[],
                edit_plan={'segments': [dict(source_start=2., source_end=3.)]},
                clips=[dict(start_seconds=2., end_seconds=3., description='Play')])
     pipeline = Pipeline()

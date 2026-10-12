@@ -47,7 +47,7 @@ def join_graph(durations, transition, overlap, fps):
         for i, duration in enumerate(durations[1:], 1):
             last = i == len(durations) - 1
             vo, ao = ("outv", "outa") if last else (f"xv{i}", f"xa{i}")
-            parts.append(f"[{video}][v{i}]xfade=transition={TRANSITIONS[transition]}:"
+            parts.append(f"[{video}][v{i}]xfade=transition={TRANSITIONS[list(TRANSITIONS)[(i-1) % len(TRANSITIONS)] if transition == 'varied' else transition]}:"
                          f"duration={number(overlap)}:offset={number(cursor-overlap)}[{vo}]")
             parts.append(f"[{audio}][a{i}]acrossfade=d={number(overlap)}:c1=tri:c2=tri[{ao}]")
             cursor += duration - overlap

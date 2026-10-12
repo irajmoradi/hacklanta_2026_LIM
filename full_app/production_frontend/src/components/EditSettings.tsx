@@ -9,6 +9,9 @@ export function EditSettings({ options, change, capabilities, legacy, preset, se
   const o = { ...extensionDefaults, ...options };
   const supports = (key: string) => !legacy && capabilities.options.includes(key);
   const toggles = [
+    ["transitions", "Varied transitions", "Join clips with short zoom, whip, flash and glitch transitions."],
+    ["cards", "Intro and outro", "Frame the montage with short title cards."],
+    ["beat_sync", "Music beat sync", "Snap cuts near the music beat."],
     ["use_signals", "Gameplay signals", "Find action using HUD events, motion and audio."],
     ["audio_ai", "Audio AI", "Detect speech, shouting and laughter."],
     ["window_scoring", "Gemini window scoring", "Score candidate moments with video understanding."],
@@ -18,12 +21,17 @@ export function EditSettings({ options, change, capabilities, legacy, preset, se
     ["sam", "SAM spotlight", "Highlight the action with a subject mask."],
     ["sam_reframe", "Subject-aware vertical crop", "Follow the subject in vertical exports."],
     ["privacy_blur", "Privacy blur", "Blur kill feed, chat and party HUD regions in the export. Review the result."],
-    ["narration", "AI narration", "Add a stock-voice caster when speech synthesis is configured."],
+    ["narration", "AI narration", "Add cached speech or an offline computer-voice caster when available."],
     ["chat", "Twitch chat signal", "Use replay activity to find crowd favorites."],
     ["share_kit", "Share kit", "Prepare covers and posting copy after rendering."],
   ] as const;
   return <details className="edit-settings" open>
     <summary>Edit settings</summary>
+    <button type="button" disabled={!supports("full_experience")} onClick={() => {
+      change("full_experience", true);
+      for (const key of ["planner_v2", "audio_ai", "captions", "reactions", "sam", "sam_reframe", "beat_sync", "transitions", "cards", "narration", "share_kit", "use_signals"] as const) change(key, true);
+      change("privacy_blur", false); change("music", "energetic");
+    }}>Full experience</button>
     <label>Game<select value={o.game} onChange={e => change("game", e.target.value)}>
       <option value="auto">Auto-detect</option><option value="generic">Generic game</option>
       <option value="valorant">Valorant</option><option value="overwatch2">Overwatch 2</option>

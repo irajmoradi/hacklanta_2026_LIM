@@ -61,11 +61,13 @@ def load_pack(folder: str | Path) -> list[Reaction]:
 
 class ReactionSelector:
     """Create one per montage/job; selection history is not shared between users."""
-    def __init__(self, reactions: Iterable[Reaction], seed: int | None = None) -> None:
+    def __init__(self, reactions: Iterable[Reaction], seed: int | None = None, cover_speakers: bool = False) -> None:
         self.reactions = list(reactions)
         self.rng = random.Random(seed)
         self.last_id = self.last_speaker = None
         self.counts: dict[str, int] = {}
+        self.cover_speakers = cover_speakers
+        self.speakers_seen = set()
 
     def select(self, label: str = '', score: float = 0.5, mode: str = 'nice',
                suggested_reaction_label: str | None = None) -> Reaction | None:
@@ -78,6 +80,9 @@ class ReactionSelector:
         preferred = suggested_reaction_label if suggested_reaction_label in LABELS else label
         if preferred not in LABELS:
             preferred = ('hype' if float(score) >= 0.7 else 'wholesome') if mode == 'nice' else 'roast'
+        unseen = [r for r in candidates if r.speaker not in self.speakers_seen]
+        if self.cover_speakers and unseen:
+            candidates = unseen
         matching = [r for r in candidates if r.label == preferred]
         candidates = matching or candidates
         rotating = [r for r in candidates if r.speaker != self.last_speaker]
@@ -85,5 +90,6 @@ class ReactionSelector:
         minimum = min(self.counts.get(r.id, 0) for r in candidates)
         chosen = self.rng.choice([r for r in candidates if self.counts.get(r.id, 0) == minimum])
         self.counts[chosen.id] = minimum + 1
+        self.speakers_seen.add(chosen.speaker)
         self.last_id, self.last_speaker = chosen.id, chosen.speaker
         return chosen

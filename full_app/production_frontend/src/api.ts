@@ -211,7 +211,10 @@ export class EditorApi {
       if (ui in result) { result[api] = result[ui]; delete result[ui]; }
     }
     if ("game" in result) result.profiles = true;
-    if ("music" in result) result.music = result.music !== "off";
+    if ("music" in result) {
+      if (this.capabilities.options.includes("music_mood") && ["chill", "energetic"].includes(String(result.music))) result.music_mood = result.music;
+      result.music = result.music !== "off";
+    }
     return result;
   }
   async createTeam(players: { file: File; name: string }[]): Promise<Job> {
@@ -369,11 +372,16 @@ export class EditorApi {
       };
       return;
     }
+    // Changed automatic cards/joins need a fresh planner budget. Director plans
+    // remain authoritative; ordinary reviewed clips were saved by the review flow.
+    const refreshExperience =
+      (options.cards !== undefined && (Boolean(plan?.intro) !== options.cards || Boolean(plan?.outro) !== options.cards)) ||
+      (options.transitions !== undefined && (options.transitions ? plan?.transition !== "varied" : plan?.transition === "varied"));
     await request(`/api/jobs/${encodeURIComponent(id)}/render`, "POST", {
       preset, mode: options.mode, style: options.style,
       captions: options.captions, reactions: options.reactions, sam: options.sam,
       ...this.extended(options),
-      ...(reviewed && (authoritative || (!this.planningModes.has(id) || this.planningModes.get(id) === options.mode) && (!this.planningStyles.has(id) || this.planningStyles.get(id) === options.style))
+      ...(reviewed && (authoritative || !refreshExperience && (!this.planningModes.has(id) || this.planningModes.get(id) === options.mode) && (!this.planningStyles.has(id) || this.planningStyles.get(id) === options.style))
         ? {
             edit_plan: {
               ...plan,

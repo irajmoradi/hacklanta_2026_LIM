@@ -66,7 +66,7 @@ class JobQueue:
             invalidate = None
             if changed & analysis_keys:
                 invalidate = 'analyze'
-            elif changed & {'mode', 'style', 'prompt', 'max_duration', 'planner', 'fx', 'editor_agent'}:
+            elif changed & {'mode', 'style', 'prompt', 'max_duration', 'planner', 'fx', 'editor_agent', 'cards', 'transitions'}:
                 invalidate = 'plan'
             elif changed:
                 invalidate = 'render'
@@ -93,6 +93,7 @@ class JobQueue:
             if custom_plan is not None and custom_plan != job['edit_plan']:
                 self.invalidate(job, 'render')
                 job['edit_plan'] = custom_plan
+                job['_custom_plan'] = True
                 if 'plan' not in job['completed']:
                     job['completed'].append('plan')
             if target in ('plan', 'render') and not job['clips'] and custom_plan is None and 'analyze' in job['completed']:
@@ -115,10 +116,11 @@ class JobQueue:
         if index <= 1:
             job['edit_plan'] = None
             job.pop('planner_plan', None)
+            job.pop('_custom_plan', None)
             for field in ('agent_versions', 'agent_result', 'agent_trace'):
                 job.pop(field, None)
         job['output'] = None
-        for field in ('share_kit', 'team_candidates', 'team_alignments'):
+        for field in ('share_kit', 'team_candidates', 'team_alignments', 'render_plan', 'render_evidence', 'subtitle_events', 'narration_track'):
             job.pop(field, None)
 
     def cancel(self, job_id):
