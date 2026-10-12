@@ -14,7 +14,7 @@ STOCK_VOICE = "JBFqnCBsd6RMkjVDRZzb"  # George, ElevenLabs stock voice
 MODEL = "eleven_multilingual_v2"
 
 
-def voice_id():
+def voice_id() -> str:
     """Only an explicitly consented ID may replace the stock voice."""
     voice = os.getenv("NARRATION_CONSENTED_VOICE_ID", "") or STOCK_VOICE
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", voice):
@@ -22,7 +22,7 @@ def voice_id():
     return voice
 
 
-def gemini_script(context, persona):
+def gemini_script(context: list[dict], persona: str) -> list[str] | None:
     from google import genai
     from google.genai import types
 
@@ -49,7 +49,7 @@ def gemini_script(context, persona):
     return lines
 
 
-def wav_duration(path):
+def wav_duration(path: str | Path) -> float:
     with wave.open(str(path), "rb") as audio:
         if audio.getnchannels() != 1 or audio.getsampwidth() != 2 or audio.getframerate() != 24000:
             raise ValueError("Unexpected narration audio format")
@@ -59,7 +59,7 @@ def wav_duration(path):
         return frames / 24000
 
 
-def synthesize(text, voice, cache_dir, *, allow_network=False):
+def synthesize(text: str, voice: str, cache_dir: str | Path, *, allow_network: bool = False) -> Path | None:
     """Cache raw 24 kHz PCM as WAV; atomic publication avoids partial cache hits."""
     digest = hashlib.sha256(json.dumps([voice, text, MODEL, "pcm_24000"]).encode()).hexdigest()
     path = Path(cache_dir) / (digest + ".wav")

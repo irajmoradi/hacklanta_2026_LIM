@@ -44,13 +44,15 @@ the new output duration and express subsequent effect windows on that new timeli
 `compose` rejects mismatched consecutive durations. Do not supply absolute source
 timestamps after trimming a source segment.
 
-The existing renderer continues using its existing defaults. This task's allowed
-paths exclude `services/ffmpeg_runner.py`, `render/`, and planner files, so this
-library exposes the integration API without changing those consumers. An integrator
-can append `compose(requests)` to a renderer's video chain and expose `metadata()`
-to the planner. Speed ramps also require the consumer to retime audio, captions,
-SFX and subsequent edit points; this package deliberately renders silent previews
-and does not silently apply an incorrect constant `atempo` to varying video speed.
+Consumers can append `compose(requests)` to a renderer's video chain and expose
+`metadata()` to the planner. Speed ramps require retiming audio, captions, SFX,
+and subsequent edit points; this package renders silent previews.
+
+Raw FFprobe metadata is shared through `fx.media.probe`. The existing
+`services.probe.probe_video` requires video codec and frame-rate fields and returns
+a summary, which cannot represent audio-only inputs or still-image previews.
+Callers retain their existing timeouts and error contracts. Encoding stays in
+each renderer because their stream maps, output ownership, and deadlines differ.
 
 ## Effects
 
@@ -143,27 +145,3 @@ geometry and duration (including multiple speed settings and minterpolate), chec
 freeze hold/resume behavior, exercise composition and both other grade presets,
 reject invalid parameters, verify pure builders and JSON metadata, test optional
 RIFE success/fallback, and render the complete contact sheet. No paid calls occur.
-
-### EXT-18 validation record
-
-Linux runner commands executed from the worktree root:
-
-* `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_fx.py"`
-  — initial milestone: **34 passed**, exit **0**.
-* `tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live' && python -m fx.contact_sheet --output /tmp/lim-ext18-fx-gallery"`
-  — broader suite: **194 passed, 4 failed, 4 skipped, 1 deselected**, exit **1**.
-  The chained gallery command did not execute because pytest failed.
-  `eval/test_app_smoke.py::test_app_pipeline` expects the removed module-level
-  `app.WORKSPACE`; the three preset variants of
-  `tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render`
-  expect five warnings but receive four. These files and their production consumers
-  were not changed by EXT-18 and do not use the new FX package.
-* `tools/remote_run.sh "cd full_app && python -m fx.contact_sheet --output /tmp/lim-ext18-fx-gallery"`
-  — gallery generated, exit **0**. Visual review prompted moving labels below
-  previews so the name-tag effect is unobstructed.
-* `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_fx.py && python -m fx.contact_sheet --output /tmp/lim-ext18-fx-gallery"`
-  — final FX suite: **44 passed**, revised gallery generated, exit **0**.
-
-The added boundary cases cover full-clip, start-of-clip, and end-of-clip freeze and
-speed windows. Invalid RIFE geometry is also checked. No live Gemini calls were
-made and no credentials were accessed.

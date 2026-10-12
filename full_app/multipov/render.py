@@ -2,21 +2,17 @@
 from pathlib import Path
 import math
 import os
-import subprocess
 import tempfile
 
 from .models import normalize
-from .sync import probe
+from .sync import probe, run
 
 
-def _run(args, cwd):
-    result = subprocess.run(["ffmpeg", "-nostdin", "-v", "error", "-y", *args],
-                            cwd=cwd, capture_output=True, timeout=600)
-    if result.returncode:
-        raise RuntimeError(result.stderr.decode(errors="replace")[-2000:])
+def _run(args: list[str], cwd: Path) -> None:
+    run(["ffmpeg", "-nostdin", "-v", "error", "-y", *args], cwd=cwd, timeout=600)
 
 
-def render_montage(videos, candidates, output, *, offsets, mode="best", width=1280, height=720, fps=30):
+def render_montage(videos, candidates, output, *, offsets, mode="best", width=1280, height=720, fps=30) -> Path:
     """Render chronological highlights with name tags and a full team credit.
 
     mode: best, split, or pip. Replays use the two highest scoring angles;

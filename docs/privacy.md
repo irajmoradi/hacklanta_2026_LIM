@@ -124,19 +124,3 @@ The prepass costs an additional encode, and many OCR boxes increase graph size
 and rendering cost. Inputs are expected to have a normal zero-based, constant
 frame-rate timeline; normalize variable-frame-rate/rotated capture files before
 detection, since OpenCV frame-count timing is used.
-
-## Sprint validation (2026-10-12)
-
-- `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_privacy.py"`:
-  exit 0, initial 20 tests passed.
-- `tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live'"`:
-  exit 1, 180 passed, 4 skipped, 1 deselected, 4 failed. The failures are in
-  unchanged code: `eval/test_app_smoke.py::test_app_pipeline` expects the absent
-  `app.WORKSPACE`; three `tests/test_jobs.py` preset cases expect five optional
-  hook warnings but receive four. Their jobs reached `done` and rendered output.
-- After adding adapter/whitelist regression coverage and improving optional OCR
-  initialization fallback,
-  `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_privacy.py tests/test_render_v2.py"`:
-  exit 0, **48 passed** (22 privacy tests plus 26 renderer tests).
-- Zero paid/live calls; RapidOCR output parsing is tested with a fake engine,
-  while Tesseract detection and FFmpeg rendering run against real executables.

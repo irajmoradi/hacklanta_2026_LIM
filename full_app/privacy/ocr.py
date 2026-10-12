@@ -23,7 +23,7 @@ class Tesseract:
         if not self.executable:
             raise RuntimeError("Tesseract executable is unavailable")
 
-    def read(self, frame):
+    def read(self, frame) -> list[Word]:
         ok, png = cv2.imencode(".png", frame)
         if not ok:
             raise RuntimeError("could not encode OCR frame")
@@ -42,7 +42,7 @@ class RapidOCR:
         from rapidocr_onnxruntime import RapidOCR as Engine
         self.engine = Engine()
 
-    def read(self, frame):
+    def read(self, frame) -> list[Word]:
         result, _ = self.engine(frame)
         words = []
         for points, text, confidence in result or []:
@@ -54,7 +54,7 @@ class RapidOCR:
         return words
 
 
-def get_reader(backend):
+def get_reader(backend: str) -> Tesseract | RapidOCR | None:
     if backend == "none":
         return None
     if backend == "rapidocr":

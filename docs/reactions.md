@@ -3,7 +3,7 @@
 The opt-in `full_app/reactions` module needs only Python, FFmpeg and ffprobe (FFmpeg
 with libx264, AAC and drawtext/font support for optional names). No API calls or ML
 dependencies are used. Existing montage behavior is unchanged until the backend
-calls the hook. Backend routes are outside EXT-06's allowed paths.
+calls the hook.
 
 ## Pack format
 

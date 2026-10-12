@@ -5,14 +5,14 @@ import json
 import subprocess
 import sys
 import threading
-import time
+from unittest.mock import Mock
 
 import cv2
 import numpy as np
 import pytest
 
 from sam import Config, clear_cache, clip_masks, render_effect, subject_track
-from sam.backends import fallback_mask
+from sam.backends import BoundedBackend, fallback_mask
 from sam.effects import composite
 
 
@@ -47,8 +47,6 @@ def endpoint():
         def do_POST(self):
             data = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             state["calls"].append((data["prompt"], self.headers.get("Authorization")))
-            if state["mode"] == "slow":
-                time.sleep(2)
             frame = cv2.imdecode(np.frombuffer(base64.b64decode(data["image_png"]), np.uint8), cv2.IMREAD_COLOR)
             mask = np.zeros(frame.shape[:2], np.uint8)
             mask[20:70, 45:85] = 1
@@ -70,6 +68,7 @@ def endpoint():
     thread.join(timeout=2)
 
 
+@pytest.mark.slow
 def test_fallback_masks_cache_and_moving_track(video):
     clip = clip_masks(video, 0, 2)
     assert clip.masks.shape == (9, 96, 160)
@@ -95,6 +94,7 @@ def test_blank_fallback_is_stable():
     assert np.array_equal(mask, fallback_mask(frame, frame))
 
 
+@pytest.mark.slow
 def test_remote_contract_and_cache(video, endpoint):
     url, state = endpoint
     config = Config(backend="remote", url=url, key="test-only", timeout=3, budget=10, max_samples=3)
@@ -109,27 +109,24 @@ def test_remote_contract_and_cache(video, endpoint):
     assert "test-only" not in repr(config)
 
 
-@pytest.mark.parametrize("mode", ["bad", "slow"])
-def test_remote_failure_is_bounded_and_falls_back(video, endpoint, mode):
+@pytest.mark.slow
+def test_remote_invalid_mask_falls_back(video, endpoint):
     url, state = endpoint
-    state["mode"] = mode
-    started = time.monotonic()
-    clip = clip_masks(video, 0, 2, config=Config(backend="remote", url=url, timeout=1, budget=1))
-    elapsed = time.monotonic()-started
+    state["mode"] = "bad"
+    clip = clip_masks(video, 0, 2, config=Config(backend="remote", url=url, timeout=5, budget=10))
     assert clip.degraded
-    assert elapsed < 2.5
-    assert len(state["calls"]) <= 1
+    assert len(state["calls"]) == 1
     assert np.array_equal(clip.masks, clip_masks(video, 0, 2).masks)
 
 
+@pytest.mark.slow
 def test_missing_local_model_falls_back(video):
-    started = time.monotonic()
-    clip = clip_masks(video, 0, 2, config=Config(backend="local", checkpoint="/missing/model.pt", timeout=1))
+    clip = clip_masks(video, 0, 2, config=Config(backend="local", checkpoint="/missing/model.pt", timeout=5))
     assert clip.degraded
-    assert time.monotonic()-started < 2.5
     assert np.array_equal(clip.masks, clip_masks(video, 0, 2).masks)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("effect,vertical,duration", [
     ("outline_pulse", False, 1.5), ("background_blur", True, 1.5), ("spotlight_freeze", False, 2.0)])
 def test_render_duration_geometry_audio_and_decode(video, tmp_path, effect, vertical, duration):
@@ -165,6 +162,7 @@ def test_render_duration_geometry_audio_and_decode(video, tmp_path, effect, vert
             rendered.release()
 
 
+@pytest.mark.slow
 def test_silent_video_and_last_frame_freeze(video, tmp_path):
     silent = tmp_path/"silent.mp4"
     run("ffmpeg", "-v", "error", "-i", str(video), "-c:v", "copy", "-an", str(silent))
@@ -187,12 +185,14 @@ def test_compositing_changes_background_and_preserves_subject():
     assert not np.array_equal(composite(frame, mask, "outline_pulse", 0), composite(frame, mask, "outline_pulse", .25))
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("start,end", [(-1, 1), (1, 1), (2, 1), (10, 11), (float("nan"), 2)])
 def test_invalid_clip(video, start, end):
     with pytest.raises(ValueError):
         clip_masks(video, start, end)
 
 
+@pytest.mark.slow
 def test_atomic_output_on_encode_failure(video, tmp_path, monkeypatch):
     import sam.effects as effects
     output = tmp_path/"existing.mp4"
@@ -206,6 +206,7 @@ def test_atomic_output_on_encode_failure(video, tmp_path, monkeypatch):
     assert list(tmp_path.iterdir()) == [output]
 
 
+@pytest.mark.slow
 def test_render_survives_remote_failure(video, tmp_path, endpoint):
     url, state = endpoint
     state["mode"] = "bad"
@@ -215,16 +216,50 @@ def test_render_survives_remote_failure(video, tmp_path, endpoint):
     assert len(state["calls"]) == 1
 
 
-def test_remote_total_budget(video, endpoint):
-    url, state = endpoint
-    state["mode"] = "slow"
-    started = time.monotonic()
-    clip = clip_masks(video, 0, 2, config=Config(backend="remote", url=url, timeout=5, budget=.8))
-    assert clip.degraded
-    assert time.monotonic()-started < 2
-    assert len(state["calls"]) <= 1
+@pytest.mark.parametrize("stage", ["startup", "response"])
+@pytest.mark.parametrize("timeout,budget", [(1, 5), (5, 1)])
+def test_backend_deadlines_close_worker_and_trip_circuit(monkeypatch, stage, timeout, budget):
+    import sam.backends as backends
+
+    clock = [0.0]
+    connection, child, process = Mock(), Mock(), Mock()
+    process.is_alive.side_effect = [True, False]
+    context = Mock()
+    context.Pipe.return_value = connection, child
+    context.Process.return_value = process
+    monkeypatch.setattr(backends.mp, "get_context", lambda method: context)
+    monkeypatch.setattr("time.monotonic", lambda: clock[0])
+    waits = []
+
+    def poll(wait):
+        waits.append(wait)
+        if stage == "response" and len(waits) == 1:
+            clock[0] += .2  # Startup consumes part of the same request deadline.
+            return True
+        clock[0] += wait
+        return False
+
+    connection.poll.side_effect = poll
+    connection.recv.return_value = "ready"
+    backend = BoundedBackend(Config(backend="remote", timeout=timeout, budget=budget))
+    seed = np.ones((4, 4), dtype=np.uint8)
+    frame = np.zeros((4, 4, 3), dtype=np.uint8)
+    assert backend.segment(frame, "player", seed) is seed
+    assert waits == pytest.approx([1] if stage == "startup" else [1, .8])
+    assert backend.remaining == pytest.approx(budget - 1)
+    assert backend.failed
+    assert backend.process is backend.connection is None
+    process.terminate.assert_called_once()
+    process.join.assert_called_once_with(timeout=.2)
+    process.close.assert_called_once()
+    connection.close.assert_called_once()
+    child.close.assert_called_once()
+    assert backend.segment(frame, "player", seed) is seed
+    assert connection.poll.call_count == len(waits)
+    context.Process.assert_called_once()
 
 
+@pytest.mark.slow
 def test_cli(video, tmp_path):
     output = tmp_path/"cli.mp4"
     run(sys.executable, "-m", "sam", str(video), str(output), "--end", "1",

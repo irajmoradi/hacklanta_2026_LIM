@@ -21,7 +21,7 @@ class MaskClip:
     height: int
     degraded: bool
 
-    def mask_at(self, time):
+    def mask_at(self, time: float) -> np.ndarray:
         index = int(np.argmin(np.abs(self.times - time)))
         return cv2.resize(self.masks[index], (self.width, self.height), interpolation=cv2.INTER_NEAREST)
 
@@ -31,12 +31,13 @@ _lock = threading.Lock()
 _CACHE_BYTES = 32 * 1024 * 1024
 
 
-def clear_cache():
+def clear_cache() -> None:
     with _lock:
         _cache.clear()
 
 
-def clip_masks(video, start, end, *, prompt="player character", config=None):
+def clip_masks(video: str | Path, start: float, end: float, *, prompt: str = "player character",
+               config: Config | None = None) -> MaskClip:
     config = config or Config.from_env()
     if not np.isfinite([start, end]).all() or start < 0 or end <= start:
         raise ValueError("Expected 0 <= start < end")
@@ -89,7 +90,7 @@ def clip_masks(video, start, end, *, prompt="player character", config=None):
     return result
 
 
-def track_from_masks(clip):
+def track_from_masks(clip: MaskClip) -> list[tuple[float, float, float, float, float]]:
     boxes = []
     for mask in clip.masks:
         y, x = np.nonzero(mask)
@@ -97,7 +98,8 @@ def track_from_masks(clip):
         boxes.append([(x.min()+x.max()+1)/(2*w), (y.min()+y.max()+1)/(2*h),
                       (x.max()-x.min()+1)/w, (y.max()-y.min()+1)/h])
     times = np.arange(clip.first, clip.stop)/clip.fps
-    interpolated = np.column_stack([np.interp(times, clip.times, np.array(boxes)[:, j]) for j in range(4)])
+    boxes = np.asarray(boxes)
+    interpolated = np.column_stack([np.interp(times, clip.times, boxes[:, j]) for j in range(4)])
     # Limit pan/size velocity to 0.6 normalized units/second, independent of FPS.
     smooth = interpolated.copy()
     alpha = 1-np.exp(-1/(clip.fps*.15))
@@ -106,6 +108,6 @@ def track_from_masks(clip):
     return [tuple(map(float, row)) for row in np.column_stack([times, smooth])]
 
 
-def subject_track(video, start, end, **kwargs):
+def subject_track(video: str | Path, start: float, end: float, **kwargs) -> list[tuple[float, float, float, float, float]]:
     """Return (absolute seconds, cx, cy, width, height), all geometry normalized."""
     return track_from_masks(clip_masks(video, start, end, **kwargs))

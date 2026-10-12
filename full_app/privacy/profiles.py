@@ -1,8 +1,8 @@
 """Conservative defaults for standard 16:9 HUDs, overridable by profile data."""
-from .models import Box
+from .models import Box, PrivacyOptions
 
 
-def box(x, y, width, height):
+def box(x: float, y: float, width: float, height: float) -> Box:
     return Box(x=x, y=y, width=width, height=height)
 
 
@@ -22,7 +22,7 @@ DEFAULTS = {
 }
 
 
-def regions_for(options):
+def regions_for(options: PrivacyOptions) -> dict[str, Box]:
     if options.regions is not None:
         return options.regions
     key = options.game.casefold().replace(" ", "").replace("_", "").replace("-", "")

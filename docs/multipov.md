@@ -4,8 +4,7 @@
 match. It uses the existing NumPy dependency and FFmpeg/ffprobe (with libx264,
 AAC and drawtext support). It needs no Gemini calls, credentials, ML models or
 new packages. The existing upload/analyze/plan/render defaults are unchanged.
-Flask routes and frontends are outside this task's allowed paths; an integrator
-can call this API after gathering each recording's scored candidates.
+Call this API after gathering each recording's scored candidates.
 
 ## Try it
 
@@ -57,7 +56,7 @@ frame accuracy. Manual `Alignment` values support recordings without audio.
 Synchronization decodes mono 8 kHz audio, measures four spectral energy bands
 at 5 ms hops, and cross-correlates 19 distributed two-second windows against the
 reference. Per-band normalization reduces the effect of independent voice chat,
-gain differences and waveform polarity. A deterministic robust affine fit rejects
+gain differences and waveform polarity. A deterministic affine fit rejects
 outlier matches and corrects linear drift up to 2%. It requires at least three
 unambiguous windows, a three-second fit span and four seconds of input audio.
 Periodicity, silence, missing audio, inconsistent clocks and insufficient overlap
@@ -122,26 +121,6 @@ middle and end. Rendering tests decode the complete MP4 and inspect panel colors
 visible text, duration, dimensions and audio. No copyrighted media is downloaded.
 Additional fixtures reject unrelated recordings and verify that a visual flash
 appears simultaneously in drift-corrected split-screen panels.
-
-Validation on the Linux runner (2026-10-12):
-
-- `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_multipov.py --tb=short"`:
-  13 passed, exit 0.
-- `tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live'"`:
-  171 passed, 4 skipped, 1 deselected, 4 failed, exit 1. This run preceded the
-  final two additional multi-POV tests. The existing `eval/test_app_smoke.py`
-  expects a removed `app.WORKSPACE` attribute. Three parameterizations in
-  `tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render`
-  render successfully but expect five optional-feature warnings instead of four.
-- `tools/remote_run.sh "cd full_app && python -m pytest -q eval/test_app_smoke.py tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render --tb=short"`:
-  the same four failures reproduced in isolation, exit 1, without collecting the
-  multi-POV tests. Those unrelated tests and app modules were not changed.
-
-Development runs of the multi-POV suite initially exited 1: a synthetic fixture
-needed an explicit mono channel layout; the synchronizer needed a broadband
-variation check to reject a constant tone; the frame extraction helper needed
-`0.5` instead of `.5` for FFmpeg's seek argument. All are fixed in the passing run.
-No live calls were made.
 
 The one-frame assertion is for the tested synthetic fixtures, not all gameplay.
 Strong voice/music interference, unrelated in-game sound mixes, very short overlap,

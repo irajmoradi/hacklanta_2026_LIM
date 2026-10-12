@@ -1,14 +1,14 @@
 """FFmpeg privacy pass, applied before montage cuts, speed changes or reframing."""
-import json
 import math
 from pathlib import Path
 import subprocess
 import tempfile
 
+from fx.media import probe
 from .models import BlurTrack
 
 
-def build_filtergraph(track):
+def build_filtergraph(track: BlurTrack | dict) -> str:
     track = BlurTrack.model_validate(track)
     parts = ["[0:v]setpts=PTS-STARTPTS,format=yuv444p[p0]"]
     for i, box in enumerate(track.boxes):
@@ -27,16 +27,13 @@ def build_filtergraph(track):
     return ";".join(parts)
 
 
-def render_private_source(source, output, track):
+def render_private_source(source: str | Path, output: str | Path, track: BlurTrack | dict) -> Path:
     """Render a source-aligned blur track, retaining optional audio. No shell."""
     source, output = Path(source), Path(output)
     if source.resolve() == output.resolve():
         raise ValueError("privacy output must differ from source")
     track = BlurTrack.model_validate(track)
-    probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
-                            "-show_entries", "stream=width,height", "-of", "json", str(source)],
-                           capture_output=True, check=True, text=True, timeout=30)
-    streams = json.loads(probe.stdout)["streams"]
+    streams = [s for s in probe(source, timeout=30)["streams"] if s["codec_type"] == "video"]
     if not streams or (streams[0]["width"], streams[0]["height"]) != (track.width, track.height):
         raise ValueError("privacy track dimensions do not match source")
     # Script avoids platform command-length limits for long blur tracks.

@@ -1,11 +1,18 @@
 """Post-montage FFmpeg hook: mix speech and duck the game audio."""
 
-import json
+from __future__ import annotations
+
 from pathlib import Path
+from typing import TYPE_CHECKING
 import subprocess
 
+from fx.media import probe
 
-def filter_graph(track, *, game_audio=True, duck_gain=0.25):
+if TYPE_CHECKING:
+    from . import NarrationTrack
+
+
+def filter_graph(track: NarrationTrack, *, game_audio: bool = True, duck_gain: float = 0.25) -> str:
     if not 0 <= duck_gain <= 1:
         raise ValueError("duck_gain must be between zero and one")
     spoken = [s for s in track.segments if s.audio_file is not None]
@@ -27,7 +34,7 @@ def filter_graph(track, *, game_audio=True, duck_gain=0.25):
     return ";".join(graph)
 
 
-def render(video, track, output, *, duck_gain=0.25):
+def render(video: str | Path, track: NarrationTrack, output: str | Path, *, duck_gain: float = 0.25) -> Path:
     """Apply a track to the matching final montage; no-op for script-only tracks."""
     video, output = Path(video).resolve(), Path(output).resolve()
     spoken = [s for s in track.segments if s.audio_file is not None]
@@ -35,9 +42,7 @@ def render(video, track, output, *, duck_gain=0.25):
         return video
     if output in [video] + [Path(s.audio_file).resolve() for s in spoken]:
         raise ValueError("Output must not overwrite an input")
-    probe = subprocess.run(["ffprobe", "-v", "error", "-show_streams", "-show_format",
-                            "-of", "json", str(video)], capture_output=True, check=True, timeout=30)
-    info = json.loads(probe.stdout)
+    info = probe(video, timeout=30)
     if abs(float(info["format"]["duration"]) - track.duration) > 0.15:
         raise ValueError("Narration timeline does not match montage duration")
     has_audio = any(s["codec_type"] == "audio" for s in info["streams"])

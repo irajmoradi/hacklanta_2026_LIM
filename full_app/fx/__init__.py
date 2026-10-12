@@ -22,7 +22,7 @@ class Timing:
             raise ValueError("Require 0 <= start < end <= duration and 1 <= fps <= 240")
 
     @property
-    def enable(self):
+    def enable(self) -> str:
         return f"gte(t,{self.start})*lt(t,{self.end})"
 
 
@@ -34,7 +34,7 @@ class Param:
     maximum: float | None = None
     choices: tuple = ()
 
-    def validate(self, value):
+    def validate(self, value: Any) -> Any:
         if isinstance(self.default, (int, float)):
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
                 raise ValueError("Expected a finite number")
@@ -60,7 +60,7 @@ class Effect:
     changes_duration: bool = False
     required_filters: tuple[str, ...] = ()
 
-    def values(self, params):
+    def values(self, params: Mapping[str, Any]) -> dict[str, Any]:
         unknown = params.keys() - self.params.keys()
         if unknown:
             raise ValueError(f"Unknown parameters: {sorted(unknown)}")
@@ -81,11 +81,11 @@ class Effect:
         return render_preview(source, output, self, timing, **params)
 
 
-def _gate(t, chain):
+def _gate(t: Timing, chain: list[str]) -> str:
     return ",".join(f"{f}:enable='{t.enable}'" for f in chain)
 
 
-def _freeze(t):
+def _freeze(t: Timing) -> str:
     # Keep the first hit frame, drop subsequent frames in the hold, retain timestamps.
     # round=up makes the fps filter hold the previous frame until the next timestamp.
     return (f"select='not(gt(t,{t.start})*lt(t,{t.end}))',fps={t.fps}:round=up,"
@@ -152,7 +152,7 @@ def color_grade(t, preset="teal-orange"):
     return _gate(t, grades[preset])
 
 
-def _text(value):
+def _text(value: str) -> str:
     # Deliberately limited display alphabet prevents FFmpeg expression/filter injection.
     if not re.fullmatch(r"[\w .!?#@+()/-]{1,48}", value, flags=re.UNICODE):
         raise ValueError("Text must be 1-48 letters, numbers, spaces or .!?#@+()/-")
@@ -185,7 +185,7 @@ REGISTRY = {
 }
 
 
-def metadata():
+def metadata() -> dict[str, dict[str, Any]]:
     """JSON-serializable planner catalog; costs are qualitative, not benchmarks."""
     from dataclasses import asdict
     return {key: {"description": e.description, "cost": e.cost, "changes_duration": e.changes_duration,

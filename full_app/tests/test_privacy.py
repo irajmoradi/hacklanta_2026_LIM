@@ -42,6 +42,7 @@ class FakeReader:
         return [Word("Uploader", 30, 40, 150, 32), Word("EnemyPlayer", 300, 40, 210, 32)]
 
 
+@pytest.mark.slow
 def test_detection_hold_whitelist_and_no_text_in_track(names_video):
     reader = FakeReader()
     track = detect_video(names_video, {"regions": FULL, "keep_own_name": True,
@@ -55,6 +56,7 @@ def test_detection_hold_whitelist_and_no_text_in_track(names_video):
     assert len(hidden.boxes) == 2
 
 
+@pytest.mark.slow
 def test_real_tesseract_drawn_names_and_chat(names_video):
     # Required Linux runner includes Tesseract: do not silently skip acceptance.
     track = detect_video(names_video, {"regions": FULL, "keep_own_name": True,
@@ -69,6 +71,7 @@ def test_profiles(game):
     assert {"chat", "kill_feed", "scoreboard", "nameplates", "party_voice", "notifications", "webcam"} <= regions_for(PrivacyOptions(game=game)).keys()
 
 
+@pytest.mark.slow
 def test_optional_ocr_fallback_webcam_and_manual(names_video, monkeypatch):
     def unavailable(_):
         raise ImportError("optional backend missing")
@@ -83,6 +86,7 @@ def test_optional_ocr_fallback_webcam_and_manual(names_video, monkeypatch):
     assert "webcam" not in {b.kind for b in detect_video(names_video, payload).boxes}
 
 
+@pytest.mark.slow
 def test_failed_reader_covers_full_duration(names_video):
     class Broken:
         def read(self, frame):
@@ -98,6 +102,7 @@ def test_invalid_boxes(bad):
         BlurBox.model_validate(dict(x=.1, y=.1, width=.2, height=.2, end=2) | bad)
 
 
+@pytest.mark.slow
 def test_invalid_inputs(names_video):
     with pytest.raises(ValueError, match="unknown"):
         detect_video(names_video, {"game": "unknown"})
@@ -130,6 +135,7 @@ def frame_at(path, index):
         cap.release()
 
 
+@pytest.mark.slow
 def test_filter_pixels_and_time_boundaries(names_video, tmp_path):
     track = BlurTrack(width=640, height=240, duration=2, boxes=[
         BlurBox(x=290/640, y=30/240, width=240/640, height=55/240, start=.5, end=1.5)])
@@ -148,6 +154,7 @@ def test_filter_pixels_and_time_boundaries(names_video, tmp_path):
         assert delta.max() <= 2  # Includes uploader and chat: exact spatial isolation.
 
 
+@pytest.mark.slow
 def test_render_api_audio_and_validation(video, tmp_path):
     output, track = sanitize(video, tmp_path / "private.mp4", {
         "backend": "none", "regions": {}, "manual_boxes": [
@@ -168,6 +175,7 @@ def test_rapidocr_adapter_without_optional_dependency():
     assert reader.read(np.zeros((50, 50, 3), dtype=np.uint8)) == [Word("Other", 10, 20, 31, 11)]
 
 
+@pytest.mark.slow
 def test_whitelist_does_not_allow_substrings_or_mixed_lines(names_video):
     class Reader:
         def read(self, frame):
@@ -177,6 +185,7 @@ def test_whitelist_does_not_allow_substrings_or_mixed_lines(names_video):
     assert len(track.boxes) == 2
 
 
+@pytest.mark.slow
 def test_montage_adapter_preserves_runner_and_cleans_source(video, tmp_path, monkeypatch):
     from services.ffmpeg_runner import FFmpegRunner
     monkeypatch.setattr("services.ffmpeg_runner.HAS_NVENC", False)

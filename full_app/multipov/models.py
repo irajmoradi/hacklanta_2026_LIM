@@ -16,7 +16,7 @@ class Video:
             raise ValueError("player must be a single line of text")
 
 
-def normalize(videos):
+def normalize(videos) -> tuple[Video, ...]:
     result = tuple(v if isinstance(v, Video) else Video(v) for v in videos)
     if not result or len({v.path for v in result}) != len(result):
         raise ValueError("provide at least one recording, with no duplicate paths")
@@ -36,10 +36,10 @@ class Alignment:
         if not .98 <= self.rate <= 1.02 or not 0 <= self.confidence <= 1:
             raise ValueError("rate must be within 2% of real time; confidence must be 0..1")
 
-    def to_match(self, seconds):
+    def to_match(self, seconds: float) -> float:
         return self.offset + self.rate * seconds
 
-    def to_local(self, seconds):
+    def to_local(self, seconds: float) -> float:
         return (seconds - self.offset) / self.rate
 
 
@@ -59,5 +59,5 @@ class TeamCandidate:
     angles: tuple[Angle, ...]  # descending signals score; first is best
 
     @property
-    def best(self):
+    def best(self) -> Angle:
         return self.angles[0]

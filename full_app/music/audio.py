@@ -6,6 +6,8 @@ import wave
 
 import numpy as np
 
+from .models import Section
+
 SAMPLE_RATE = 22050
 
 
@@ -40,7 +42,7 @@ def write_audio(path: Path, samples: np.ndarray) -> None:
         output.writeframes(pcm.tobytes())
 
 
-def finish(samples: np.ndarray, sections) -> np.ndarray:
+def finish(samples: np.ndarray, sections: list[Section]) -> np.ndarray:
     """Section dynamics plus short edge fades; normalize only to prevent clipping."""
     samples = samples.copy()
     drop = round(sections[1].start * SAMPLE_RATE)

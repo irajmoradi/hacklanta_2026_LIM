@@ -10,7 +10,7 @@ def _get(candidate, key, default=None):
     return candidate.get(key, default) if isinstance(candidate, Mapping) else getattr(candidate, key, default)
 
 
-def team_candidates(videos, candidates_per_video, *, offsets=None, overlap=.5):
+def team_candidates(videos, candidates_per_video, *, offsets=None, overlap=.5) -> list[TeamCandidate]:
     """Group highlights sharing >= overlap of the shorter interval.
 
     Input candidates expose start/end and score (e.g. signals.Candidate or

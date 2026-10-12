@@ -1,21 +1,17 @@
 """FFmpeg-only PIP renderer; timestamps are local to the rendered clip."""
-import json
 import math
 import subprocess
 import tempfile
 import uuid
 from pathlib import Path
 
+from fx.media import probe
+from .pack import Reaction
+
 PRESETS = {'landscape': 'bottom-right', 'vertical': 'top-left'}
 
 
-def probe(path):
-    result = subprocess.run(['ffprobe', '-v', 'error', '-show_streams', '-show_format',
-                             '-of', 'json', str(path)], capture_output=True, text=True, check=True)
-    return json.loads(result.stdout)
-
-
-def layout(width, height, preset):
+def layout(width: int, height: int, preset: str) -> tuple[int, int, int]:
     corner = PRESETS[preset]
     size = max(16, int(min(width, height) * 0.30) // 2 * 2)
     margin = max(8, int(min(width, height) * 0.04))
@@ -23,8 +19,8 @@ def layout(width, height, preset):
             height - size - margin if corner.startswith('bottom') else margin)
 
 
-def render_overlay(base_clip, reaction, preset='landscape', *, peak_time=None,
-                   output_path=None, show_speaker=False, duck_gain=0.25):
+def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'landscape', *, peak_time: float | None = None,
+                   output_path: str | Path | None = None, show_speaker: bool = False, duck_gain: float = 0.25) -> Path:
     """Start a reaction at the peak, clamped to the available clip duration.
 
     Returns a new MP4 Path. Never modifies the source. Requires ffmpeg/ffprobe.

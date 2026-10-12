@@ -11,12 +11,12 @@ import numpy as np
 from .tracking import clip_masks, track_from_masks
 
 
-def composite(frame, mask, effect, phase=0):
+def composite(frame: np.ndarray, mask: np.ndarray, effect: str, phase: float = 0) -> np.ndarray:
     """Pure BGR compositor, also useful to an existing frame renderer."""
-    alpha = mask.astype(np.float32)[..., None]
-    blurred = cv2.GaussianBlur(frame, (0, 0), 7).astype(np.float32)
     base = frame.astype(np.float32)
     if effect in {"background_blur", "spotlight_freeze"}:
+        alpha = mask.astype(np.float32)[..., None]
+        blurred = cv2.GaussianBlur(frame, (0, 0), 7).astype(np.float32)
         background = blurred * (.3 if effect == "spotlight_freeze" else 1)
         base = base*alpha + background*(1-alpha)
     if effect in {"outline_pulse", "spotlight_freeze"}:
@@ -28,7 +28,7 @@ def composite(frame, mask, effect, phase=0):
     return np.clip(base, 0, 255).astype(np.uint8)
 
 
-def _slam(frame, progress, text):
+def _slam(frame: np.ndarray, progress: float, text: str) -> np.ndarray:
     frame = frame.copy()
     h, w = frame.shape[:2]
     scale = min(w/max(1, len(text)*21), h/80) * (1 + .4*max(0, 1-progress*5))
@@ -40,7 +40,7 @@ def _slam(frame, progress, text):
     return frame
 
 
-def _vertical(frame, center, size):
+def _vertical(frame: np.ndarray, center: tuple[float, float], size: tuple[int, int]) -> np.ndarray:
     h, w = frame.shape[:2]
     target_w, target_h = size
     crop_w = min(w, round(h*target_w/target_h))
@@ -50,7 +50,7 @@ def _vertical(frame, center, size):
     return cv2.resize(frame[y:y+crop_h, x:x+crop_w], size)
 
 
-def _run(command, timeout):
+def _run(command: list[str], timeout: float) -> subprocess.CompletedProcess[bytes]:
     result = subprocess.run(command, capture_output=True, timeout=timeout)
     if result.returncode:
         raise RuntimeError("Media command failed: " + result.stderr.decode(errors="replace")[-500:])
@@ -59,7 +59,7 @@ def _run(command, timeout):
 
 def render_effect(video, output, start, end, *, effect="outline_pulse", kill_time=None,
                   freeze_seconds=.6, text="SICK KILL", vertical=False, size=(720, 1280),
-                  prompt="player character", config=None, encode_timeout=120):
+                  prompt="player character", config=None, encode_timeout=120) -> Path:
     """Render [start,end) to H.264/AAC. Freeze adds rounded freeze_seconds to duration.
 
     kill_time is absolute source time. Other effects preserve clip duration. Model

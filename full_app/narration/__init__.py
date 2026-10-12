@@ -31,11 +31,11 @@ class NarrationTrack:
     characters: int = 0
 
 
-def _dict(value):
+def _dict(value) -> dict:
     return value.model_dump() if hasattr(value, "model_dump") else dict(value)
 
 
-def _number(value):
+def _number(value) -> float:
     number = float(value)
     if not math.isfinite(number):
         raise ValueError("Narration timestamps must be finite")
@@ -54,7 +54,7 @@ def _gaps(start, end, blocked):
         yield cursor, end
 
 
-def _words(text, limit):
+def _words(text: str, limit: int) -> str:
     return " ".join(str(text).split()[:limit])
 
 

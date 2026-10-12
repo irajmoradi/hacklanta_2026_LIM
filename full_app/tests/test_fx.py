@@ -9,6 +9,67 @@ from fx import REGISTRY, Request, Timing, compose, metadata
 from fx.preview import probe, run
 
 
+def test_shared_probe_preserves_raw_metadata_and_timeout(monkeypatch, tmp_path):
+    from fx.media import probe as raw_probe
+    from reactions.render import probe as reaction_probe
+
+    source = tmp_path / "source with spaces.mp4"
+    metadata = {"streams": [{"codec_type": "audio", "channels": 2}],
+                "format": {"duration": "3.0"}}
+    calls = []
+
+    def execute(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(command, 0, json.dumps(metadata))
+
+    monkeypatch.setattr(subprocess, "run", execute)
+    assert raw_probe(source, timeout=30) == metadata
+    assert calls[-1][0][-1] == str(source)
+    assert calls[-1][1]["timeout"] == 30
+    assert calls[-1][1]["check"] is True
+    assert reaction_probe(source) == metadata
+    assert calls[-1][1]["timeout"] is None
+    assert probe(source) == metadata
+    assert calls[-1][1]["timeout"] == 180
+
+
+def test_shared_probe_failure_contracts(monkeypatch):
+    from fx.media import probe as raw_probe
+    from multipov.sync import probe as recording_probe
+
+    failure = subprocess.CalledProcessError(1, ["ffprobe"], stderr="x" * 4000)
+
+    def fail(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(subprocess, "run", fail)
+    with pytest.raises(subprocess.CalledProcessError) as caught:
+        raw_probe("invalid.mp4")
+    assert caught.value is failure
+    with pytest.raises(RuntimeError) as caught:
+        probe("invalid.mp4")
+    assert str(caught.value) == "ffprobe failed (1): " + "x" * 3000
+    with pytest.raises(RuntimeError) as caught:
+        recording_probe("invalid.mp4")
+    assert str(caught.value) == "x" * 2000
+
+
+@pytest.mark.parametrize("failure", [FileNotFoundError("ffprobe"),
+                                  subprocess.TimeoutExpired("ffprobe", 30),
+                                  json.JSONDecodeError("invalid metadata", "", 0)])
+def test_shared_probe_does_not_hide_system_errors(monkeypatch, failure):
+    from fx.media import probe as raw_probe
+
+    def fail(*args, **kwargs):
+        if isinstance(failure, json.JSONDecodeError):
+            return subprocess.CompletedProcess(args[0], 0, "not json")
+        raise failure
+
+    monkeypatch.setattr(subprocess, "run", fail)
+    with pytest.raises(type(failure)):
+        raw_probe("source.mp4")
+
+
 @pytest.fixture(scope="module")
 def fx_source(tmp_path_factory):
     source = tmp_path_factory.mktemp("fx") / "source.mp4"
@@ -25,6 +86,7 @@ def assert_video(path, duration):
     run(["ffmpeg", "-v", "error", "-i", path, "-f", "null", "-"])
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("name", REGISTRY)
 def test_every_effect_renders(name, fx_source, tmp_path):
     effect = REGISTRY[name]
@@ -33,6 +95,7 @@ def test_every_effect_renders(name, fx_source, tmp_path):
     assert_video(path, 1.75 if name == "speed_ramp" else 2)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("params,expected", [
     ({"fast": 2.0, "slow": 0.25}, 2.75),
     ({"fast": 1.0, "slow": 1.0}, 2.0),
@@ -45,11 +108,13 @@ def test_speed_duration(params, expected, fx_source, tmp_path):
     assert_video(effect.preview(fx_source, tmp_path / "ramp.mp4", timing, **params), expected)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("preset", ["high-contrast", "neon"])
 def test_grades(preset, fx_source, tmp_path):
     assert_video(REGISTRY["color_grade"].preview(fx_source, tmp_path / "grade.mp4", Timing(2), preset=preset), 2)
 
 
+@pytest.mark.slow
 def test_composition(fx_source, tmp_path):
     requests = [Request("speed_ramp", Timing(2)), Request("zoom_punch", Timing(1.75)),
                 Request("rgb_split", Timing(1.75)), Request("letterbox", Timing(1.75)),
@@ -62,6 +127,7 @@ def test_composition(fx_source, tmp_path):
         compose([requests[0], Request("letterbox", Timing(2))])
 
 
+@pytest.mark.slow
 def test_freeze_holds_hit_and_resumes(fx_source):
     # Lossless raw frames avoid codec noise; compare held frames and resumed motion.
     chain = REGISTRY["freeze_name_tag"].filter(Timing(2), name="ACE")
@@ -97,6 +163,7 @@ def test_metadata_is_json_and_builders_are_pure(monkeypatch):
         assert effect.filter(Timing(2)) == effect.filter(Timing(2))
 
 
+@pytest.mark.slow
 def test_optional_rife_fallback(fx_source, tmp_path):
     def missing(*args):
         raise ImportError("RIFE not installed")
@@ -105,6 +172,7 @@ def test_optional_rife_fallback(fx_source, tmp_path):
     assert_video(path, 1.75)
 
 
+@pytest.mark.slow
 def test_optional_rife_hook(fx_source, tmp_path):
     import shutil
     calls = []
@@ -116,6 +184,7 @@ def test_optional_rife_hook(fx_source, tmp_path):
     assert_video(path, 1.75)
 
 
+@pytest.mark.slow
 def test_invalid_rife_output_keeps_preview(fx_source, tmp_path):
     def hook(source, target, fps):
         run(["ffmpeg", "-v", "error", "-y", "-i", source, "-vf", "scale=80:60",
@@ -125,6 +194,7 @@ def test_invalid_rife_output_keeps_preview(fx_source, tmp_path):
     assert_video(path, 1.75)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("name", ["impact_frame", "freeze_name_tag", "speed_ramp"])
 @pytest.mark.parametrize("window", [(0, 2), (1.5, 2), (0, 0.5)])
 def test_timeline_boundaries(name, window, fx_source, tmp_path):
@@ -134,6 +204,7 @@ def test_timeline_boundaries(name, window, fx_source, tmp_path):
     assert_video(effect.preview(fx_source, tmp_path / "edge.mp4", timing), expected)
 
 
+@pytest.mark.slow
 def test_contact_sheet(tmp_path):
     from fx.contact_sheet import generate
     path = generate(tmp_path)

@@ -5,7 +5,7 @@ import subprocess
 from pathlib import Path
 
 
-def generate_pack(folder):
+def generate_pack(folder: str | Path) -> Path:
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
     entries = []

@@ -22,6 +22,7 @@ def pcm(path):
         return np.frombuffer(source.readframes(source.getnframes()), dtype="<i2") / 32768
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("style,bpm", [("energetic", 120), ("energetic", 140), ("chill", 85), ("chill", 100)])
 def test_generated_length_tempo_and_sections(tmp_path, style, bpm):
     bed = pick_or_generate(style, 19.123, 5.137, bpm=bpm, output_dir=tmp_path)
@@ -96,6 +97,7 @@ def click_track(path, bpm=120, duration=12):
     return samples
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("bpm", [40, 60, 85, 100, 120, 140, 180, 220, 240])
 def test_fallback_tempo(tmp_path, bpm):
     path = tmp_path / "clicks.wav"
@@ -158,6 +160,7 @@ def library(tmp_path):
     return path, data
 
 
+@pytest.mark.slow
 def test_manifest_selection_and_fallback(library, tmp_path):
     path, _ = library
     tracks = load_manifest(path)
@@ -168,6 +171,7 @@ def test_manifest_selection_and_fallback(library, tmp_path):
     assert bed.source == "procedural"
 
 
+@pytest.mark.slow
 def test_library_render_alignment_and_provenance(library, tmp_path):
     path, _ = library
     bed = pick_or_generate("energetic", 16.123, 3.137, manifest=path,
@@ -186,6 +190,7 @@ def test_library_render_alignment_and_provenance(library, tmp_path):
     assert analyze_samples(samples, use_librosa=False).bpm == pytest.approx(120, abs=3)
 
 
+@pytest.mark.slow
 def test_library_without_bpm(library, tmp_path):
     path, data = library
     data["tracks"][0]["bpm"] = None
@@ -194,6 +199,7 @@ def test_library_without_bpm(library, tmp_path):
     assert bed.bpm == pytest.approx(120, abs=3)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("field,value", [
     ("license", ""), ("energy", 2), ("energy", "high"), ("bpm", -10),
     ("mood", "calm"), ("styles", [None]), ("path", "missing.wav"),
@@ -215,6 +221,7 @@ def test_bad_manifest_shape(tmp_path, data):
         load_manifest(path)
 
 
+@pytest.mark.slow
 def test_invalid_library_audio(library, tmp_path):
     path, data = library
     data["tracks"][0]["drop_at"] = 50
@@ -229,6 +236,7 @@ def test_invalid_library_audio(library, tmp_path):
         pick_or_generate("energetic", 5, 2, manifest=path, output_dir=tmp_path)
 
 
+@pytest.mark.slow
 def test_ffmpeg_formats_and_decode_errors(tmp_path):
     path = tmp_path / "synthetic.flac"
     subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
@@ -244,6 +252,7 @@ def test_ffmpeg_formats_and_decode_errors(tmp_path):
         read_audio(path)
 
 
+@pytest.mark.slow
 def test_manifest_ranking_and_empty_fallback(library, tmp_path):
     path, data = library
     for entry in data["tracks"]:
@@ -270,6 +279,7 @@ def test_decoder_missing_ffmpeg(tmp_path, monkeypatch):
         read_audio(path)
 
 
+@pytest.mark.slow
 def test_music_bed_in_existing_renderer(video, tmp_path, monkeypatch):
     from render import RenderPlan
     from render.engine import probe
