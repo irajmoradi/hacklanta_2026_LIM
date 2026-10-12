@@ -67,7 +67,7 @@ clips. The greedy selection is deterministic, not a global optimization solver.
 Durations are output seconds: `(source_end - source_start) / speed`. Clutches run
 at 0.5x in hype/cinematic styles, including that extra playback time in the budget;
 the usual teaser stays at 1x. Trims retain approximately 65% lead-in around the
-peak, clamped inside source bounds. The default output limits are 1â€“6 seconds per
+peak, clamped inside source bounds. The default output limits are 1ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“6 seconds per
 clip. Minimum length must fit the maximum, budget, and three-second hook limit.
 Short budgets combine hook and climax into one clip; insufficient footage or
 variety yields a shorter plan with notes. No qualifying footage yields a valid
@@ -192,3 +192,16 @@ killcam or death-screen language. This is a conservative caption heuristic,
 not proof that every veto is a death: uncertain POV and plain spectator footage
 remain excluded. The existing provider neutralizes dead-player hype scores,
 so recovered deaths retain their local signal score and explicit provenance.
+
+Reviewed (`validated=True`) inputs precede unreviewed candidates during selection;
+original scores remain unchanged in the plan. The pipeline marks VLM-scored and
+whole-video observations reviewed. This means model-reviewed, not human-verified.
+When lowlights cannot fill mean mode, remaining highlights supply honest context
+without failure captions or roast decoration.
+
+Grounded kill/death timestamps take precedence over heuristic acoustic anchors.
+Otherwise, the pipeline centers the trim on the longest sustained-audio burst
+inside the candidate, breaking ties by proximity to the candidate midpoint.
+Scene cuts alone do not define an action peak. This avoids treating an early
+ability sound or camera transition as the climax while cutting out later action.
+Without usable event/audio timing the library uses the candidate midpoint.

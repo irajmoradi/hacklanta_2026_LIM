@@ -54,3 +54,62 @@ def test_pipeline_fills_local_evidence_and_prefers_mean_deaths():
     planner_plan(Pipeline(), job)
     assert job["planner_plan"]["duration"] == 20
     assert job["planner_plan"]["clips"][-1]["label"] == "lowlight"
+
+
+def test_reviewed_moment_precedes_high_scoring_unvalidated_fallback():
+    clips=rows()
+    clips[-1].update(validated=True, score=.2)
+    plan=plan_edit(clips, fill_target=True, target_length=60, max_clip_length=10)
+    assert plan.duration == 60
+    assert plan.clips[-1].source_id == clips[-1]["id"]
+    assert plan.clips[-1].score == .2
+    assert len(plan.clips)>2
+
+
+def test_scarce_lowlights_use_honest_context_to_fill():
+    clips=rows()
+    clips[0]["label"]="lowlight"
+    plan=plan_edit(clips, mode="mean", fill_target=True, target_length=30, max_clip_length=10)
+    assert plan.duration == 30
+    assert plan.clips[-1].label == "lowlight"
+    by_id={c.id:c for c in plan.clips}
+    assert all(by_id[t.clip_id].label == "lowlight" for t in plan.text if t.role == "meme")
+
+
+@pytest.mark.parametrize("preset,target", [("landscape",60),("vertical",30)])
+def test_pipeline_default_targets(preset,target):
+    candidates=[dict(start=i*20,end=i*20+12,score=2,signals={}) for i in range(12)]
+    job=dict(clips=rank_merge(candidates,[],[]),options=dict(preset=preset),warnings=[])
+    planner_plan(Pipeline(),job)
+    assert job["planner_plan"]["duration"]==target
+
+
+def test_rejected_user_selection_is_not_used_as_filler():
+    candidates=[dict(start=i*20,end=i*20+12,score=2,signals={}) for i in range(12)]
+    clips=rank_merge(candidates,[],[])
+    for c in clips[1:]:c["keep"]=False
+    job=dict(clips=clips,options=dict(max_duration=60),warnings=[])
+    planner_plan(Pipeline(),job)
+    assert job["planner_plan"]["duration"]==12
+    assert {c["source_id"] for c in job["planner_plan"]["clips"]}=={clips[0]["id"]}
+
+
+def test_grounded_kill_takes_precedence_over_earlier_audio_event():
+    c=dict(id="one",start_seconds=0,end_seconds=20,score=1,type="good",
+           events=[dict(time=1,type="sustained_audio"),dict(time=15,type="kill")])
+    job=dict(clips=[c],options=dict(max_duration=12),warnings=[])
+    planner_plan(Pipeline(),job)
+    climax=job["planner_plan"]["clips"][-1]
+    assert climax["source_start"] < 15 < climax["source_end"]
+    assert climax["peak"] == pytest.approx(climax["start"]+15-climax["source_start"])
+
+
+def test_stronger_late_audio_burst_beats_early_ability_and_scene_cut():
+    c=dict(id="one",start_seconds=0,end_seconds=20,score=1,type="good",
+           suggested_reaction_label="clutch",events=[dict(time=1,type="scene_cut"),
+           dict(time=2,end=3,type="sustained_audio"),dict(time=12,end=16,type="sustained_audio")])
+    job=dict(clips=[c],options=dict(max_duration=12),warnings=[])
+    planner_plan(Pipeline(),job)
+    climax=job["planner_plan"]["clips"][-1]
+    assert climax["source_start"] <= 14 < climax["source_end"]
+    assert climax["speed"] == .5

@@ -27,6 +27,7 @@ class Signals(Model):
 
 
 class RankedClip(Model):
+    validated: bool = False
     id: str = Field(min_length=1)
     start: float = Field(ge=0)
     end: float = Field(gt=0)

@@ -32,6 +32,11 @@ def _capacity(clip: RankedClip, options: PlannerOptions) -> float:
     return min(options.max_clip_length, (clip.end - clip.start) / _speed(clip, options))
 
 
+def _rank(clip: RankedClip):
+    # Keep measured scores intact; model-reviewed moments precede local fallbacks.
+    return (-clip.validated, -clip.score, clip.id)
+
+
 def _trim(clip: RankedClip, duration: float, speed: float) -> tuple[float, float]:
     span = duration * speed
     # Keep lead-in and some aftermath; clamp without ever leaving source bounds.
@@ -132,7 +137,7 @@ def plan_edit(
         plan.notes.append("Requested label unavailable; using the strongest available moment.")
         preferred = eligible
     # Stable tie break independent of the caller's list ordering.
-    best = min(preferred, key=lambda c: (-c.score, c.id))
+    best = min(preferred, key=_rank)
     minimum = options.min_clip_length
     hook_duration = min(2, options.max_clip_length, best.end - best.start)
     hook_duration = max(minimum, hook_duration)
@@ -149,16 +154,16 @@ def plan_edit(
         selected = []
 
         def ordered(items):
-            return sorted(items, key=lambda item: (item[1] != "setup", item[0].score, item[0].id))
+            return sorted(items, key=lambda item: (item[1] != "setup", item[0].validated, item[0].score, item[0].id))
 
         def varied(items):
             kinds = [_kind(best), *[_kind(item[0]) for item in ordered(items)], _kind(best)]
             return not any(a == b == c for a, b, c in zip(kinds, kinds[1:], kinds[2:]))
 
         # Prefer high scores for selection, then play them in ascending order.
-        candidates = sorted((c for c in preferred if c.id != best.id), key=lambda c: (-c.score, c.id))
+        candidates = sorted((c for c in preferred if c.id != best.id), key=_rank)
         if mode == "mean":
-            setups = sorted((c for c in eligible if c.label == "highlight" and c.id != best.id), key=lambda c: (-c.score, c.id))
+            setups = sorted((c for c in eligible if c.label == "highlight" and c.id != best.id), key=_rank)
             for setup in setups:
                 if remaining < minimum:
                     break
@@ -182,6 +187,11 @@ def plan_edit(
                     break
             else:
                 break
+        # If fails are scarce, use honest highlight context instead of inventing
+        # more failures. Only lowlight-labelled sources receive roast decoration.
+        if options.fill_target and mode == "mean":
+            used = {best.id, *(item[0].id for item in selected), *(c.id for c in candidates)}
+            candidates.extend(sorted((c for c in eligible if c.id not in used), key=_rank))
         # Variety is a preference in stock pipeline plans, not an eight-second cap.
         if options.fill_target and remaining >= minimum and candidates:
             plan.notes.append("Relaxed variety to fill the requested duration from ranked evidence.")

@@ -193,12 +193,27 @@ def planner_plan(pipeline, job):
             if isinstance(value, (float, int)) and c['start_seconds'] <= value < c['end_seconds']:
                 signals[name] = value
         # Detector event anchors give the trim a real pre-roll and aftermath.
+        explicit_action = signals.get('action_time') is not None
+        audio_beats = []
         for event in c.get('events', []):
             time = event.get('time')
             if isinstance(time, (float, int)) and c['start_seconds'] <= time < c['end_seconds']:
-                name = 'kill_time' if event.get('type') == 'kill' else 'fail_time' if event.get('type') == 'death' else 'action_time'
-                signals.setdefault(name, time)
+                kind = event.get('type')
+                if kind in ('kill', 'death'):
+                    signals.setdefault('kill_time' if kind == 'kill' else 'fail_time', time)
+                elif kind == 'sustained_audio':
+                    end = min(c['end_seconds'], event.get('end', time))
+                    if end > time:
+                        audio_beats.append((end-time, (time+end)/2))
+        if not explicit_action:
+            event_peak = signals.get('fail_time' if c.get('type') == 'bad' else 'kill_time')
+            if event_peak is None and audio_beats:
+                center = (c['start_seconds'] + c['end_seconds']) / 2
+                event_peak = max(audio_beats, key=lambda beat: (beat[0], -abs(beat[1]-center)))[1]
+            if event_peak is not None:
+                signals['action_time'] = event_peak
         clips.append(dict(id=c['id'], start=c['start_seconds'], end=c['end_seconds'],
+                          validated=c.get('source') in ('signals+vlm', 'whole_video'),
                           score=c.get('score', .5), label='lowlight' if c.get('type') == 'bad' else 'highlight',
                           caption=c.get('caption', c.get('description', ''))[:240],
                           signals=signals, game_profile=job.get('game', 'generic')))
