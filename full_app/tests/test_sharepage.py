@@ -150,6 +150,21 @@ def test_reaction_validation_and_cross_origin_protection(setup):
     assert store.counts(share_id)["🔥"] == 0
 
 
+def test_chunked_and_malformed_reaction_bodies(setup):
+    from io import BytesIO
+
+    _, share_id, client = setup
+    route = f"/s/{share_id}/reactions"
+    headers = {"X-Sharepage-Reaction": "1", "Content-Type": "application/json"}
+    for raw in (b'{', b'\xff', b'null'):
+        assert client.post(route, data=raw, headers=headers).status_code == 400
+    response = client.post(route, headers=headers, environ_overrides={
+        "wsgi.input": BytesIO(b" " * 2048), "wsgi.input_terminated": True,
+        "CONTENT_LENGTH": "",
+    })
+    assert response.status_code == 413
+
+
 @pytest.mark.parametrize("changes", [dict(title=""), dict(width=0), dict(height=True),
     dict(expires_at=float("nan")), dict(chapters=[dict(start=-1, title="bad")]),
     dict(chapters=[dict(start=float("inf"), title="bad")]), dict(description="x" * 2001)])

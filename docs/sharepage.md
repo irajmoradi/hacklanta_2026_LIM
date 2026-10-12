@@ -93,3 +93,20 @@ durability, concurrent increments, invalid input, and expiry on every route.
 No paid API calls or downloaded media are involved. For a manual check after
 registration, create a share with the Python API, open its link on desktop and
 mobile, seek a chapter, tap an emoji, then reload to check the saved count.
+
+### Task-run results
+
+All commands below ran through the Linux runner from the worktree root:
+
+| Command | Result |
+| --- | --- |
+| `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_sharepage.py"` | Initial implementation: 15 passed, exit 0. |
+| `tools/remote_run.sh "cd full_app && node --check sharepage/static/page.js && python -m pytest -q tests/test_sharepage.py tests/test_pipeline.py tests/e2e/test_e2e_pipeline.py"` | JavaScript syntax passed; 51 passed, 1 failed, 2 errors; exit 1. |
+| `tools/remote_run.sh "cd full_app && node --check sharepage/static/page.js && python -m pytest -q tests/test_sharepage.py tests/test_pipeline.py"` | Final implementation: JavaScript syntax passed; 36 passed (16 sharepage, 20 pipeline), exit 0. |
+
+The broader suite's three unsuccessful cases all stop in the existing
+`demo/pipeline.py` harness when it attempts to patch `app.WORKSPACE`, which the
+current `app.py` does not expose. Neither file was changed by EXT-25; fixing this
+integration mismatch requires work outside this task's allowed paths. No live
+API calls were made. Browser/device visual QA and real Discord/iMessage unfurls
+were not exercised in this run.

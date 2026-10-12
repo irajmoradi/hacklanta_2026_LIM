@@ -1,4 +1,6 @@
 """Blueprint with expiry-protected media and same-origin anonymous reactions."""
+import json
+
 from flask import Blueprint, abort, jsonify, render_template, request, send_file, url_for
 
 from .store import EMOJIS
@@ -62,8 +64,15 @@ def create_blueprint(store):
             abort(403)
         if request.content_length is not None and request.content_length > 1024:
             abort(413)
-        request.max_content_length = 1024
-        data = request.get_json(silent=True)
+        # Bound even chunked bodies; avoid the Flask 3.1-only per-request limit
+        # setter so this blueprint also supports the project's Flask 3.0 floor.
+        raw = request.stream.read(1025)
+        if len(raw) > 1024:
+            abort(413)
+        try:
+            data = json.loads(raw) if request.is_json else None
+        except (ValueError, UnicodeDecodeError):
+            data = None
         if not isinstance(data, dict) or data.get("emoji") not in EMOJIS:
             return jsonify(error="Choose a supported emoji"), 400
         if not store.react(share_id, data["emoji"]):
