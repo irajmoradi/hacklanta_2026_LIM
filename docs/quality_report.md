@@ -35,7 +35,7 @@ Evidence labels: **R** = reproduced on the Linux runner without network/model ca
 
 **Exact fix:** retain one queue owner but serve SSE through an appropriately configured concurrent streaming server or separate event service. As a minimal bounded mitigation, close terminal/idle streams and have the client reopen on actions; cap subscribers and verify four-plus tabs plus a timely health/status request. Merely adding Gunicorn worker processes violates the workspace lease contract.
 
-### P1-03 — Demo and E2E harness target removed application globals [S]
+### P1-03 — Demo and E2E harness target removed application globals [T, S]
 
 **Evidence:** `full_app/demo/pipeline.py:192` patches `backend.WORKSPACE`, `:193` patches `backend.jobs`, `:200` reads that dict, `:231` patches `_get_gemini`, and `:270` patches `backend.FFmpegRunner`. `full_app/app.py:8`–`:10` only imports the factory and creates `app`; those globals no longer exist. The first patch raises `AttributeError`; importing `app` also acquires the default workspace lease before isolation. The E2E fixture calls this harness (`full_app/tests/e2e/test_e2e_pipeline.py`).
 
@@ -43,19 +43,19 @@ Evidence labels: **R** = reproduced on the Linux runner without network/model ca
 
 ### P1-04 — Export silently ignores changed settings and edited caption text [S]
 
-**Evidence:** `full_app/production_frontend/src/App.tsx:442` passes current `options` to `EditorApi.render`; jobs-mode rendering in `src/api.ts:248` sends only `preset` and `edit_plan`. Changing captions/reactions/SAM/style after analysis therefore does not update server options. Each segment receives `caption` at `src/api.ts:262`, but `full_app/pipeline/rendering.py:55` retains only a whitelist including `title`/`words`, not `caption`. `full_app/render/plan.py:38` defines `title` and `words`; `render/captions.py:59` burns `title`. Existing overlapping effects are reused even after a style change.
+**Evidence:** `full_app/production_frontend/src/App.tsx:442` passes current `options` to `EditorApi.render`; jobs-mode rendering in `src/api.ts:248` sends only `preset` and `edit_plan`. Changing captions/reactions/SAM/style after analysis therefore does not update server options. Each segment receives `caption` at `src/api.ts:265`, but `full_app/pipeline/rendering.py:55` retains only a whitelist including `title`/`words`, not `caption`. `full_app/render/plan.py:38` defines `title` and `words`; `render/captions.py:59` burns `title`. Existing overlapping effects are reused even after a style change.
 
 **Exact fix:** send supported render flags explicitly; track analysis/planning settings separately and replan when style changes. Decide whether the editable text is a title or transcript, then send `title` or timed `words` through a documented adapter. Preserve the version/top-level settings of explicit v2 plans instead of rebuilding only `segments`. Test changing a toggle after analysis and verify burned text in a synthetic export.
 
 ### P1-05 — Square export with a configured reaction pack fails [R, S]
 
-**Evidence:** `full_app/pipeline/rendering.py:105` passes `validated.preset` to reactions; `full_app/render/plan.py:103` accepts square. `full_app/reactions/render.py:9` defines only landscape/vertical and `:20` indexes `PRESETS[preset]`. Runner probe `layout(1080, 1080, 'square')` raises `KeyError`. This occurs when an actual reaction is selected, not when reactions are disabled or a pack is absent.
+**Evidence:** `full_app/pipeline/rendering.py:105` passes `validated.preset` to reactions; `full_app/render/plan.py:101` accepts square. `full_app/reactions/render.py:9` defines only landscape/vertical and `:20` indexes `PRESETS[preset]`. Runner probe `layout(1080, 1080, 'square')` raises `KeyError`. This occurs when an actual reaction is selected, not when reactions are disabled or a pack is absent.
 
 **Exact fix:** define a square safe-area layout and validate preset at the public overlay boundary; parameterize the real pipeline reaction test across all three presets.
 
 ### P1-06 — HTTP accepts plans the worker cannot render; duration cap is prompt-only [R, S]
 
-**Evidence:** `full_app/server/validation.py:31` checks segment time ranges and speed only, accepting 500 segments, unknown fields/effects and unvalidated SFX. `full_app/render/plan.py:102` permits 100 segments and rejects extras/unsupported effects. Runner probes accepted an invalid effect through `plan_valid` and rejected it through `RenderPlan`. `pipeline/orchestrator.py:149` inserts `max_duration` into the prompt but `:155` only validates source bounds; aggregate output duration is not enforced. A caller can also supply a v2 `music.path` read by `render/engine.py:65` without job/asset containment, inappropriate for a shared HTTP boundary even if trusted local Python use allows paths.
+**Evidence:** `full_app/server/validation.py:31` checks segment time ranges and speed only, accepting 500 segments, unknown fields/effects and unvalidated SFX. `full_app/render/plan.py:100` permits 100 segments and rejects extras/unsupported effects. Runner probes accepted an invalid effect through `plan_valid` and rejected it through `RenderPlan`. `pipeline/orchestrator.py:149` inserts `max_duration` into the prompt but `:155` only validates source bounds; aggregate output duration is not enforced. A caller can also supply a v2 `music.path` read by `render/engine.py:65` without job/asset containment, inappropriate for a shared HTTP boundary even if trusted local Python use allows paths.
 
 **Exact fix:** introduce a discriminated legacy/v2 request schema and validate the converted render plan synchronously before queue mutation. Set one segment limit, bound effect/SFX/text collections, validate offset types and names, compute speed/transition/card-adjusted duration, and enforce the configured output cap. Resolve music through authorized asset IDs within permitted roots. Return a clear 400 rather than a later generic worker error. Test both schemas and malformed nested inputs.
 
@@ -67,7 +67,7 @@ Evidence labels: **R** = reproduced on the Linux runner without network/model ca
 
 ### P1-08 — Evaluation's advertised three-call live budget counts videos, not requests [S]
 
-**Evidence:** `full_app/eval/pipelines.py:49` checks `self.calls`, incremented once at `:58` before `find_clips`. `services/video_understanding.py:25` defaults to three attempts and `:125` iterates chunks (600 seconds with overlap). One long input can exceed three generation calls; retries further multiply them. `eval/runner.py:67` limits only dataset length. The comment at `eval/pipelines.py:60` claims `find_clips` owns cleanup, while `services/gemini_client.py:119` performs cache cleanup in `close`, which this evaluation adapter never calls.
+**Evidence:** `full_app/eval/pipelines.py:50` checks `self.calls`, incremented once at `:59` before `find_clips`. `services/video_understanding.py:25` defaults to three attempts and `:125` iterates chunks (600 seconds with overlap). One long input can exceed three generation calls; retries further multiply them. `eval/runner.py:67` limits only dataset length. The comment at `eval/pipelines.py:61` claims `find_clips` owns cleanup, while `services/gemini_client.py:119` performs cache cleanup in `close`, which this evaluation adapter never calls.
 
 **Exact fix:** share a generation-attempt budget enforced immediately before every SDK inference; set application and SDK attempts to one for smoke tests, restrict source duration/chunk count before calls, and close the provider in `finally` after evaluation. Add an offline fake-SDK test for long videos and retryable failures proving at most three invocations and file cleanup. Do not validate this by spending live calls.
 
@@ -87,11 +87,11 @@ Evidence labels: **R** = reproduced on the Linux runner without network/model ca
 
 ### P2-01 — Two incompatible types both named RenderPlan [S]
 
-`full_app/planner/models.py:138` uses `version`, `clips`, absolute output placements and space-separated styles; `full_app/render/plan.py:100` uses `render_version`, `segments`, clip-local words and different transitions. `pipeline/orchestrator.py:142` still calls Gemini's legacy edit planner; no caller imports `planner.plan_edit` in the application path. The demo's `legacy_plan` (`demo/pipeline.py:133`) discards rich placements. **Fix:** define an explicit versioned adapter, including speed-retimed placements, caption/reaction/SFX timing and empty-plan handling; share style/aspect enums. Do not merely rename one type or pass `model_dump()` to the renderer.
+`full_app/planner/models.py:126` uses `version`, `clips`, absolute output placements and space-separated styles; `full_app/render/plan.py:98` uses `render_version`, `segments`, clip-local words and different transitions. `pipeline/orchestrator.py:142` still calls Gemini's legacy edit planner; no caller imports `planner.plan_edit` in the application path. The demo's `legacy_plan` (`demo/pipeline.py:133`) discards rich placements. **Fix:** define an explicit versioned adapter, including speed-retimed placements, caption/reaction/SFX timing and empty-plan handling; share style/aspect enums. Do not merely rename one type or pass `model_dump()` to the renderer.
 
 ### P2-02 — Signal strength and UI scores use incompatible scales [R, S]
 
-`signals/fusion.py:17` produces an unbounded weighted z-score; `pipeline/ranking.py:24` clamps it to [0,1], flattening all values above one. The runner confirmed scores 2 and 8 both become 1. Scored windows then mix this with hype/10. React `src/api.ts:51` forwards raw scores while its demo uses 82–96 and `docs/frontend.md:29` promises 0–100. Reaction labels from fusion (`label`, `suggested_reaction_label`) are ignored by `normalizeClip` (`:52`, which reads other aliases). **Fix:** specify score provenance and scale, apply a monotonic normalization before fusion, convert to UI percent only at display, and normalize actual reaction-label fields. Test rankings with multiple >1 signal scores and real wire snapshots.
+`signals/fusion.py:17` produces an unbounded weighted z-score; `pipeline/ranking.py:24` clamps it to [0,1], flattening all values above one. The runner confirmed scores 2 and 8 both become 1. Scored windows then mix this with hype/10. React `src/api.ts:52` forwards raw scores while its demo uses 82–96 and `docs/frontend.md:29` promises 0–100. Reaction labels from fusion (`label`, `suggested_reaction_label`) are ignored by `normalizeClip` (`:53`, which reads other aliases). **Fix:** specify score provenance and scale, apply a monotonic normalization before fusion, convert to UI percent only at display, and normalize actual reaction-label fields. Test rankings with multiple >1 signal scores and real wire snapshots.
 
 ### P2-03 — Legacy preparation loses supported segment metadata [S]
 
@@ -133,6 +133,12 @@ See the documentation matrix below. **Fix:** rewrite feature docs around the mer
 
 Base Pillow allows `>=10` while social requires `>=10.4,<13`; caption and speech extras specify different faster-whisper floors. SAM's Git requirement has no revision; Docker installs the package by another spec. Docker installs unused `pytesseract`; implemented OCR executes Tesseract directly. Base and container dependencies are not locked. **Fix:** centralize compatible constraints, pin the SAM revision used in verification, remove unused Docker imports/packages, and generate reproducible constraints per supported Python/platform. Do not move heavy extras into base requirements. Details below.
 
+### P2-13 — Refactors invalidated integration test doubles [T, S]
+
+`tests/test_jobs.py:231` patches `server.pipeline.importlib`, but `server/pipeline.py:2` now only re-exports `Pipeline`; the lookup occurs in `pipeline.orchestrator`. This fails all three preset cases before rendering. **Fix:** patch the actual lookup or, preferably, inject the optional-module resolver into the pipeline rather than pinning tests to import internals.
+
+`tests/test_capture.py:279` creates an unconstrained `Mock`. `server/queue.py:118` detects its fabricated `run_stage` attribute and invokes that empty mock instead of the configured analyze/plan side effects. The test observes `planned` with no analyze call. **Fix:** use a concrete fake implementing only analyze/plan/render, or a spec-constrained mock with a correctly dispatching `run_stage`; assert persisted nonempty clips/plan as well as call counts. This observed failure is a test-double mismatch, not evidence that real capture uploads bypass analysis.
+
 ## P3 — naming, comments and maintenance noise
 
 1. **Dead helpers/imports:** `server/legacy.py:64` `_fmt_time` has no callers; `services/ffmpeg_runner.py:8` imports executor helpers although `render` is sequential. Remove after caller grep; retain `_seconds_to_mmss`, which is used by timestamp offsetting.
@@ -155,9 +161,9 @@ This is a direct-dependency/import-reachability audit, not a Python vulnerabilit
 | `:5` pydantic >=2 | schemas, render/planner/privacy/audio models | Keep core; lock tested release. |
 | `:6` numpy >=1.26,<3 | signals/fusion; audio/music/SAM/V-JEPA/multipov | Keep while signals default on. No unused core dependency finding. |
 | `:7` opencv-python-headless >=4.10,<5 | `signals/detector.py`, OCR, privacy and SAM | Keep for current signal default; headless avoids GUI stack. |
-| `:8` pillow >=10 | `social/*`; Gemini thumbnail uses PIL | Needed by thumbnail path; align floor/cap with social and tested font APIs. |
+| `:8` pillow >=10 | Direct imports only in `social/*` (apart from tests) | Candidate to move to social extra: current Gemini thumbnail code writes response bytes and does not import PIL. Check SDK runtime requirements before removing base declaration; align social floor/cap and tested font APIs. |
 | `capture/requirements.txt:1` httpx >=0.28,<1 | `capture/client.py:4` | Needed; duplicates compatible base spec, useful for standalone capture. |
-| `:2` watchdog >=4,<7 | `capture/watcher.py:102` lazy observer | Optional; polling fallback exists. Keep in capture extra. |
+| `:2` watchdog >=4,<7 | `capture/watcher.py:92` lazy observer | Optional; polling fallback exists. Keep in capture extra. |
 | `:3` websocket-client >=1.8,<2 | `capture/obs.py` lazy websocket connection | Optional OBS feature; keep out of base. |
 | `capture/requirements-hotkey.txt:1` -r requirements.txt | Includes capture dependencies | Intentional composition, not a package. |
 | `:2` pynput >=1.7,<2 | `capture/__main__.py` hotkey path | Optional hotkey extra; retain. |
@@ -242,7 +248,7 @@ Optional dependencies documented/imported without dedicated manifests: `scenedet
 | --- | --- | --- |
 | `README.md:29`, `full_app/README.md:136`: split analysis in parallel | `pipeline/orchestrator.py:124` iterates segments sequentially | Say sequential; distinguish the signal detector's audio/video concurrency. |
 | `README.md:46`, `full_app/README.md:110`: browser asks for API key | Simple frontend supports keys; current React App has no such control/header path | Scope promise to simple frontend or implement React key configuration. |
-| `docs/api.md:83`: default preserves source by fitting/padding | New API uses v2 crosshair reframing (`render/plan.py:106`, `render/graph.py`); legacy renderer pads | Document each path, especially vertical crop, and test representative aspect ratios. |
+| `docs/api.md:83`: default preserves source by fitting/padding | New API uses v2 crosshair reframing (`render/plan.py:104`, `render/graph.py`); legacy renderer pads | Document each path, especially vertical crop, and test representative aspect ratios. |
 | `docs/signals.md:27`: pipeline unchanged/unintegrated | `pipeline/orchestrator.py:88` enables candidates by default | Describe integrated defaults and the separate optional OCR/profile limitations. |
 | `docs/video_models.md:165`: candidate scoring belongs to future route work | `pipeline/orchestrator.py:95` already scores candidates | Retain the still-real GOOGLE-only gate issue, remove stale scoring claim. |
 | `docs/privacy.md:73`, `docs/vjepa.md:214`: profiles/signals absent | Both packages are present but not connected to these adapters | Replace “absent” with the exact missing contract/wiring. |
@@ -256,9 +262,64 @@ Optional dependencies documented/imported without dedicated manifests: `scenedet
 
 ## Validation and remaining limits
 
-All execution is through `tools/remote_run.sh` on the Linux runner. Commands/results will be finalized after the full suite completes. Tests generate synthetic media; no downloaded gameplay, credentials or generated media are committed.
+All test execution was through `tools/remote_run.sh` on the Linux runner. Tests generate synthetic media; no downloaded gameplay, credentials or generated media are committed. There were no code edits between these runs.
 
+* `bash tools/remote_run.sh "cd full_app && python -m pytest -q"` — **exit 1**; **597 passed, 15 skipped, 8 failed, 2 errors**, 301.87 seconds. The live test was skipped by its opt-in gate; no live credentials were supplied.
 * `bash tools/remote_run.sh "cd full_app/production_frontend && npm ci && npm run build && npm test"` — **exit 0**; strict TypeScript/Vite build passed, **14 tests passed** across three files. Install reported **0 npm vulnerabilities** for this lockfile at execution time.
-* An inline Python probe run via `bash tools/remote_run.sh` — **exit 0** (probe intentionally catches failures): dataclass evaluation raised `AttributeError`; square layout raised `KeyError`; HTTP validator accepted invalid v2 effect while renderer raised `ValidationError`; dummy GOOGLE-only configuration raised the pipeline key-gate `ValueError`; raw scores 2 and 8 both became 1. No provider was created for this check.
+* `bash tools/remote_run.sh "cd full_app/production_frontend && npm run test:browser"` — **exit 0**; **1 Playwright Chromium test passed**, exercising synthetic source playback, review edits, mock export and laptop/mobile layouts. This test does not contact Flask or render a real montage.
+* Inline Python probe below, sent as one command through `bash tools/remote_run.sh` — **exit 0** (probe intentionally catches failures): dataclass evaluation raised `AttributeError`; square layout raised `KeyError`; HTTP validator accepted invalid v2 effect while renderer raised `ValidationError`; dummy GOOGLE-only configuration raised the pipeline key-gate `ValueError`; raw scores 2 and 8 both became 1. No provider was created for this check.
+* Local `git diff --check` — **exit 0** at the first report milestone. No application tests were changed or added because the only allowed path is this report.
+
+### Complete backend failure ledger
+
+| Failed/error test | Observed cause | Fix reference |
+| --- | --- | --- |
+| `tests/e2e/test_e2e_pipeline.py::test_pipeline` (setup error) | `app` has no `WORKSPACE` | P1-03 |
+| `tests/e2e/test_e2e_pipeline.py::test_top_events_are_in_encoded_pixels` (setup error) | Same module fixture | P1-03 |
+| `tests/e2e/test_e2e_pipeline.py::test_optional_stages_chain_when_modules_land` | Same obsolete patch | P1-03 |
+| `tests/test_capture.py::test_synthetic_video_flows_through_real_api` | Expected analyze once; observed zero | P2-13 |
+| `tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render[square-dimensions0]` | Missing `server.pipeline.importlib` | P2-13 |
+| Same test `[vertical-dimensions1]` | Same missing patch target | P2-13 |
+| Same test `[landscape-dimensions2]` | Same missing patch target | P2-13 |
+| `tests/test_perf.py::test_single_pass_streams_duration[effects3-1]` | Slow-motion durations 1.979 vs 1.000 seconds | P2-09 |
+| Same test `[effects4-2]` | 2x durations 0.566667 vs 1.000 seconds | P2-09 |
+| Same test `[effects5-0.25]` | 0.25x durations 3.966667 vs 1.000 seconds | P2-09 |
+
+The report does not infer the reasons for all 15 skips from a `-q` summary; inspected skip gates include the live smoke, opt-in benchmarks and missing optional packages. No claim is made that skipped adapters were tested.
+
+### Reproduce the inexpensive boundary probes
+
+Pass the following multiline command as one argument to `tools/remote_run.sh` from the worktree root (on PowerShell, a single-quoted here-string preserves the shell/Python quoting):
+
+```sh
+cd full_app && python - <<'PY'
+from eval.metrics import interval
+from signals.models import Candidate
+from reactions.render import layout
+from server.validation import plan_valid
+from render.plan import RenderPlan
+from pipeline import Pipeline
+from unittest.mock import patch
+checks = [
+    ('signals evaluation dataclass', lambda: interval(Candidate(0, 1, 1, {}), 2)),
+    ('square reaction layout', lambda: layout(1080, 1080, 'square')),
+    ('HTTP permits invalid v2 effect', lambda: plan_valid({'render_version': 2, 'segments': [{'source_start': 0, 'source_end': 1, 'video_effects': ['not-an-effect']}]}, 2)),
+    ('renderer rejects same effect', lambda: RenderPlan.model_validate({'render_version': 2, 'segments': [{'source_start': 0, 'source_end': 1, 'video_effects': ['not-an-effect']}]})),
+]
+for label, call in checks:
+    try:
+        call()
+        print(label + ': accepted')
+    except Exception as exc:
+        print(label + ': ' + type(exc).__name__)
+with patch.dict('os.environ', {'GOOGLE_API_KEY': 'dummy-nonsecret', 'GOOGLE_GENAI_USE_VERTEXAI': 'true'}, clear=True):
+    try:
+        Pipeline().client({'options': {}}, None)
+    except Exception as exc:
+        print('GOOGLE-only pipeline: ' + type(exc).__name__ + ': ' + str(exc))
+from pipeline.ranking import rank_merge
+print('raw signal scores:', [c['score'] for c in rank_merge([{'start': 0, 'end': 1, 'score': 2, 'signals': {}}, {'start': 2, 'end': 3, 'score': 8, 'signals': {}}], [], [])])
+PY
+```
 
 No Docker build, real GPU/model execution, paid provider call or public-service security penetration test has been performed by this audit. Source-established risks are identified as such. All fixes remain for the integrator; this task changes only this report.
