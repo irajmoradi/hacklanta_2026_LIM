@@ -20,7 +20,7 @@ class Clip:
     speed: float = 1
     transition: str = "cut"
     cheap_blur: bool = False
-    timing: str = "legacy"
+    timing: str = "source"
 
 
 def tempo(speed):

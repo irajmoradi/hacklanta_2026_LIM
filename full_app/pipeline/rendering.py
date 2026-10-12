@@ -16,7 +16,7 @@ def prepare_legacy(pipeline, job, plan, scratch):
     resulting media, including legacy slow-motion effects and frame rounding.
     """
     runner = FFmpegRunner(scratch, Path(job['source']), job['meta']['width'],
-                          job['meta']['height'], job['meta']['fps'])
+                          job['meta']['height'], job['meta']['fps'], perf=job['options'].get('perf'))
     paths, segments, cursor = [], [], 0.
     with pipeline.stage(job, 'legacy_effects'):
         for index, segment in enumerate(plan['segments']):
@@ -32,6 +32,32 @@ def prepare_legacy(pipeline, job, plan, scratch):
 
 
 def render_job(pipeline, job, key):
+    from .extensions import private_source, finish_output, team_source
+    scratch = Path(job['dir']) / 'extensions_tmp'
+    scratch.mkdir(exist_ok=True)
+    original = job['source']
+    original_plan, original_meta = job['edit_plan'], job['meta']
+    try:
+        team = team_source(pipeline, job, scratch)
+        if team:
+            source, job['edit_plan'] = team
+            job['source'] = str(source)
+            job['meta'] = probe_video(source)
+        else:
+            job['source'] = str(private_source(pipeline, job, Path(original), scratch))
+        _render_job(pipeline, job, key)
+        output = finish_output(pipeline, job, Path(job['output']), job['edit_plan'], scratch)
+        destination = Path(job['dir']) / 'output.mp4'
+        if output != destination:
+            os.replace(output, destination)
+        job['output'] = str(destination)
+    finally:
+        job['source'] = original
+        job['edit_plan'], job['meta'] = original_plan, original_meta
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _render_job(pipeline, job, key):
     options = job['options']
     renderer = pipeline.hook('render.engine', 'Renderer', job)
     # Legacy source-size output and thumbnail generation retain their old contract.
@@ -52,8 +78,8 @@ def render_job(pipeline, job, key):
         if any(s.get('speed', 1) != 1 or unsupported.intersection(s.get('video_effects', [])) or
                s.get('transition_in', 'cut') != 'cut' for s in plan['segments']):
             prepare = True
-        plan = dict(render_version=2, segments=[{k: v for k, v in s.items()
-                    if k in {'source_start', 'source_end', 'video_effects', 'sound_effects', 'words', 'title', 'sam'}}
+        plan = dict(render_version=2, resolution=plan.get('resolution', 1080), segments=[{k: v for k, v in s.items()
+                    if k in {'source_start', 'source_end', 'video_effects', 'sound_effects', 'words', 'title', 'sam', 'fx'}}
                     for s in plan['segments']])
     plan['preset'] = options.get('preset', plan.get('preset', 'landscape'))
     if options.get('captions'):
@@ -67,6 +93,21 @@ def render_job(pipeline, job, key):
         if prepare:
             source, prepared = prepare_legacy(pipeline, job, job['edit_plan'], scratch)
             plan['segments'] = prepared['segments']
+            for segment, original in zip(plan['segments'], original_segments):
+                for name in ('title', 'fx'):
+                    if name in original:
+                        segment[name] = original[name]
+        if not options.get('fx') or not pipeline.hook('fx', 'compose', job):
+            for segment in plan['segments']:
+                segment.pop('fx', None)
+        if options.get('music') and not plan.get('music'):
+            generate = pipeline.hook('music', 'pick_or_generate', job)
+            if generate:
+                with pipeline.stage(job, 'music'):
+                    length = sum(s['source_end']-s['source_start'] for s in plan['segments'])
+                    bed = generate('chill' if options.get('style') in ('clean_edit', 'cinematic') else 'energetic',
+                                   min(600, length), min(599, length*.8), output_dir=scratch)
+                    plan['music'] = dict(path=str(bed.path), beats=bed.beats, duck=True)
         with pipeline.stage(job, 'subject_track'):
             track = pipeline.hook('sam', 'subject_track', job) if options.get('sam_reframe') else None
             if track:
@@ -112,10 +153,10 @@ def render_job(pipeline, job, key):
                     duration = probe_video(path)['duration']
             return path, duration
 
-        runner = FFmpegRunner(scratch, source, *validated.size, validated.fps)
+        runner = FFmpegRunner(scratch, source, *validated.size, validated.fps, perf=options.get('perf'))
         with pipeline.stage(job, 'render_v2'), warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always', RuntimeWarning)
-            output = renderer(runner, segment_processor=finish_segment).render(validated)
+            output = renderer(runner, segment_processor=finish_segment if selector or spotlight else None).render(validated)
         if any('Automatic captions unavailable' in str(w.message) for w in caught):
             pipeline.warn(job, 'Automatic captions unavailable; install/cache faster-whisper or supply segment words')
         destination = Path(job['dir']) / 'output.mp4'

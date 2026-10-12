@@ -20,7 +20,7 @@ from .validation import clips_valid, options_valid, plan_valid
 
 
 def public(job):
-    data = {k: v for k, v in job.items() if k not in ('dir', 'source', 'output')}
+    data = {k: v for k, v in job.items() if k not in ('dir', 'source', 'output', 'sources') and not k.startswith('_')}
     data.update(job_id=job['id'], plan=job['edit_plan'],
                 has_clips=job['clips'] is not None, has_plan=job['edit_plan'] is not None,
                 has_output=job['output'] is not None,
@@ -61,9 +61,10 @@ def create_app(config=None, pipeline=None):
         if directory.name not in known:
             shutil.rmtree(directory)
         else:
-            scratch = directory / 'render_tmp'
-            if scratch.is_dir() and not scratch.is_symlink():
-                shutil.rmtree(scratch)
+            for name in ('render_tmp', 'extensions_tmp'):
+                scratch = directory / name
+                if scratch.is_dir() and not scratch.is_symlink():
+                    shutil.rmtree(scratch)
             (directory / 'upload.part').unlink(missing_ok=True)
             for segment in directory.glob('seg_*_source.mp4'):
                 segment.unlink(missing_ok=True)
@@ -113,7 +114,17 @@ def create_app(config=None, pipeline=None):
                 raise ValueError('Invalid video metadata')
             source = directory / 'source.mp4'
             temporary.replace(source)
+            videos = request.files.getlist('video')
+            if len(videos) > 8:
+                raise ValueError('At most eight team recordings are supported')
+            sources = [str(source)]
+            for index, extra in enumerate(videos[1:], 1):
+                path = directory / f'source_{index}.mp4'
+                extra.save(path)
+                probe_video(path)
+                sources.append(str(path))
             job = dict(id=job_id, dir=str(directory), source=str(source), meta=meta,
+                       sources=sources, source_count=len(sources),
                        status='uploaded', stage='upload', progress=1, completed=['upload'],
                        options={}, clips=None, candidates=[], edit_plan=None, output=None,
                        warnings=[], error=None, created_at=time.time(), target=None, elapsed=0)
@@ -224,6 +235,13 @@ def create_app(config=None, pipeline=None):
     @app.get('/api/stream/<job_id>')
     def stream(job_id):
         return send_file(store.get(job_id)['source'], mimetype='video/mp4', conditional=True)
+
+    @app.get('/api/jobs/<job_id>/share/<path:filename>')
+    def share(job_id, filename):
+        job = store.get(job_id)
+        if job['status'] != 'done' or not job.get('share_kit'):
+            return jsonify(error='No share kit yet'), 404
+        return send_from_directory(Path(job['dir']) / 'share', filename, as_attachment=True)
 
     @app.get('/api/log/<job_id>')
     def log(job_id):

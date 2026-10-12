@@ -274,10 +274,14 @@ def test_workspace_exclusive_and_crash_cleanup(setup, video):
     scratch = workspace / job / 'render_tmp'
     scratch.mkdir()
     (scratch / 'partial.mp4').write_bytes(b'partial')
+    extension_scratch = workspace / job / 'extensions_tmp'
+    extension_scratch.mkdir()
+    (extension_scratch / 'private.mp4').write_bytes(b'partial')
     app.extensions['job_queue'].close()
     fresh = create_app({'WORKSPACE': str(workspace)}, FakePipeline())
     try:
         assert not scratch.exists()
+        assert not extension_scratch.exists()
         assert not orphan.exists()
         assert fresh.test_client().get('/api/stream/' + job).data == video
     finally:

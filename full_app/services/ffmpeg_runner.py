@@ -5,6 +5,7 @@ Supports multiple VFX per clip via ordered filter chaining.
 """
 
 import subprocess
+import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -28,12 +29,17 @@ HAS_NVENC = _detect_nvenc()
 
 
 class FFmpegRunner:
-    def __init__(self, workspace: Path, source: Path, width: int, height: int, fps: float):
+    def __init__(self, workspace: Path, source: Path, width: int, height: int, fps: float, *, perf=None):
         self.workspace = workspace
         self.source = source
         self.width = width
         self.height = height
         self.fps = fps
+        self.perf = os.getenv('LIM_PERF', '1') != '0' if perf is None else perf
+        self.workspace.mkdir(parents=True, exist_ok=True)
+        if self.perf:
+            from perf.cache import Cache
+            self.cache = Cache(self.workspace / 'sfx_cache')
 
     def _encoder_args(self) -> list[str]:
         """Return encoder args — NVENC if available, else libx264."""
@@ -243,6 +249,26 @@ class FFmpegRunner:
     def _render_one_segment(self, i: int, seg: dict) -> tuple[int, Path]:
         """Render a single segment (extract + sfx + transition). Thread-safe."""
         vfx = seg.get("video_effects", seg.get("video_effect", "none"))
+        if self.perf:
+            from perf.graph import Clip, render
+            from perf.encoders import best, Encoder
+            effects = [vfx] if isinstance(vfx, str) else vfx
+            sfx = []
+            for entry in seg.get('sound_effects', []):
+                file = SOUND_EFFECTS.get(entry.get('sfx_key'), {}).get('file')
+                if file and Path(file).is_file():
+                    sfx.append(dict(file=file, offset=entry.get('offset_in_segment', 0)))
+            clip = Clip(self.source, self.workspace / f'seg_{i:03d}.mp4',
+                        seg['source_start'], seg['source_end'], self.width, self.height,
+                        self.fps, seg.get('speed', 1), seg.get('transition_in', 'cut'))
+            encoder = best(threads=2)
+            try:
+                path = render(clip, effects, sfx, encoder=encoder, cache=self.cache)
+            except RuntimeError:
+                if not encoder.hardware:
+                    raise
+                path = render(clip, effects, sfx, encoder=Encoder(), cache=self.cache)
+            return i, path
 
         print(f"[render] Segment {i+1}: "
               f"{seg['source_start']:.1f}s-{seg['source_end']:.1f}s "
@@ -277,10 +303,14 @@ class FFmpegRunner:
         encoder = "NVENC" if HAS_NVENC else "libx264"
         print(f"[render] Using {encoder} encoder for {len(segments)} segments")
 
-        final_paths = []
-        for i, seg in enumerate(segments):
-            idx, path = self._render_one_segment(i, seg)
-            final_paths.append(path)
+        if self.perf:
+            from perf.parallel import render_all
+            from perf.encoders import best
+            rendered = render_all([lambda i=i, seg=seg: self._render_one_segment(i, seg)
+                                   for i, seg in enumerate(segments)], best(threads=2))
+            final_paths = [path for _, path in rendered]
+        else:
+            final_paths = [self._render_one_segment(i, seg)[1] for i, seg in enumerate(segments)]
 
         # Concatenate
         print(f"[render] Concatenating {len(final_paths)} segments...")

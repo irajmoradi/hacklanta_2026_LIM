@@ -35,6 +35,13 @@ class Renderer:
             arguments[index:index + 2] = ["-filter_complex_script", str(graph_path)]
         encoders = [["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "22"]] if HAS_NVENC else []
         encoders.append(["-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-threads", "2"])
+        if self.runner.perf:
+            from perf.encoders import best, Encoder
+            selected = best(threads=2)
+            # VAAPI requires graph hwupload; use CPU for graphs ending in ASS/RGB.
+            if selected.name == 'h264_vaapi':
+                selected = Encoder()
+            encoders = [selected.args(), Encoder().args()]
         for encoder in encoders:
             command = ["ffmpeg", "-v", "error", "-y", "-filter_complex_threads", "1",
                        "-filter_threads", "1", *arguments, *encoder, "-pix_fmt", "yuv420p",
@@ -81,7 +88,8 @@ class Renderer:
                 path, duration = self.card(plan.intro, "intro", plan, directory)
                 paths.append(path)
                 timeline.append(duration)
-            for index, (segment, duration) in enumerate(zip(plan.segments, durations)):
+            def render_segment(item):
+                index, (segment, duration) = item
                 points = []
                 if segment.sam and segment.sam.subject_track:
                     points = smooth_track(segment.sam.subject_track)
@@ -93,16 +101,45 @@ class Renderer:
                     args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
                 graph = reframe_graph(plan.size, plan.reframe, points)
                 vf, _ = build_vf_chain(segment.video_effects, *plan.size, plan.fps)
+                if segment.fx:
+                    from fx import Request, Timing, compose
+                    extra = compose([Request(e['name'], Timing(duration, e['start'], e['end'], plan.fps),
+                                             e.get('params', {})) for e in segment.fx])
+                    vf = ','.join(p for p in (vf, extra) if p)
                 graph += f";[v]{vf + ',' if vf else ''}fps={plan.fps},setpts=PTS-STARTPTS[outv]"
                 audio_input = "0:a:0" if has_audio else "1:a:0"
                 graph += f";[{audio_input}]asetpts=PTS-STARTPTS,aresample=48000,apad[outa]"
+                words = segment.words if plan.captions.enabled else []
+                baked_captions = self.runner.perf and (words or segment.title) and not (
+                    plan.captions.enabled and plan.captions.transcribe and not words and has_audio)
+                if baked_captions:
+                    ass = directory / f'caption_{index}.ass'
+                    write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title)
+                    graph = graph.replace('[outv]', '[uncaptioned]')
+                    graph += f';[uncaptioned]ass={ass.name}[outv]'
+                if self.runner.perf and segment.sound_effects:
+                    from models.effects import SOUND_EFFECTS
+                    labels = ['[outa]']
+                    next_input = 1 if has_audio else 2
+                    for s in segment.sound_effects:
+                        file = SOUND_EFFECTS.get(s.sfx_key, {}).get('file')
+                        if not file or not Path(file).is_file():
+                            continue
+                        args += ['-i', str(self.runner.cache.audio(file))]
+                        graph += (f';[{next_input}:a]adelay={int(s.offset_in_segment*1000)}:all=1,'
+                                  f'volume=0.7[sfx{next_input}]')
+                        labels.append(f'[sfx{next_input}]')
+                        next_input += 1
+                    if len(labels) > 1:
+                        graph += ''.join([';', *labels, f'amix=inputs={len(labels)}:duration=first[mixed]'])
+                        graph = graph.replace('[outa]', '[baseaudio]').replace('[mixed]', '[outa]')
                 args += ["-filter_complex", graph, "-map", "[outv]", "-map", "[outa]",
                          "-t", str(duration)]
                 self.encode(args, path, directory)
                 words = segment.words if plan.captions.enabled else []
                 if plan.captions.enabled and plan.captions.transcribe and not words and has_audio:
                     words = transcribe(path, plan.captions.model)
-                if words or segment.title:
+                if (words or segment.title) and not baked_captions:
                     ass = directory / f"caption_{index}.ass"
                     write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title)
                     captioned = directory / f"captioned_{index}.mp4"
@@ -110,12 +147,21 @@ class Renderer:
                                 captioned, directory)
                     path = captioned
                 # Reuse the existing meme SFX registry and mixer in this isolated workspace.
-                if segment.sound_effects:
+                if segment.sound_effects and not self.runner.perf:
                     from services.ffmpeg_runner import FFmpegRunner
                     helper = FFmpegRunner(directory, self.source, *plan.size, plan.fps)
                     path = helper.overlay_sfx(path, [s.model_dump() for s in segment.sound_effects], index)
                 if self.segment_processor:
                     path, duration = self.segment_processor(path, index, segment, duration, directory)
+                return path, duration
+            work = list(enumerate(zip(plan.segments, durations)))
+            if self.runner.perf and self.segment_processor is None:
+                from perf.parallel import render_all
+                from perf.encoders import best
+                results = render_all([lambda item=item: render_segment(item) for item in work], best(threads=2))
+            else:
+                results = [render_segment(item) for item in work]
+            for path, duration in results:
                 paths.append(path)
                 timeline.append(duration)
             if plan.outro:
@@ -128,7 +174,15 @@ class Renderer:
             total = sum(timeline) - overlap * (len(timeline) - 1)
             args += ["-filter_complex", join_graph(timeline, plan.transition, overlap, plan.fps),
                      "-map", "[outv]", "-map", "[outa]", "-t", str(total)]
-            joined = self.encode(args, directory / "joined.mp4", directory)
+            joined = None
+            if self.runner.perf and plan.transition == 'cut':
+                from perf.media import concatenate
+                try:
+                    joined = concatenate(paths, directory / 'joined.mp4')
+                except ValueError:
+                    pass  # A segment processor may change codecs or stream layout.
+            if joined is None:
+                joined = self.encode(args, directory / "joined.mp4", directory)
             if plan.music:
                 # Mix audio separately: old FFmpeg schedulers can stop amix early
                 # when an independently encoded video stream reaches output -t.

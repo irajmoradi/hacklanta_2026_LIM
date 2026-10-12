@@ -8,7 +8,7 @@ from types import ModuleType
 import pytest
 
 from demo.make_demo_gameplay import events_for, ffmpeg, generate, probe
-from demo.pipeline import (Progress, Unavailable, clean_plan, coverage, fallback_windows,
+from pipeline.demo import (Progress, Unavailable, clean_plan, coverage, fallback_windows,
                            legacy_plan, offline, optional_call, run, score_windows)
 
 

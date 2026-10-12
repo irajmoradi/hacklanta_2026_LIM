@@ -277,7 +277,7 @@ def test_real_watchdog_wakeup(tmp_path):
 
 def test_synthetic_video_flows_through_real_api(tmp_path, video):
     from server.api import create_app
-    pipeline = Mock()
+    pipeline = Mock(spec=['analyze', 'plan', 'render'])
     def analyze(job, key):
         job['clips'] = [{'id': '1', 'start_seconds': 0, 'end_seconds': 1}]
     def plan(job, key):

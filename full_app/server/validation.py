@@ -1,6 +1,9 @@
 """Validation shared by HTTP inputs and provider outputs."""
 import math
 
+EXTENSION_FLAGS = {'profiles', 'audio_ai', 'planner', 'vjepa', 'social', 'ingest',
+                   'fx', 'narration', 'privacy', 'multipov', 'music', 'perf'}
+
 
 def number(value, name, low=0, high=86400):
     if isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value) or not low <= value <= high:
@@ -47,7 +50,8 @@ def plan_valid(plan, duration):
 def options_valid(data, styles):
     allowed = {'mode', 'style', 'provider', 'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam',
                'prompt', 'splits', 'max_duration', 'preset', 'generate_thumbnails', 'edit_plan',
-               'attitude', 'edit_style', 'job_id', 'api_key'}
+               'attitude', 'edit_style', 'job_id', 'api_key', 'game', 'privacy_options',
+               'chat', 'team_mode'} | EXTENSION_FLAGS
     if set(data) - allowed:
         raise ValueError('unknown options: ' + ', '.join(sorted(set(data) - allowed)))
     result = {k: v for k, v in data.items() if k not in ('api_key', 'job_id', 'attitude', 'edit_style', 'edit_plan')}
@@ -61,7 +65,7 @@ def options_valid(data, styles):
         raise ValueError('unknown style')
     if result.get('preset', 'landscape') not in ('landscape', 'vertical', 'square'):
         raise ValueError('unknown preset')
-    for name in ('use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam', 'generate_thumbnails'):
+    for name in EXTENSION_FLAGS | {'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam', 'generate_thumbnails'}:
         if name in result and not isinstance(result[name], bool):
             raise ValueError(f'{name} must be boolean')
     for name in ('prompt', 'provider'):
@@ -71,4 +75,21 @@ def options_valid(data, styles):
         raise ValueError('splits must be an integer from 1 to 4')
     if 'max_duration' in result:
         number(result['max_duration'], 'max_duration', 1, 3600)
+    if result.get('game', 'auto') not in {'auto', 'generic', 'valorant', 'overwatch2', 'deadlock', 'league_of_legends'}:
+        raise ValueError('unknown game')
+    if result.get('team_mode', 'best') not in {'best', 'split', 'pip'}:
+        raise ValueError('unknown team_mode')
+    if 'privacy_options' in result:
+        from privacy import PrivacyOptions
+        result['privacy_options'] = PrivacyOptions.model_validate(result['privacy_options']).model_dump(mode='json', exclude_unset=True)
+    if 'chat' in result:
+        chat = result['chat']
+        if not isinstance(chat, list) or len(chat) > 100000:
+            raise ValueError('chat must be a list of at most 100000 replay bins')
+        # Accept numerical counts only; never persist chat text or usernames.
+        for row in chat:
+            if not isinstance(row, dict) or set(row) != {'time', 'activity', 'emotes', 'clip_it'}:
+                raise ValueError('chat requires time, activity, emotes and clip_it counts')
+            for name, value in row.items():
+                number(value, 'chat.' + name, high=864000)
     return result

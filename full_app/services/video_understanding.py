@@ -160,6 +160,7 @@ class VideoUnderstandingProvider(ABC):
         if any(c.end > duration for c in parsed):
             raise ValueError("candidate extends beyond video duration")
         prompt = WINDOW_PROMPT.read_text(encoding="utf-8")
+        prompt += '\n' + getattr(self, 'profile_prompt', '')
         results = []
         for candidate in parsed:
             with video_slice(path, candidate.start, candidate.end, self.config.processing_timeout_seconds) as window:
