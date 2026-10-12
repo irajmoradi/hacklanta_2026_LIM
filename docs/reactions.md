@@ -168,3 +168,46 @@ python -m reactions.qa /srv/packs/team /srv/demo_out/react2/gameplay --gameplay 
 This creates 24 short videos and before/after stills. Still panels are original reaction,
 gameplay before, gameplay after; outputs remain private. The QA directory must be new
 to prevent accidentally overwriting an earlier review.
+
+## Runner 1 completion, 2026-10-12
+
+The team pack at `/srv/packs/team/` reached 80 clips (the original 32 plus all 48
+new clips). All 80 have both alpha and mask assets and a detected head box. The
+five-minute watcher finished successfully within the requested 45-minute window.
+The producer refreshed some manifest entries while appending; a subsequent pass
+reconciled those entries before reporting success. Originals were retained.
+
+Final per-clip processing time, including encoding and three QA sheets: mean 5.844 s,
+minimum 3.698 s, maximum 9.563 s, sum 467.530 s across the final 80 outputs. These
+numbers exclude earlier tuning passes and polling waits. Full event timings are in
+`/srv/demo_out/react2/head-timings.json`; local final timings are in
+`demo_video/react2/timings.csv`. All these artifacts are intentionally untracked.
+
+Recorded validation commands from the Windows worktree (Git Bash via `bash`):
+
+```sh
+bash tools/remote_run.sh "cd full_app && python -m pytest -q -m not\ live"
+# exit 0: 1052 passed, 19 skipped, 1 deselected; 878.59 seconds
+bash tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_reaction_matte.py tests/test_reactions.py"
+# exit 0 on the final implementation: 27 passed; 41.97 seconds
+bash tools/remote_run.sh "python tools/matte_pack.py /srv/packs/team --report /srv/demo_out/react2/idempotent.json"
+# exit 0: pack clips=80; existing mattes skipped
+```
+
+A separate FFprobe/FFmpeg audit exited 0: all 80 alpha/mask pairs match their
+original dimensions, frame rates and frame counts (2,430 video frames total).
+Forced libvpx decoding confirmed both transparent and opaque pixels in every
+alpha asset. Each speaker has 20 entries. The real-pack idempotency report has
+80 skipped entries and no regenerated clips. Audit details are saved privately in
+`/srv/demo_out/react2/verified.json` and `demo_video/react2/verified.json`.
+
+The broad suite ran during implementation; the final focused run includes the later
+head contour, watcher reconciliation and failure-recovery tests. No paid/live calls
+were made, and no API credentials were read. Local SAM2 weights were not exercised.
+
+Decoded gameplay QA completed with exit 0 using `python -m reactions.qa`, all four
+speakers, all three presets and both bright/dark gameplay. Its 24 videos and 24
+original/before/after stills are at `/srv/demo_out/react2/head-gameplay/` and copied
+locally to `demo_video/react2/final/`. Fine source hair remains soft; the jaw contour
+is heuristic and intentionally trims long hair below the jaw. Other packs need the
+same visual review, especially profiles, moving subjects or long beards.
