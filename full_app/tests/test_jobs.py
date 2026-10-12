@@ -228,7 +228,7 @@ def test_default_pipeline_mocked_gemini_and_real_render(tmp_path, video, monkeyp
         if name in {'signals', 'services.providers', 'captions', 'reactions', 'sam'}:
             raise ImportError('optional integration intentionally absent in this test')
         return importlib.import_module(name)
-    monkeypatch.setattr('server.pipeline.importlib', SimpleNamespace(import_module=optional_import))
+    monkeypatch.setattr('pipeline.orchestrator.importlib', SimpleNamespace(import_module=optional_import))
     client_mock = Mock()
     client_mock.score_windows.return_value = []
     client_mock.find_clips.return_value = [{'start': '0:00', 'end': '0:01', 'description': 'kill'}]
