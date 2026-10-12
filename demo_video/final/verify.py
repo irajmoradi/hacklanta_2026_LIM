@@ -1,5 +1,6 @@
 """Decode the final artifacts, audit replay/feature evidence, and build QA tables."""
 import array
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -15,6 +16,9 @@ from planner.stacks import events_for
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--only', choices=['landscape','vertical','mean_vertical','mean_vertical_reroll'])
+    args = parser.parse_args()
     out = Path('/srv/demo_out/final')
     manifest = json.loads((out/'manifest.json').read_text())
     rows = ['# Final montage clip table', '',
@@ -24,34 +28,40 @@ def main():
     verification = {}
     cells = []
     for name in ('landscape', 'vertical', 'mean_vertical', 'mean_vertical_reroll'):
+        if args.only and name != args.only:
+            continue
         job = json.loads((out/f'job_{name}.json').read_text())
         evidence = job['render_evidence']
         assert not job['options']['privacy'] and not evidence['privacy']
         assert evidence['sam'] and len({r['speaker'] for r in evidence['reactions']}) == 4
+        if job['options']['mode'] == 'nice':
+            assert all(not r['explicit'] for r in evidence['reactions'])
         graphs = '\n'.join(evidence['filter_graphs'])
         assert 'xfade=' in graphs and 'sidechaincompress' in graphs
         assert job['render_plan']['music']['beat_sync'] and job['render_plan']['music']['beats']
         replay = dict(options=job['options'].copy(), clips=job['clips'], game=job.get('game'))
-        planner_plan(Pipeline(), replay)
+        pipeline, sources = Pipeline(), {}
+        original_hook = pipeline.hook
+        def capture(module, symbol, current):
+            function = original_hook(module, symbol, current)
+            if (module, symbol) != ('planner', 'plan_edit'):
+                return function
+            def record(clips, **options):
+                sources.update({c['id']: RankedClip.model_validate(c) for c in clips})
+                return function(clips, **options)
+            return record
+        pipeline.hook = capture
+        planner_plan(pipeline, replay)
         assert replay['planner_plan'] == job['planner_plan']
         native = RenderPlan.model_validate(job['planner_plan'])
-        originals = {c['id']: c for c in job['clips']}
         for index, segment in enumerate(job['edit_plan']['segments']):
             clip = native.clips[index]
-            original = originals[clip.source_id]
-            signals = {k:v for k,v in original.get('signals',{}).items()
-                       if k in ('action_time','kill_time','fail_time','clutch','multikill','kind')}
-            signals = {k:v for k,v in signals.items() if not k.endswith('_time') or
-                       type(v) in (int,float) and original['start_seconds'] <= v < original['end_seconds']}
-            signals['events'] = [dict(kind=e.get('kind',e.get('type')),time=e['time'])
-                                for e in original.get('events', []) if e.get('kind',e.get('type')) in
-                                ('kill','headshot','multikill','clutch','death','whiff','ability','play')
-                                and original['start_seconds'] <= e.get('time',-1) < original['end_seconds']]
-            source = RankedClip(id=clip.source_id, start=original['start_seconds'], end=original['end_seconds'],
-                score=clip.score,label=clip.label,caption=original.get('caption',original.get('description',''))[:240],signals=signals)
+            source = sources[clip.source_id]
             start = evidence['timeline'][index]['start']
             events = ', '.join(f'{kind} @{start+t-clip.start:.2f}' for kind,t in events_for(clip,source))
             vfx = ', '.join(f"{e['name']} @{start+e['start']:.2f}" for e in segment['timed_effects'])
+            if segment['speed'] == .5:
+                vfx = 'slow_motion (0.5x), ' + vfx
             sfx = ', '.join(f"{e['sfx_key']} @{start+e['offset_in_segment']:.2f}" for e in segment['sound_effects'])
             reactions = '; '.join(f"{r['speaker']}: {r['text']} ({r['label']}{', explicit' if r['explicit'] else ''})"
                                   for r in evidence['reactions'] if r['segment']==index)
@@ -74,11 +84,13 @@ def main():
             cell.paste(img,((400-img.width)//2,0))
             ImageDraw.Draw(cell).text((8,390),path.stem,fill='white')
             cells.append(cell)
-    first = json.loads((out/'job_mean_vertical.json').read_text())
-    second = json.loads((out/'job_mean_vertical_reroll.json').read_text())
-    assert first['planner_plan']['clips'] == second['planner_plan']['clips']
-    assert first['planner_plan']['effects'] != second['planner_plan']['effects']
-    assert first['planner_plan']['sfx'] != second['planner_plan']['sfx']
+    if not args.only:
+        first = json.loads((out/'job_mean_vertical.json').read_text())
+        second = json.loads((out/'job_mean_vertical_reroll.json').read_text())
+        assert first['planner_plan']['clips'] == second['planner_plan']['clips']
+        assert first['render_evidence']['timeline'] == second['render_evidence']['timeline']
+        assert first['planner_plan']['effects'] != second['planner_plan']['effects']
+        assert first['planner_plan']['sfx'] != second['planner_plan']['sfx']
     sheet = Image.new('RGB',(1600,420*((len(cells)+3)//4)),'#161820')
     for i,cell in enumerate(cells):
         sheet.paste(cell,((i%4)*400,(i//4)*420))
