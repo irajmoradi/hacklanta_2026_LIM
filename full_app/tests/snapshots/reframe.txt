@@ -1,0 +1,1 @@
+[0:v]scale=720:1280:force_original_aspect_ratio=increase,crop=720:1280:x='clip(iw*(0.5)-ow/2,0,iw-ow)':y='clip(ih*(0.5)-oh/2,0,ih-oh)',setsar=1[v]
