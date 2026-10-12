@@ -202,7 +202,8 @@ root, with `cd full_app &&` preceding the command shown. No live calls were made
 | `python -m pytest -q tests/e2e tests/test_int02.py` | 35 passed, 2 demo errors | 1 |
 | `python -m pytest -q -m 'not live'` (first integrated full run) | 624 passed, 1 old encoder-mock failure, 14 skipped, 1 deselected | 1 |
 | `python -m pytest -q tests/test_int02.py tests/e2e tests/test_render_v2.py` | 65 passed in 76.71 s | 0 |
-| `python -m pytest -q -m 'not live'` (final) | **627 passed, 14 skipped, 1 deselected in 351.07 s** | **0** |
+| `python -m pytest -q -m 'not live'` (verified final retry) | **627 passed, 14 skipped, 1 deselected in 347.77 s** | **0** |
+| `python -m pytest -q -m 'not live'` (green log; SSH reset) | 627 passed, 14 skipped, 1 deselected in 351.07 s | 255 (SSH transport) |
 
 Two early pytest invocation errors (shell quoting and the nonexistent
 `tests/test_render.py` path) returned pytest exit 4 without executing tests;
@@ -228,3 +229,14 @@ Integrator follow-up outside this task's allowed paths: change the old
 `full_app/demo/run_demo.sh` entry point from `python -m demo.pipeline` to
 `python -m pipeline.demo`, and fold this document's options into `docs/api.md`.
 The replacement CLI and HTTP options are already usable without those edits.
+
+
+The 351.07-second run's pytest log was green, but SSH reset before the runner
+returned its exit status. The verification retry streams output through `tee`
+and persists the actual pytest exit status in `/tmp/int02-verified.rc`; it does
+not infer a successful wrapper exit from the test summary alone.
+
+The verification retry completed with **627 passed, 14 skipped, 1 deselected in
+347.77 seconds**. Both the `tools/remote_run.sh` process and the saved pytest exit
+code were **0**. Scope audit: all 20 changed files are within INT-02's allowed
+paths; no live calls, pushes or merges occurred.
