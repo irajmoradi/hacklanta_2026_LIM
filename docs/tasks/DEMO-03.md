@@ -20,6 +20,11 @@ names; do not use any other cloned voice. Use `ELEVENLABS_API_KEY` from /c/Users
 disk or logs. At most 10 synth calls, total under 2,500 characters; cache the mp3s (gitignored) and never regenerate in a loop. Never commit voice
 audio. Duck music and game audio under narration; time cuts to the narration beats; caption every line with the speaker's name.
 If `demo_video/v3/` already has work from an earlier attempt of this task, review it and continue from it.
+**Gaussian-splat reaction overlays (owner request):** use the team reaction pack (LAM Gaussian-splat talking heads, voiced clips) as pop-in
+reaction overlays on key montage moments in the demo (corner picture-in-picture with a quick scale/bounce-in, name tag, and the reaction's own audio),
+featuring all 4 people. Runner 1 `/srv/packs/team/` has Iraj + Stefanny (8 clips each); Lance + Mario (same 8 labels) are being rendered now and
+will be added to that folder and `pack.json` within ~20 minutes (re-read pack.json before the final render). Include at least one reaction per
+person and one beat that shows the reaction feature itself (label + "Gaussian-splat talking head from one selfie").
 **Footage:** on runner 1 (`tools/runner_ip`), `/srv/demo_out/demo01/` has montages, UI walkthrough and stats from the first demo; `/srv/demo_out/demo02/` will get
 better montages and numbers from DEMO-02 (running now). Build with demo01 assets first; if `/srv/demo_out/demo02/montage_landscape.mp4` exists when
 you are ready to render (check, wait up to 40 minutes in 5-minute checks), use demo02's montages and numbers instead. Real numbers only.
