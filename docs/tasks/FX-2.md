@@ -23,3 +23,8 @@ mode**. The original app (`full_app/models/effects.py` VFX + SFX registries, `fu
 4. **Re-render on runner 1** from the saved DEMO-02 analysis (no re-analysis; at most 3 Gemini calls) the landscape, vertical and mean-vertical
    montages into `/srv/demo_out/fx2/` and copy them locally to `demo_video/fx2/out/` (gitignored), plus Discord copies under 20 MB each and a
    per-clip effects table (clip, events, VFX, SFX) in your report. Full suite green on the runner.
+5. **Chaos knob (owner request: "a bit of randomness or chaos in effect selection and stacking"):** add a `chaos` setting (0-1, default
+   ~0.35 nice / ~0.6 mean, exposed in the API render/plan options and the UI settings panel if the field already exists there; otherwise
+   document it) plus a `seed`. Chaos does weighted-random picks from the tagged candidates (not always the top match), random extra stack
+   layers and occasional wildcard "surprise" effects (rare, e.g. 1 per montage at 0.35, more at higher chaos), jittered timings, random
+   intensity, while keeping variety caps and event relevance. Same seed = same cut (reproducible); "Reroll" = new seed. Test both.
