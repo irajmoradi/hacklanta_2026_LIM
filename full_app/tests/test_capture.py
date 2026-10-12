@@ -310,3 +310,97 @@ def test_synthetic_video_flows_through_real_api(tmp_path, video):
     finally:
         client.close()
         app.extensions['job_queue'].close()
+
+
+def test_locked_file_waits_then_retries(watch, monkeypatch):
+    watcher, client, now, folder = watch
+    path = folder / 'locked.mp4'
+    path.write_bytes(b'data')
+    original = Path.open
+    def locked(self, *args, **kwargs):
+        if self == path:
+            raise PermissionError('recording still open')
+        return original(self, *args, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, 'open', locked)
+        settle(watcher, now)
+    client.upload.assert_not_called()
+    now[0] += 5
+    watcher.scan()
+    client.upload.assert_called_once_with(path)
+
+
+def test_optional_dependencies_fall_back(monkeypatch, tmp_path):
+    import builtins
+    import threading
+    from capture.__main__ import start_hotkey
+    original = builtins.__import__
+    def missing(name, *args, **kwargs):
+        if name.startswith(('watchdog', 'pynput')):
+            raise ImportError(name)
+        return original(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, '__import__', missing)
+    assert start_observer(tmp_path, threading.Event()) is None
+    assert start_hotkey('<ctrl>+r', Mock()) is None
+
+
+def test_shutdown_stops_workers_and_closes_http(monkeypatch, tmp_path):
+    import signal
+    import capture.__main__ as cli
+    signals = {}
+    previous = Mock()
+    def register(sig, callback):
+        signals[sig] = callback
+        return previous
+    monkeypatch.setattr(cli.signal, 'signal', register)
+    watcher = Mock()
+    watcher.scan.side_effect = lambda: signals[signal.SIGTERM]()
+    monkeypatch.setattr(cli, 'FolderWatcher', Mock(return_value=watcher))
+    client, observer, listener = Mock(), Mock(), Mock()
+    monkeypatch.setattr(cli, 'UploadClient', Mock(return_value=client))
+    monkeypatch.setattr(cli, 'start_observer', Mock(return_value=observer))
+    def hotkey(combination, callback):
+        callback()
+        return listener
+    monkeypatch.setattr(cli, 'start_hotkey', hotkey)
+    replay = Mock()
+    monkeypatch.setattr(cli, 'trigger_replay', replay)
+    cli.run({'watch': str(tmp_path), 'api': 'http://localhost', 'options': {},
+             'state': str(tmp_path / 'state.json'), 'stable_seconds': 3,
+             'retry_seconds': 5, 'include_existing': False, 'poll_seconds': .001,
+             'hotkey': '<ctrl>+r', 'obs': {}})
+    replay.assert_called_once_with({})
+    for worker in (observer, listener):
+        worker.stop.assert_called_once()
+        worker.join.assert_called_once()
+    client.close.assert_called_once()
+    assert all(handler is previous for handler in signals.values())
+
+
+def test_obs_nested_scene_and_group_context():
+    obs = OBSClient()
+    def request(kind, data=None):
+        if kind == 'GetCurrentProgramScene':
+            return {'currentProgramSceneName': 'Root'}
+        if kind == 'GetInputSettings':
+            return {'inputSettings': {'window': 'Game.exe'}}
+        name = data['sceneName']
+        if name == 'Root':
+            return {'sceneItems': [{'sourceName': 'Nested', 'sourceType': 'OBS_SOURCE_TYPE_SCENE'}]}
+        if name == 'Nested':
+            return {'sceneItems': [{'sourceName': 'Group', 'isGroup': True}]}
+        assert kind == 'GetGroupSceneItemList'
+        return {'sceneItems': [{'sourceName': 'Game', 'inputKind': 'game_capture'},
+                              {'sourceName': 'Root', 'sourceType': 'OBS_SOURCE_TYPE_SCENE'}]}
+    obs.request = Mock(side_effect=request)
+    assert obs.context()['captures'][0]['window'] == 'Game.exe'
+    assert obs.request.call_count == 5
+
+
+def test_one_shot_connection_errors_are_clean(monkeypatch, caplog):
+    import capture.__main__ as cli
+    class LibraryConnectionError(Exception):
+        pass
+    monkeypatch.setattr(cli, 'trigger_replay', Mock(side_effect=LibraryConnectionError('private-response')))
+    assert main(['--save-replay']) == 2
+    assert 'private-response' not in caplog.text

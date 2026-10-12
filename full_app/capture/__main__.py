@@ -149,7 +149,7 @@ def main(argv=None):
         else:
             run(config)
         return 0
-    except (OSError, ValueError, RuntimeError, TypeError) as exc:
+    except Exception as exc:
         LOG.error('Capture stopped (%s): check configuration, dependencies and OBS connectivity', type(exc).__name__)
         return 2
 
