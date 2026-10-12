@@ -71,7 +71,7 @@ export function Timeline({
           />
         ))}
       </div>
-      <small>Edit order ? {montageDuration.toFixed(1)}s</small>
+      <small>Edit order - {montageDuration.toFixed(1)}s</small>
       <div className="clip-track montage-track" aria-label="Montage order">
         {kept.map((c, index) => {
           const left = montageOffset / montageDuration * 100;

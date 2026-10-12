@@ -338,7 +338,7 @@ export default function App() {
             {job && (
               <Timeline affectedClip={affectedClip} job={{ ...job, clips }} onSeek={(time) => seek(time)} />
             )}
-            {job && clips.length > 0 && mode === 'jobs' && <Director key={job.id} api={api} jobId={job.id}
+            {job && (clips.length > 0 || job.plan || directorPlan.current) && mode === 'jobs' && <Director key={job.id} api={api} jobId={job.id} canRender={kept.length > 0}
               disabled={busy || needsAnalysis || (!directorBusy && working)} subscribe={subscribeDirector}
               onBusy={value => { setDirectorBusy(value); if (value) {
                 directorRollback.current = {clips, plan: directorPlan.current, dirty: dirtyRef.current};

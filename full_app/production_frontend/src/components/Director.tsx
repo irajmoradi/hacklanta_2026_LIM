@@ -1,10 +1,11 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { ApiError, type AgentResult, type AgentStep, type EditorApi } from '../api';
 const chips = ['Shorter (30 s)', 'More hype', 'Roast my deaths', 'Cut slow parts', 'Add reactions'];
-export function Director({api, jobId, disabled, subscribe, onStep, onPlan, onBusy, onRender, onFailure}: {
+export function Director({api, jobId, disabled, subscribe, onStep, onPlan, onBusy, onRender, onFailure, canRender = true}: {
   api: EditorApi; jobId: string; disabled: boolean;
   subscribe: (listener: (step: AgentStep) => void) => () => void;
   onStep: (step: AgentStep) => void; onPlan: (result: AgentResult) => void;
+  canRender?: boolean;
   onFailure: () => void;
   onBusy: (busy: boolean) => void; onRender: () => void;
 }) {
@@ -77,12 +78,15 @@ export function Director({api, jobId, disabled, subscribe, onStep, onPlan, onBus
       }} /></label>
     <div className="director-actions"><button disabled={busy || disabled || !instruction.trim()} onClick={() => void act()}>Send</button>
       <button disabled={busy || disabled || !undoCount} onClick={() => void act(true)}>Undo</button>
-      <button className="primary" disabled={busy || disabled} onClick={onRender}>Apply &amp; render</button></div>
+      <button className="primary" disabled={busy || disabled || !canRender} onClick={onRender}>Apply &amp; render</button></div>
     {busy && <p role="status">Director is editing…</p>}
     {error && <p className="error" role="alert">{error}</p>}
     <ol className="director-trace" aria-label="Edit trace" aria-live="polite">{steps.map(step => <li key={step.step}>
       <strong><span aria-hidden="true">{ /trim|cut/.test(step.tool) ? '✂' : /reaction|effect/.test(step.tool) ? '✦' : '↔' }</span> {step.tool}</strong>
-      <p>{step.rationale}</p><pre>{JSON.stringify(step.diff ?? {}, null, 2)}</pre>
+      <p>{step.rationale}</p>{step.diff && ('before' in step.diff || 'after' in step.diff)
+        ? <div className="director-diff"><div><small>Before</small><pre>{JSON.stringify(step.diff.before ?? 'Unavailable')}</pre></div>
+          <div><small>After</small><pre>{JSON.stringify(step.diff.after ?? 'Unavailable')}</pre></div></div>
+        : <pre>{JSON.stringify(step.diff ?? {})}</pre>}
     </li>)}</ol>
   </section>;
 }
