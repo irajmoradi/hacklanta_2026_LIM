@@ -3,6 +3,7 @@ import importlib
 import io
 import sys
 from types import SimpleNamespace
+from contextlib import nullcontext
 from unittest.mock import MagicMock
 
 import numpy as np
@@ -150,3 +151,46 @@ def test_modal_definition_with_mock(monkeypatch):
     assert worker["scaledown_window"] == 30 and worker["retries"] == 0
     assert module.app is app
     sys.modules.pop("gpu.modal_app", None)
+
+
+def test_whisper_runner_consumes_words_and_requests_timestamps():
+    engine = Engine()
+    engine.family = "transcribe"
+    engine.model = MagicMock()
+    word = SimpleNamespace(start=.1, end=.3, word=" go ", probability=.8)
+    engine.model.transcribe.return_value = (iter([SimpleNamespace(words=[word])]),
+                                            SimpleNamespace(language="en"))
+    result = engine.infer("transcribe", {"pcm_f32le": b64(np.zeros(16000, "<f4").tobytes())})
+    assert result["words"][0]["text"] == "go"
+    assert engine.model.transcribe.call_args.kwargs == {"word_timestamps": True, "vad_filter": True}
+
+
+def test_embedding_runner_pools_without_resampling(monkeypatch):
+    monkeypatch.setitem(sys.modules, "torch", SimpleNamespace(inference_mode=nullcontext))
+    engine = Engine()
+    engine.family = "embed"
+    engine.identity = "test"
+    engine.model = MagicMock()
+    output = engine.model.get_vision_features.return_value
+    output.mean.return_value.float.return_value.cpu.return_value.numpy.return_value = np.ones((1, 1024))
+    engine.processor = MagicMock()
+    engine.processor.return_value.to.return_value = {"pixel_values_videos": "sentinel"}
+    result = engine.infer("embed", {"rgb_u8": b64(bytes(16*256*256*3)), "frames": 16, "encoder": "test"})
+    assert result["features"] == [1.]*1024
+    output.mean.assert_called_once_with(dim=1)
+    assert engine.processor.call_args.kwargs["do_sample_frames"] is False
+    engine.model.get_vision_features.assert_called_once_with(pixel_values_videos="sentinel")
+
+
+@pytest.mark.parametrize("kind,result,values", [
+    ("transcribe", {"words": [{"start": 0, "end": 2, "text": "x", "probability": .5}]},
+     {"pcm_f32le": b64(bytes(16000*4))}),
+    ("transcribe", {"words": [{"start": 0, "end": .5, "text": "x", "probability": float("nan")}]},
+     {"pcm_f32le": b64(bytes(16000*4))}),
+    ("embed", {"features": [0.]*1024, "encoder": "wrong"},
+     {"frames": 16, "encoder": "test", "rgb_u8": b64(bytes(16*256*256*3))}),
+])
+def test_response_contract_rejections(kind, result, values):
+    request = REQUESTS[kind].model_validate(values)
+    with pytest.raises(ValueError):
+        validate_response(kind, result, request, decode(kind, request))

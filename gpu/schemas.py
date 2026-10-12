@@ -120,6 +120,8 @@ def validate_response(kind, result, request, media):
         if len(rows) != len(media):
             raise ValueError("Missing tracked frames")
         h, w = media.shape[1:3]
+        if result["width"] != w or result["height"] != h:
+            raise ValueError("Invalid track dimensions")
         for index, row in enumerate(rows):
             if row["frame_index"] != index or row["time"] != index / request.fps:
                 raise ValueError("Invalid track timeline")

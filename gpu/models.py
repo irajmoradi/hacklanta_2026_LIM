@@ -1,5 +1,6 @@
 """Lazy real-model runners; one model family resident at a time."""
 import gc
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -7,7 +8,7 @@ import tempfile
 import numpy as np
 from PIL import Image
 
-from gpu.schemas import MODEL_ID, REQUESTS, decode, validate_response
+from gpu.schemas import MAX_RESPONSE, MODEL_ID, REQUESTS, decode, validate_response
 
 
 def rle(mask):
@@ -28,6 +29,8 @@ class Engine:
     def load(self, family):
         if family == self.family:
             return
+        if self.family == "track" and self.model is not None:
+            self.model.shutdown()
         self.model = self.processor = None
         self.family = None
         gc.collect()
@@ -100,6 +103,7 @@ class Engine:
                 self.model.handle_request({"type": "add_prompt", "session_id": sid,
                                            "frame_index": 0, "text": request.prompt})
                 rows = {}
+                response_bytes = 0
                 for response in self.model.handle_stream_request({
                     "type": "propagate_in_video", "session_id": sid,
                     "propagation_direction": "forward", "start_frame_index": 0,
@@ -116,6 +120,9 @@ class Engine:
                                             "box": [float(x.min()/w), float(y.min()/h),
                                                     float((x.max()+1)/w), float((y.max()+1)/h)]})
                     rows[index] = {"frame_index": index, "time": index/request.fps, "objects": objects}
+                    response_bytes += len(json.dumps(rows[index], separators=(",", ":")))
+                    if response_bytes > MAX_RESPONSE - 1024:
+                        raise ValueError("Tracking output exceeds response limit")
                 return {"width": w, "height": h, "frames": [rows[i] for i in range(len(frames))]}
             finally:
                 self.model.handle_request({"type": "close_session", "session_id": sid})
