@@ -1,0 +1,73 @@
+"""Offline regression tests. No credential or live provider is used."""
+import json
+import sys
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+import subprocess
+
+sys.path.insert(0, str(Path(__file__).parent))
+from budget import Budget
+
+
+def test_budget_is_persistent_and_counts_failed_requests(tmp_path):
+    path = tmp_path / 'calls.json'
+    calls = []
+    def fail(**kwargs):
+        calls.append(kwargs)
+        raise ValueError('mock failure')
+    for _ in range(5):
+        try:
+            Budget(path, 120).wrap(fail)(model='mock')
+        except (RuntimeError, ValueError):
+            pass
+    assert len(calls) == len(json.loads(path.read_text())) == 3
+
+
+def test_budget_concurrent(tmp_path):
+    budget = Budget(tmp_path / 'calls.json')
+    def reserve(_):
+        try:
+            return budget.reserve('mock')
+        except RuntimeError:
+            return 0
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        assert sorted(pool.map(reserve, range(10))) == [0]*7 + [1, 2, 3]
+
+
+def test_real_api_adapter_offline(tmp_path, monkeypatch):
+    monkeypatch.setenv('DEMO_OUT', str(tmp_path / 'out'))
+    from live_smoke_server import make_app
+    from server.api import public
+    source = tmp_path / 'test.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=320x180:rate=15',
+                    '-f', 'lavfi', '-i', 'sine=frequency=440', '-t', '2', '-c:v', 'libx264',
+                    '-threads', '1', '-c:a', 'aac', str(source)], check=True)
+    class Offline:
+        def analyze(self, job, key):
+            job['clips'] = [dict(id='a', start_seconds=0., end_seconds=1., description='Mock event')]
+            job['candidates'] = [dict(start=0., end=1., score=.8, signals={'rms': .8})]
+        def plan(self, job, key):
+            job['edit_plan'] = dict(segments=[dict(source_start=0., source_end=1.)])
+    app = make_app(tmp_path / 'jobs', Offline())
+    client = app.test_client()
+    try:
+        assert 'privacy_blur' in client.get('/api/info').json['frontend_capabilities']['options']
+        with source.open('rb') as video:
+            response = client.post('/api/jobs', data={'video': (video, 'test.mp4')})
+        assert response.status_code == 201
+        job_id = response.json['id']
+        response = client.post(f'/api/jobs/{job_id}/analyze', json=dict(game='auto', planner_v2=True, privacy_blur=True, share_kit=True))
+        assert response.status_code == 202
+        queue = app.extensions['job_queue']
+        with queue.lock:
+            future = queue.active.get(job_id)
+        if future:
+            future.result(timeout=10)
+        result = client.get(f'/api/jobs/{job_id}').json
+        assert result['options']['profiles'] and result['options']['planner']
+        assert result['options']['privacy'] and result['options']['social']
+        assert result['interest_curve'] == [{'time': .5, 'score': 80.}]
+        assert result['source_url'] == f'/api/stream/{job_id}'
+        assert result['status'] != 'error'
+    finally:
+        app.extensions['job_queue'].close()
