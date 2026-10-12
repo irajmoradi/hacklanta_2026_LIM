@@ -4,8 +4,10 @@ Run from repo root: PYTHONPATH=full_app python full_app/tests/measure_fix5.py VI
 Print aggregate counts only: OCR player names are deliberately not persisted.
 """
 import json
+import os
 import sys
 import time
+import warnings
 from collections import Counter
 from profiles import detect_game
 from profiles.detection import tesseract_ocr
@@ -16,6 +18,10 @@ from pathlib import Path
 
 
 if __name__ == '__main__':
+    # Avoid OpenMP oversubscription on the shared runner. A timed-out reader
+    # must not silently produce a misleading "full VOD" detection count.
+    os.environ['OMP_THREAD_LIMIT'] = '1'
+    warnings.filterwarnings('error', message='OCR failed; disabling OCR:.*', category=RuntimeWarning)
     path = Path(sys.argv[1])
     started = time.monotonic()
     baseline = '--baseline' in sys.argv[2:]
