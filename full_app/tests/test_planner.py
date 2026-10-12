@@ -77,7 +77,7 @@ def test_effects_speed_peak_trims_and_styles(style):
     # FX-2 replaces fixed style effects with rich, seeded stacks in every style.
     assert 1 <= len(names) <= 4
     assert 2 <= len([s for s in plan.sfx if s.clip_id == c.id]) <= 5
-    assert all(r.position == "top_right" for r in plan.reactions)
+    assert all(r.position == "bottom_right" for r in plan.reactions)
     assert plan.reactions[-1].start == pytest.approx(c.peak)
     assert all(e.name in VIDEO_EFFECTS for e in plan.effects)
     assert all(s.name in SOUND_EFFECTS for s in plan.sfx)

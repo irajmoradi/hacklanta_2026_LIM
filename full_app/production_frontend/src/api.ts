@@ -331,7 +331,7 @@ export class EditorApi {
     const seed = random === previousSeed ? (random + 1) >>> 0 : random;
     if (this.mode !== 'jobs') throw new Error('Reroll requires the jobs API.');
     await request(`/api/jobs/${encodeURIComponent(id)}/plan`, 'POST', {
-      chaos: options.chaos ?? (options.mode === 'mean' ? .6 : .35), seed, planner: true,
+      chaos: options.chaos ?? (options.mode === 'mean' ? .6 : .35), seed, planner: true, editor_agent: false,
       preset, mode: options.mode, style: options.style,
     });
     return seed;

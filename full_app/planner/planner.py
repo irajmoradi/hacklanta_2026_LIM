@@ -74,7 +74,7 @@ def _decorate(plan: RenderPlan, sources: dict[str, RankedClip]) -> None:
             if plan.mode == "nice" and label in ("roast", "bruh", "fail"):
                 label = "wholesome"
             plan.reactions.append(Reaction(**beat, label=label,
-                position="top_right" if plan.aspect == "9:16" else "bottom_right"))
+                position="bottom_right"))
         transition = "fade_in" if cinematic else "cut"
         if loud and c.phase == "climax":
             transition = "flash_white"

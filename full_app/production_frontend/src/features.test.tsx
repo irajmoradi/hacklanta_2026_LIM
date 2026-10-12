@@ -134,3 +134,15 @@ it("applies full experience while keeping privacy off and editable", async () =>
   await user.click(privacy);
   expect(privacy).toBeChecked();
 });
+
+it('edits chaos, reaction size and clean policy independently', async () => {
+  window.history.replaceState({}, '', '/?mock=1');
+  render(<App />);
+  const slider = await screen.findByRole('slider', {name: 'Chaos'});
+  fireEvent.change(slider, {target: {value: '72'}});
+  expect(slider).toHaveValue('72');
+  fireEvent.change(screen.getByLabelText('Reaction size'), {target: {value: 'medium'}});
+  expect(screen.getByLabelText('Reaction size')).toHaveValue('medium');
+  await userEvent.click(screen.getByRole('checkbox', {name: /Clean reactions/}));
+  expect(screen.getByRole('checkbox', {name: /Clean reactions/})).toBeChecked();
+});

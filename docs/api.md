@@ -22,6 +22,19 @@ multiple Gunicorn workers, or preload the app before forking.
 
 ## Workflow
 
+FINAL-1 planning options: `chaos` is a finite number from 0 to 1 (defaults .35
+nice / .6 mean); `seed` is an integer from 0 to 4294967295 (default 0). Changing
+either invalidates the plan and rendered output while retaining analysis. Status
+returns `seed` and the full plan with VFX/SFX assignments. To reroll without paid
+calls after analysis, POST `/api/jobs/<id>/plan` with
+`{"planner":true,"editor_agent":false,"chaos":0.6,"seed":2027}`.
+Keep other options unchanged to reuse analysis. A failed local replan does not
+fall back to a paid provider.
+
+Reaction options: `reaction_size` is `small`, `medium`, or `large` (default);
+`clean` is boolean (default false). These invalidate rendering only. Clean
+excludes pack clips marked explicit. Nice prefers non-explicit; mean allows both.
+
 | Method / path | Input | Result |
 | --- | --- | --- |
 | `POST /api/jobs` | Multipart `video` | 201, job snapshot with `id`, `job_id`, metadata |

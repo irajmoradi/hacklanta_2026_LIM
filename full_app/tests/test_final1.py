@@ -101,3 +101,12 @@ def test_visible_head_layout(preset,w,h,low,high):
     assert low <= large/min(w,h) <= high
     assert y+large > h and y > h/2
     assert layout(w,h,preset,'small')[0] < layout(w,h,preset,'medium')[0] < large
+
+
+def test_sam_sample_budget_configuration(monkeypatch):
+    from sam import Config
+    monkeypatch.setenv('SAM_MAX_SAMPLES', '4')
+    assert Config.from_env().max_samples == 4
+    monkeypatch.setenv('SAM_MAX_SAMPLES', '0')
+    with pytest.raises(ValueError):
+        Config.from_env()

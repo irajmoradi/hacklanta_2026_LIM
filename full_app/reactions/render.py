@@ -112,7 +112,17 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
     if alpha_file or mask_file:
         matte_path = Path(alpha_file or mask_file)
         left, top, right, bottom = matte_bounds(str(matte_path), matte_path.stat().st_mtime_ns, bool(alpha_file))
-        geometry = (f'crop=iw*{right-left}:ih*{bottom-top}:iw*{left}:ih*{top},' + geometry)
+        portrait_info = next(s for s in probe(matte_path)['streams'] if s['codec_type'] == 'video')
+        ratio = portrait_info['width']*(right-left)/(portrait_info['height']*(bottom-top))
+        # Landscape sizes the visible height; portrait exports size visible width.
+        head_width = size if preset == 'vertical' else max(2, round(size*ratio/2)*2)
+        head_height = max(2, round(size/ratio/2)*2) if preset == 'vertical' else size
+        margin = max(2, int(size*.025))
+        x = video['width']-head_width+margin if position or PRESETS[preset].endswith('right') else -margin
+        y = margin if position == 'top_right' else video['height']-head_height+margin
+        geometry = (f'crop=iw*{right-left}:ih*{bottom-top}:iw*{left}:ih*{top},'
+                    f'scale={head_width}:{head_height}')
+        size = head_height
     graph += [
         f'[portrait]trim=duration={length},{geometry},format=rgba,{crop_mask}'
         f'fade=t=in:st=0:d={fade}:alpha=1,fade=t=out:st={length-fade}:d={fade}:alpha=1,'

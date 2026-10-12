@@ -192,7 +192,9 @@ export default function App() {
         );
   };
   const option = <K extends keyof Options>(key: K, value: Options[K]) => {
-    setOptions((o) => ({ ...o, [key]: value }));
+    setOptions((o) => ({ ...o, [key]: value,
+      ...(key === 'mode' && o.chaos === (o.mode === 'mean' ? .6 : .35)
+        ? {chaos: value === 'mean' ? .6 : .35} : {}) }));
     if (clips.length && ["game", "profile", "style", "provider", "use_signals", "audio_ai", "planner_v2", "window_scoring", "chat", "chat_offset", "twitch_vod_id", "fx_intensity"].includes(key)) setNeedsAnalysis(true);
   };
   const kept = clips.filter((c) => c.keep);

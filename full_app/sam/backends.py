@@ -36,6 +36,7 @@ class Config:
                    url=os.getenv("SAM_ENDPOINT_URL", ""), key=os.getenv("SAM_API_KEY", ""),
                    timeout=float(os.getenv("SAM_TIMEOUT", "2")),
                    budget=float(os.getenv("SAM_CLIP_BUDGET", "6")),
+                   max_samples=int(os.getenv("SAM_MAX_SAMPLES", "12")),
                    checkpoint=os.getenv("SAM2_CHECKPOINT", ""),
                    model_config=os.getenv("SAM2_CONFIG", cls.model_config),
                    device=os.getenv("SAM2_DEVICE", "cpu"))

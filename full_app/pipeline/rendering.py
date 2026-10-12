@@ -201,6 +201,10 @@ def _render_job(pipeline, job, key):
                         peak = clip.get('signals', {}).get('kill_time', clip.get('peak_time'))
                         local_peak = ((peak-original_segments[index]['source_start']) / segment.speed
                                       if isinstance(peak, (float, int)) else duration/2)
+                        native_clips = job.get('planner_plan', {}).get('clips', [])
+                        if peak is None and index < len(native_clips):
+                            native = native_clips[index]
+                            local_peak = native['peak']-native['start']
                         local_peak = min(max(0, local_peak), max(0, duration-1/validated.fps))
                         spotlight(path, output, 0, duration, effect='spotlight',
                                   kill_time=local_peak, freeze_seconds=0)
