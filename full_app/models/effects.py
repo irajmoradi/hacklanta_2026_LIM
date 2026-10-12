@@ -325,6 +325,9 @@ def build_vf_chain(vfx_list: list[str], width: int = 1920, height: int = 1080, f
         if name == "none" or name not in VIDEO_EFFECTS:
             continue
         effect = VIDEO_EFFECTS[name]
+        if name in ('skull_rain', 'fire_rain', 'laugh_rain', 'confetti_ace'):
+            from fx.sprites import filter_for
+            effect = {**effect, 'filter': filter_for(name, width, height)}
         if effect["filter"]:
             selected.append(effect)
         if effect.get("audio_filter"):
