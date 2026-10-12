@@ -11,10 +11,14 @@ const out=path.join(__dirname,'out');
 const front=path.join(root,'full_app/production_frontend');
 const {chromium}=createRequire(path.join(front,'package.json'))('@playwright/test');
 async function main(){
-  const log=fs.openSync(path.join(out,'vite.log'),'a');
-  const vite=spawn('npm',['run','dev','--','--host','127.0.0.1','--port','5178'],{cwd:front,stdio:['ignore',log,log],detached:true});
-  vite.unref();
-  fs.writeFileSync(path.join(out,'vite_pid.json'),JSON.stringify({pid:vite.pid}));
+  let ready=false;
+  try { ready=(await fetch('http://127.0.0.1:5178')).ok; } catch {}
+  if(!ready){
+    const log=fs.openSync(path.join(out,'vite.log'),'a');
+    const vite=spawn('npm',['run','dev','--','--host','127.0.0.1','--port','5178','--strictPort'],{cwd:front,stdio:['ignore',log,log],detached:true});
+    vite.unref();
+    fs.writeFileSync(path.join(out,'vite_pid.json'),JSON.stringify({pid:vite.pid}));
+  }
   const browser=await chromium.launch({headless:true,args:['--no-sandbox']});
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
   const errors=[];
@@ -40,7 +44,7 @@ async function main(){
     const real=await page.request.get('http://127.0.0.1:8000/api/jobs/'+uploaded.id);
     await route.fulfill({status:201,contentType:'application/json',body:await real.text()});
   });
-  await page.locator('input[type=file]').first().setInputFiles({name:'audit-existing-job.mp4',mimeType:'video/mp4',buffer:Buffer.from('audit-session-attachment')});
+  await page.locator('input[type=file]').first().setInputFiles(path.join(out,'input_4min.mp4'));
   await page.waitForTimeout(4000);
   await page.screenshot({path:path.join(out,'ui_review_full.png'),fullPage:true});
   const director=page.getByText('Director',{exact:true}).first();
@@ -55,7 +59,8 @@ async function main(){
   }
   fs.writeFileSync(path.join(out,'ui_result.json'),JSON.stringify({errors,
     reroll_controls:await page.getByRole('button',{name:/reroll/i}).count(),
-    chaos_controls:await page.getByLabel(/chaos/i).count(),
+    // Do not mistake the Profile option "Comedy & chaos" for a Chaos control.
+    chaos_controls:await page.getByLabel(/^chaos(?:\s|$)/i).count(),
     director_count:await director.count(),
     text:await page.locator('body').innerText(),
     session_attachment:'Only POST /api/jobs was mapped to the existing real job. No fake analysis/render/status/media; no new inference.'},null,2));

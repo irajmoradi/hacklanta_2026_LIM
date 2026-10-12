@@ -117,11 +117,13 @@ def sources():
 def main():
     OUT.mkdir(exist_ok=True,parents=True)
     intro=(ROOT/'demo_video/audit/report_intro.md').read_text(encoding='utf-8')
+    visual=(ROOT/'demo_video/audit/visual_review.md').read_text(encoding='utf-8')
+    intro=intro.replace('## Verification record',visual+'\n\n## Verification record')
     text=[intro,'\n## Reviewed feature findings\n',
       '✅ = works on ordinary defaults for the stated scope; 🟡 = opt-in/library feature with stated evidence; 🟠 = partial or unproven broader promise; 🔴 = absent from the stock path; ⏳ = separate running branch, not shipped in the audited snapshot. A synthetic test does not certify a real ML model or external service.\n',
       '| ID / promise | Code location | Stock reachability / option | Meaningful test | Real-output evidence / limit | Verdict | Exact fix |',
       '|---|---|---|---|---|---|---|']
-    for row in FINDINGS:
+    for row in sorted(FINDINGS,key=lambda row:int(row[0][1:])):
         fid,promise,loc,reach,test,evidence,verdict,fix=row
         text.append('| '+ ' | '.join(map(esc,[f'<a id="{fid.lower()}"></a>**{fid}** {promise}',code_location(loc),reach,test,evidence,verdict,fix]))+' |')
     text+=['\n## Promise-by-promise source ledger\n',
@@ -134,7 +136,7 @@ def main():
         inventory.append(inv)
         if path.stem=='AUDIT-2':
             inv['scope']='Audit instructions, not a product promise'; continue
-        text+=['\n### '+label+'\n','| Source / promise | Code · reachability · test · output | Verdict | Exact next action |','|---|---|---|---|']
+        text+=['\n### '+label+'\n','| Source / promise | Code location | Stock reachability / option | Meaningful test | Real-output evidence / limit | Verdict | Exact next action |','|---|---|---|---|---|---|---|']
         for line,claim in paragraphs(path):
             if len(claim)<15: continue
             if label.endswith('AUDIT-2-discord.md'):
@@ -146,10 +148,13 @@ def main():
                 # The final thread contains unrelated Village hosting/billing advice.
                 excluded=any(x in claim for x in ('Friendship Village cost','what is cost of it','how needed is vultr','Is the. Vultr needed','Vultr credits:','we can run it till late November','what can be done to reduce costs','Honestly, not very needed','Good question Mario','for the vultr credits'))
             verdict='Outside LIM product scope' if excluded else '🟠 evidence scope limited; see findings'
-            action='No editor change; not a gameplay-product promise.' if excluded else 'Apply the exact fix(s) in '+refs+'; keep any unproved clause open, rather than treating a module/test name as acceptance.'
+            primary=next(row for row in FINDINGS if row[0]==ids[0])
+            action='No editor change; not a gameplay-product promise.' if excluded else primary[7]+' Related clauses: '+refs+'. Unproved broader clauses remain open.'
             n+=1; inv['rows']+=1
             ledger.append({'id':n,'source':label,'line':line,'claim':claim,'findings':ids,'verdict':verdict})
-            text.append('| '+esc(f'{label}:{line} — {claim}')+' | '+refs+' | '+verdict+' | '+action+' |')
+            values=[f'{label}:{line} — {claim}',code_location(primary[2])+'; '+refs,
+                    primary[3],primary[4],primary[5],verdict,action]
+            text.append('| '+' | '.join(esc(value) for value in values)+' |')
     text+=['\n## Coverage inventory\n',f'{len(FINDINGS)} reviewed feature findings; {n} source rows; {len(inventory)} source files. See `demo_video/audit/out/sources.json` for exact hashes and `source_ledger.json` for machine-readable rows.\n',
            '| Source | SHA-256 | Prose rows |','|---|---|---|']
     for row in inventory: text.append(f"| {row['source']} | `{row['sha256']}` | {row['rows']} |")

@@ -20,19 +20,19 @@ owner rather than competing branches.
 | Rank | Gap and concrete evidence | Exact fix / suggested split |
 |---|---|---|
 | 1 | Stock `gemini-3.1-flash-lite-preview` fails with “Gemini model unavailable”; six attempts reserved before the job fails. F59. | **PROVIDER**: choose a verified available model and stop model-not-found fan-out after the first response. **GLUE**: use the shared model resolver in app/API. |
-| 2 | Full share-kit builder uses the original plan, not beat-trimmed/overlapped output clocks; cards are not passed as an intro duration. It can reject a finished video or mislabel its chapters. F31. | **GLUE**: pass measured executed timeline; publish video independently of optional metadata. **SOCIAL**: consume output starts/durations and retain failure reasons. |
+| 2 | Full landscape fails at the FFmpeg transition join under the worker's 8 GiB address-space limit, reported falsely as a Gemini error. Same plan renders outside the limit. Share-kit chapters also use the wrong clock. F62/F31. | **RENDER**: bound transition memory and test six segments plus cards inside isolation. **SERVER**: preserve safe error categories. **GLUE/SOCIAL**: pass executed timeline including cards/overlaps. |
 | 3 | Nice-mode filler can include unverified signal windows and misleading model captions; real scored caption calls Phoenix's Run It Back “Yoru”, another names “Omen”. Neutral scores only suppress exact candidates, not overlapping alternate proposals. F14/F58. | **GLUE**: preserve negative/neutral interval coverage across proposal sources and label unverified fill. **PLANNER**: require context/POV quality before filling; validate actor/event captions against evidence. |
-| 4 | Visible VFX remain mostly short grades rather than the requested obvious meme edits; bold effects are separate FX-3 work. F15/F17. | **FX**: integrate bold registry/placement minimums; assert >=3 visible effects/clip, >=2 at hit, >=0.35s, then inspect frames and motion. |
+| 4 | Visible VFX remain mostly short grades; freeze masks the planned RIP text at 2.517s in mean output. Bold effects are separate FX-3 work. F15/F17/F63. | **FX/RENDER**: integrate bold registry/placement minimums; composite text after temporal effects; assert >=3 visible effects/clip, >=2 at hit, >=0.35s, then inspect frames and motion. |
 | 5 | Reactions have one-second maximum slots and fixed 65%-of-clip timing; longer speech can be cut off. F25. | **GLUE**: reserve slots around verified events using actual selected line duration; **REACTIONS**: preserve phrase/audio tail, expose effective timing. |
 | 6 | Head-only mattes exist, but default size is small; readable streamer-sized heads remain FINAL-1 work. F26. | **REACTIONS**: integrate size/placement controls; inspect landscape and vertical readability and jaw/hair edges. **UI/SERVER/GLUE**: carry the option. |
 | 7 | Chaos/seed are rejected over HTTP; no Reroll control in the audited UI. F16. | **SERVER/GLUE/UI**: integrate FINAL-1 and test reproducibility plus paid-call-free reroll against actual exported effects. |
-| 8 | Nano Banana never executes in the stock share-kit call: no image client or option is supplied. Local template covers are not AI generation. F32. | **SOCIAL/PROVIDER**: integrate THUMB-1; **SERVER/GLUE/UI**: complete option, budget, provider/reason and warning plumbing. A library merge alone is insufficient. |
+| 8 | Nano Banana never executes in stock share kit; original AI intro and car/fish outro are replaced by plain black text cards in Full v2. F32/F61. | **SOCIAL/PROVIDER**: integrate THUMB-1; **SERVER/GLUE/UI**: finish option/budget/provenance plumbing. Coordinate new FISH-1 restoration within GLUE/RENDER ownership; a library merge alone is insufficient. |
 | 9 | Full experience leaves Gemini window scoring unchecked and ordinary defaults do not select Full. F08. | **UI/GLUE**: share a single preset contract; show paid-call/dependency implications; assert the button's real serialized request. |
 | 10 | SAM weights are present but no `sam2` in the audit environment; fallback motion crop is not SAM spotlight. F28. | **MODELS**: provide documented optional runtime/checkpoint/config and realistic CPU time budget; verify nondegraded masks and spotlight pixels in stock exports. |
 | 11 | “Word captions” become animated editorial words without Whisper; audio AI also uses heuristic fallbacks. F12/F22. | **MODELS**: provision cached speech/VAD models; **CAPTIONS**: return transcript provenance and test real spoken-word timing. |
 | 12 | Pack has 80 clips and nine explicit flags, but stock loader discards `explicit`/style; no clean option. F27. | **REACTIONS**: integrate FINAL-1 metadata/filtering; **SERVER/UI/GLUE**: forward clean policy and verify selection across label fallbacks. |
 | 13 | Full rendering loses the promised speed advantages: reaction processing makes segments sequential and captions/heads/narration add encodes. F49. | **RENDER**: parallelize isolated segment postprocessing and consolidate safe passes; report a matched, idle-runner Full benchmark rather than small synthetic speedups. |
-| 14 | Default `python app.py` opens the legacy UI; React has disabled VOD/chat/music uploads, disabled FX intensity/own-name controls, no bearer-auth transport. F35/F39/F40/F52. | **UI/SERVER**: ship a coherent authenticated React entrypoint and implement asset/import routes; **DEPLOY**: exercise real Compose API/UI and include frontend tests in CI. |
+| 14 | React review shows 155.7s of candidates rather than the 29.312s executed edit. Default `python app.py` serves legacy UI; React lacks several enabled inputs/auth transport. F35/F39/F40/F52/F60. | **UI/SERVER**: separate candidate pool from planned timeline, ship a coherent authenticated entrypoint and implement asset/import routes; **DEPLOY**: test real Compose/API/UI and include frontend tests in CI. |
 | 15 | Claimed advanced roast templates/local-VLM sampler/search-all-windows/friends stats are incomplete stock integrations. F11/F37/F42/F43. | **GLUE/SERVER**: wire explicit library adapters, preserve player/window/transcript data; **UI**: expose only implemented capabilities. Keep external publish/bot/capture/desktop labeled separate opt-ins. |
 
 Non-overlapping implementation ownership (test paths should follow the same
@@ -122,6 +122,12 @@ the runner-only reaction pack. It does not change the product or test source.
 | `bash demo_video/audit/remote_checks.sh "bash demo_video/audit/frontend_checks.sh"` | TypeScript/Vite build, **35 Vitest**, **3 Playwright** passed, exit **0**. Browser tests are mocked, separate from real-job screenshots. |
 | `bash demo_video/audit/remote_checks.sh "python demo_video/audit/probes.py"` | Contract/capability/pack/library/artifact probes, exit **0**; zero inference. |
 | `bash demo_video/audit/remote_checks.sh "PYTHONPATH=.:full_app python -m pytest -q gpu/tests && PYTHONPATH=.:full_app python -m pytest -q desktop/tests && python -m pytest -q demo_video/v3/test_v3.py && node --test desktop/tests/runtime.test.cjs"` | **30 GPU**, **5 desktop Python**, **10 demo**, **7 desktop Node** passed, exit **0**, after installing `gpu/requirements-test.txt`. No deployment/GUI proof. |
+| `ssh` stdin-key launch of `.venv/bin/python demo_video/audit/resume_live.py` | Driver exit **0**; analysis and two vertical variants succeeded; landscape status **error**. **14/25** total attempts. Driver completion is not a claim that all variants passed. |
+| `bash demo_video/audit/remote_checks.sh "python demo_video/audit/diagnose_render.py landscape"` and the same with `--bounded` | Both diagnostic harness exits **0**. Unbounded stock renderer succeeded at 44.053s; bounded run captured FFmpeg `Cannot allocate memory` at the join. No paid calls; neither substitutes for API acceptance. |
+| `bash demo_video/audit/remote_checks.sh "python demo_video/audit/download_check.py && python demo_video/audit/inspect_outputs.py && node demo_video/audit/browser.cjs"` | Exit **0**; four HTTP 200 downloads, three complete video decodes, 369 event frames, real-job UI screenshots. |
+| `bash demo_video/audit/remote_checks.sh "node demo_video/audit/browser.cjs && python -m pytest -q demo_video/audit/test_evidence.py"` | **5 passed**, 0.53s, exit **0**; validates artifact coverage, provenance separation, call ceiling, UI controls and all code/test references. |
+| `bash demo_video/audit/remote_checks.sh "python -m pytest -q demo_video/audit/test_evidence.py && python demo_video/audit/stop_servers.py"` | Final **5 passed**, 0.40s, exit **0**; stopped only the recorded audit API/Vite processes after checking ownership. Evidence remains on disk. |
+| `python -X utf8 demo_video/audit/build_report.py`; `python -X utf8 demo_video/audit/verify_scope.py`; `git diff --check` | Local exit **0** each; report references generated, all 20 changed files in allowed paths, nonprinting runtime-key scan clean. |
 
 Failed attempts are retained: an initial inline shell command failed quoting
 before pytest (remote 2/local 1); the initial optional-suite collection lacked
@@ -129,6 +135,10 @@ FastAPI (remote 2/local 1); a combined GPU/demo/desktop process had 43 passes an
 two desktop setup errors (exit 1) because the demo test's `render` module shadows
 the production `render` package. Separate processes passed. This is a test
 namespace collision, not evidence of a desktop product runtime failure.
+The first audit-evidence check had **4 passed, 1 failed**, exit **1**: its broad
+`/chaos/i` label locator counted the Profile option “Comedy & chaos”. Narrowing
+that audit-only locator to a label beginning with Chaos fixed the false positive;
+the rerun above passed. No product test or implementation was changed.
 
 Reproduce offline checks with the commands above. Reproduce live evidence only
 with an explicit budget and an env/stdio key: `live_run.py` records the initial
@@ -152,6 +162,12 @@ attribution unverified. THUMB-1 documents generated image candidates and an
 explicit outstanding pipeline/UI integration handoff. The integrator merged
 THUMB-1 into `Extension` during this audit (`3b95965`); it is **not** in the
 audited `8db1f6d` snapshot, and that merge alone does not enable its stock caller.
+By the final read-only check, FX-3 was at `123963e` with its QA report, while
+FINAL-1 remained `ad69b76`, DEADLOCK-1 `4e3001c` and THUMB-1 `bf56b57`.
+`Extension` had additionally dispatched FISH-1 (`12f42e8`) and PARITY-1 (`e449a17`)
+after this snapshot; F61 records the original-card regression they address.
+These moving branches were inspected as ongoing work, never merged into this
+audit or substituted for its real-output evidence.
 
 No real OW2/League, multi-POV recordings, V-JEPA trained head, local VLM server,
 external publishing, bot delivery, OBS device, desktop GUI/keychain, Modal

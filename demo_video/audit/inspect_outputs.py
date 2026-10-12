@@ -3,6 +3,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 
 import cv2
 import numpy as np
@@ -44,13 +45,23 @@ def contact(video, events, target):
 def inspect(label):
     job=json.loads((OUT/(label+'.json')).read_text())
     video=OUT/(label+'.mp4')
+    api_status,api_error=job['status'],job.get('error')
+    provenance='stock HTTP API output'
     if not video.exists():
-        # A failed post-render share stage can leave valid media: preserve and label it.
-        candidate=OUT/'workspace'/job['id']/'output.mp4'
+        # Never reuse the mutable shared workspace: it may contain another preset.
+        diagnostic=OUT/(label+'_diagnostic.json')
+        candidate=OUT/('diagnostic_'+label)/'output.mp4'
         if candidate.exists():
             import shutil
             shutil.copyfile(candidate,video)
+            job=json.loads(diagnostic.read_text())
+            provenance='separate no-key diagnostic of the same saved API plan; NOT a successful API export'
+            share=candidate.parent/'share'
+            if share.exists(): shutil.copytree(share,OUT/(label+'_share'),dirs_exist_ok=True)
         else: return dict(status=job['status'],error=job.get('error'),no_video=True)
+    elif (OUT/(label+'_diagnostic.json')).exists() and api_status=='error':
+        job=json.loads((OUT/(label+'_diagnostic.json')).read_text())
+        provenance='separate no-key diagnostic of the same saved API plan; NOT a successful API export'
     plan=job.get('render_plan') or job.get('edit_plan') or {}
     timeline=job.get('render_evidence',{}).get('timeline',[])
     events=[(0,'opening'),(.5,'intro'),(1.5,'first play')]
@@ -86,7 +97,7 @@ def inspect(label):
     save(OUT/(label+'_segments.json'),segments)
     save(OUT/(label+'_audio.json'),audio)
     subprocess.run(['ffmpeg','-v','error','-i',str(video),'-f','null','-'],check=True)
-    return dict(status=job['status'],error=job.get('error'),duration=duration,
+    return dict(status=api_status,error=api_error,provenance=provenance,duration=duration,
         dimensions=[probe['streams'][0]['width'],probe['streams'][0]['height']],
         frames=n,segments=len(segments),sfx=sum(len(s['sfx']) for s in segments),
         timed_effects=sum(len(s['timed_effects']) for s in segments),words=sum(s['words'] for s in segments),
@@ -97,7 +108,7 @@ def inspect(label):
 
 if __name__=='__main__':
     summary={}
-    for name in ('landscape','vertical','mean_vertical'):
+    for name in (sys.argv[1:] or ('landscape','vertical','mean_vertical')):
         if (OUT/(name+'.json')).exists(): summary[name]=inspect(name)
     if (OUT/'input_4min.mp4').exists():
         contact(OUT/'input_4min.mp4',[(t,f'source +{t}s') for t in range(0,240,10)],OUT/'source_frames')

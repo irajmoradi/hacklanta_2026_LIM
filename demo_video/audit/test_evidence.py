@@ -33,6 +33,18 @@ def test_budget_provenance_and_failed_default_are_retained():
     assert before['status']=='error'
     assert 'model unavailable' in before['error']
 
+
+def test_api_success_and_diagnostic_are_not_conflated():
+    summary=json.loads((OUT/'summary.json').read_text())
+    assert summary['landscape']['status']=='error'
+    assert 'NOT a successful API export' in summary['landscape']['provenance']
+    for name in ('vertical','mean_vertical'):
+        assert summary[name]['status']=='done'
+        assert summary[name]['provenance']=='stock HTTP API output'
+    downloads=json.loads((OUT/'http_downloads.json').read_text())
+    assert all(row['status']==200 for row in downloads['checks'])
+    assert downloads['checks'][0]['sha256']==summary['mean_vertical']['sha256']
+
 def test_browser_evidence_covers_controls_review_director_and_export():
     for name in ('ui_stock_legacy.png','ui_settings_defaults.png','ui_settings_full.png',
                  'ui_review_full.png','ui_director.png','ui_export.png'):
