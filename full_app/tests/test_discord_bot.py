@@ -271,3 +271,68 @@ def test_redirect_and_private_ip_rejected(config, tmp_path, monkeypatch):
         finally:
             await resolver.close()
     run(scenario())
+
+
+def test_real_job_api_contract_with_synthetic_video(config, tmp_path, video):
+    """Exercise real Flask validation/queue with a mocked paid/render pipeline."""
+    from server.api import create_app
+    calls = []
+
+    def analyze(job, key):
+        calls.append("analyze")
+        assert job["options"]["mode"] == "mean"
+        assert job["options"]["prompt"] == "Gameplay context: Halo"
+        job["clips"] = [{"id": "0", "start_seconds": 0, "end_seconds": 1}]
+
+    def plan(job, key):
+        calls.append("plan")
+        job["edit_plan"] = {"segments": [{"source_start": 0, "source_end": 1}]}
+
+    def render(job, key):
+        calls.append("render")
+        assert job["options"]["preset"] == "vertical"
+        assert job["options"]["generate_thumbnails"] is False
+        output = Path(job["dir"]) / "output.mp4"
+        output.write_bytes(Path(job["source"]).read_bytes())
+        job["output"] = str(output)
+
+    app = create_app({"TESTING": True, "WORKSPACE": str(tmp_path / "workspace")},
+                     SimpleNamespace(analyze=analyze, plan=plan, render=render))
+    client = app.test_client()
+
+    class FlaskAPI:
+        async def fetch_source(self, url, path, limit):
+            path.write_bytes(video.read_bytes())
+
+        async def upload(self, path):
+            with path.open("rb") as stream:
+                response = client.post("/api/jobs", data={"video": (stream, path.name)})
+            assert response.status_code == 201
+            return response.json
+
+        async def action(self, job_id, action, payload):
+            response = client.post(f"/api/jobs/{job_id}/{action}", json=payload)
+            assert response.status_code == 202
+            return response.json
+
+        async def snapshot(self, job_id):
+            return client.get(f"/api/jobs/{job_id}").json
+
+        async def download(self, job_id, path, limit):
+            response = client.get(f"/api/jobs/{job_id}/download")
+            try:
+                assert response.status_code == 200
+                path.write_bytes(response.data)
+            finally:
+                response.close()
+            return True
+
+    sink = fake_sink()
+    try:
+        run(MontageService(replace(config, timeout=10), FlaskAPI()).run(
+            7, 123, Source("unused", "game.mp4"), Options("mean", "vertical", "Halo", 30), sink))
+        assert calls == ["analyze", "plan", "render"]
+        sink.deliver.assert_awaited_once()
+        assert sink.send_status.return_value.edit.await_args.kwargs["content"] == "Montage ready!"
+    finally:
+        app.extensions["job_queue"].close()

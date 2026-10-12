@@ -12,7 +12,8 @@ Only configured guild channels accept submissions; DMs and bot messages are igno
    Content Intent** on its Bot page for automatic attachment/link submissions.
 3. Invite it with the `bot` and `applications.commands` scopes. In the allowed
    channels grant View Channel, Send Messages, and Attach Files. No administrator
-   permission is needed. Slash commands are synced globally at startup and may
+   permission is needed. Grant Read Message History for replies to submissions.
+   Slash commands are synced globally at startup and may
    take time to become visible. Threads are allowed only if their exact IDs are
    configured, and need Send Messages in Threads.
 4. Install and run from `full_app` (use environment variables or your process
@@ -123,6 +124,25 @@ attachment/link routing, progress edits, option validation, rate limiting,
 bounded streaming, error cleanup, title fallback, and oversize delivery. SDK-specific
 tests skip when the optional dependency is absent; the first command installs it
 so those tests run too. No Discord connection or Gemini request occurs in tests.
+An additional contract test generates synthetic video with ffmpeg and exercises
+the real Flask upload/validation/job queue/download routes with processing mocked.
+
+Validation on the Linux runner (2026-10-12):
+
+- Dependency-install plus focused command above: initially exit 1 (23 passed,
+  one assertion compared `AllowedMentions` object identity). Fixed the assertion.
+- Focused command without reinstall: initially exit 1 (24 passed, one failure
+  exposed `discord.File` not supporting context managers). Fixed explicit cleanup;
+  next run passed all 25 tests, exit 0.
+- After adding the synthetic API contract test, focused command passed all
+  **26 tests**, exit 0.
+- Full suite command above: **185 passed, 5 skipped, 4 failed**, exit 1
+  (before adding the extra contract test). Existing `eval/test_app_smoke.py`
+  expects the removed `app.WORKSPACE` global. Three preset variants in
+  `tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render`
+  render successfully but expect five missing-module warnings instead of the
+  four now produced with the signals module installed. These unrelated tests
+  were not changed by EXT-17. Live provider calls: **0**.
 
 Discord integration follows the official [discord.py API](https://discordpy.readthedocs.io/en/stable/api.html)
 and [application command API](https://discordpy.readthedocs.io/en/stable/interactions/api.html).
