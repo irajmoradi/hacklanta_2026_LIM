@@ -263,6 +263,12 @@ class FFmpegRunner:
         Uses NVENC GPU for fast encoding. Segments processed sequentially
         to avoid NVENC session limits, but each segment encodes fast on GPU.
         """
+        # Explicit opt-in keeps old planner payloads and defaults unchanged.
+        from render.plan import RenderPlan
+        if isinstance(edit_plan, RenderPlan) or edit_plan.get("render_version") == 2:
+            from render.engine import Renderer
+            return Renderer(self).render(edit_plan)
+
         segments = edit_plan.get("segments", [])
         if not segments:
             raise ValueError("Edit plan has no segments")
