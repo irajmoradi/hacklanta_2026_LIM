@@ -304,7 +304,7 @@ def create_app(config=None, pipeline=None):
         if job['status'] != 'done' or not job.get('share_kit'):
             return jsonify(error='No share kit yet'), 404
         target = media_path(job, Path(job['dir']) / 'share' / filename)
-        if not target.is_relative_to((Path(job['dir']) / 'share').resolve()):
+        if not target.is_relative_to((Path(job['dir']) / 'share').resolve()) or not target.is_file():
             raise KeyError(job_id)
         return send_file(target, as_attachment=True)
 

@@ -79,9 +79,9 @@ FIX-1 makes no paid calls and does not read the supplied Gemini key.
 - P1-01: fixed for server routes, local binding and Compose port exposure. Browser
   authentication transport remains outside allowed paths.
 - P1-02: fixed with bounded streams/subscribers and single-owner concurrent server.
-- P1-06: fixed admission and duration enforcement; unsafe music paths fail closed.
+- P1-06: partially fixed: admission and duration enforcement are implemented; unsafe music paths fail closed.
   Authorized music asset IDs are not implemented because no asset service exists.
-- P1-10: production Linux deadlines, cancellation, quotas and retention implemented.
+- P1-10: partially fixed: production Linux deadlines, cancellation, quotas and retention implemented.
   Strict aggregate filesystem quotas and non-HTTP library subprocess migration
   remain deployment/out-of-scope work; Windows memory enforcement is not supplied.
 - P2-11: API/security docs reconciled for this server scope. P2-12: unused Docker

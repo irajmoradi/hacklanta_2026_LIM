@@ -5,7 +5,7 @@ The development server binds `127.0.0.1`. Without application tokens, only liter
 loopback peers can call the API; forwarded headers are not trusted. Configure
 `LIM_API_TOKEN` (one identity named `default`) or `LIM_API_TOKENS` (a JSON object
 mapping stable owner names to distinct tokens) for shared use. Tokens must have
-32?4096 visible ASCII characters and come from the runtime environment. Send
+32-4096 visible ASCII characters and come from the runtime environment. Send
 `Authorization: Bearer <token>` on every API request except `/api/health`.
 Each job belongs to its uploader; other identities receive 404 on every job,
 media, SSE and action route, including legacy aliases. Existing ownerless jobs
@@ -90,7 +90,7 @@ Planning receives selected clips in this order; the AI planner may reorder them
 according to the chosen style. For exact final sequence control, render accepts
 an explicit `edit_plan` with ordered `segments` (`source_start`, `source_end`,
 optional `speed` between 0.1 and 8, and the existing effects fields). An explicit
-plan can render without analyzing or calling a provider. Plans require 1–500
+plan can render without analyzing or calling a provider. Plans require 1-100
 segments. There must be at least one selected clip for automatic planning.
 
 New render routes default to `landscape` (1920×1080); `vertical` is 1080×1920 and
@@ -193,13 +193,14 @@ tools/remote_run.sh "cd full_app && python -m pytest -q"
 `edit_plan` accepts legacy `segments` (optional `render_version: 1`) or an explicit
 `render_version: 2` renderer plan. The boundary rejects unknown fields, invalid
 nested types/effects/SFX names/offsets, source overruns and excessive collections
-before the queue or checkpoints change. Per segment: at most 16 unique video
+before the queue or checkpoints change. The shipped review UI alias `caption`
+is normalized to `title`; conflicting values are rejected. Per segment: at most 16 unique video
 effects, 32 sounds, 1000 words, 500 track points and 20 advanced FX. Titles and
 individual words are at most 200 characters. Legacy speed effects are validated
 through their prepared v2 metadata representation. Both schemas use at most 100
 segments. The separate planner `version`/`clips` schema is not an HTTP schema.
 
-The effective `max_duration` defaults to 180 seconds and accepts 1?3600. Admission
+The effective `max_duration` defaults to 180 seconds and accepts 1-3600. Admission
 accounts for speed effects, frame quantization and v2 card/transition duration;
 generated plans pass the same boundary before their checkpoint/render. Production
 also measures the final output (0.1-second codec tolerance) and rejects optional
@@ -225,7 +226,7 @@ JSON action bodies are limited to 2 MiB. Default limits (override through
 | --- | --- |
 | MAX_CONTENT_LENGTH | 2 GiB (`MAX_UPLOAD_BYTES` also supported) |
 | MAX_MEDIA_DURATION / MAX_MEDIA_FRAMES | 43200 seconds / 3000000 frames |
-| MAX_MEDIA_PIXELS / MAX_MEDIA_FPS / MAX_MEDIA_PIXEL_RATE | 3840?2160 / 120 / 3840?2160?60 |
+| MAX_MEDIA_PIXELS / MAX_MEDIA_FPS / MAX_MEDIA_PIXEL_RATE | 3840x2160 / 120 / 3840x2160x60 |
 | MAX_JOBS / MAX_UPLOADS | 200 / 2 |
 | WORKSPACE_BYTES / OWNER_BYTES / JOB_BYTES | 20 / 10 / 4 GiB |
 | DISK_HEADROOM_BYTES | 512 MiB |

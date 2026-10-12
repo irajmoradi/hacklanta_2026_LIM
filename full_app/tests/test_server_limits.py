@@ -1,12 +1,10 @@
 """FIX-1 regressions: no external providers; tiny synthetic media only."""
-import copy
 import io
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
-import threading
 import time
 
 import pytest
@@ -111,6 +109,19 @@ def test_duration_accounts_for_speed_effects_cards_and_overlap():
         plan_valid(v2, 3, 2.7)
 
 
+@pytest.mark.parametrize('version', [1, 2])
+def test_current_review_ui_caption_alias_reaches_renderer(setup, video, version):
+    app, client, _ = setup
+    job = upload(client, video)
+    plan = {'render_version': version, 'segments': [{'source_start': 0, 'source_end': 1,
+                                                    'caption': 'Reviewed title'}]}
+    assert client.post('/api/jobs/' + job + '/render', json={'edit_plan': plan}).status_code == 202
+    result = wait(app, job)
+    assert result['status'] == 'done'
+    assert result['edit_plan']['segments'][0]['title'] == 'Reviewed title'
+    assert 'caption' not in result['edit_plan']['segments'][0]
+
+
 def test_generated_plan_cap_prevents_render(setup, video):
     app, client, pipeline = setup
     job = upload(client, video)
@@ -168,10 +179,39 @@ def test_hung_process_and_descendant_are_killed(tmp_path, cancel):
     pid = int(pidfile.read_text())
     # A killed orphan may briefly remain a zombie until PID 1 reaps it.
     stat = Path('/proc') / str(pid) / 'stat'
+    deadline = time.monotonic() + 1
+    while time.monotonic() < deadline:
+        try:
+            if stat.read_text().split()[2] == 'Z':
+                break
+        except (FileNotFoundError, ProcessLookupError):
+            break
+        time.sleep(.01)
+    else:
+        pytest.fail('Descendant survived process-group termination')
+
+
+@pytest.mark.skipif(os.name != 'posix', reason='Linux resource limit contract')
+def test_worker_enforces_memory_and_inherits_limits_to_children():
+    script = '''
+import io, json, resource, subprocess, sys, types
+from server.stage_worker import main
+def probe(path):
     try:
-        assert stat.read_text().split()[2] == 'Z'
-    except FileNotFoundError:
-        pass
+        bytearray(128 * 1024**2)
+        limited = False
+    except MemoryError:
+        limited = True
+    child = subprocess.check_output([sys.executable, '-c',
+        'import json,resource; print(json.dumps([resource.getrlimit(resource.RLIMIT_AS), resource.getrlimit(resource.RLIMIT_FSIZE)]))'])
+    return dict(limited=limited, child=json.loads(child))
+sys.modules['server.media'] = types.SimpleNamespace(probe_upload=probe)
+sys.stdin = io.StringIO(json.dumps(dict(path='unused', memory=64*1024**2, file_bytes=65536)))
+main()
+'''
+    result = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, timeout=10)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {'limited': True, 'child': [[64 * 1024**2] * 2, [65536] * 2]}
 
 
 def test_isolated_default_pipeline_renders_without_provider(tmp_path, video):
@@ -186,6 +226,76 @@ def test_isolated_default_pipeline_renders_without_provider(tmp_path, video):
         assert Path(result['output']).stat().st_size > 0
     finally:
         app.extensions['job_queue'].close()
+
+
+def test_isolated_stage_deadline_cleans_output_and_scratch(tmp_path, video):
+    app = create_app({'TESTING': True, 'WORKSPACE': str(tmp_path),
+                      'STAGE_TIMEOUT_SECONDS': .001, 'ISOLATE_STAGES': True})
+    try:
+        client = app.test_client()
+        job = upload(client, video)
+        plan = {'render_version': 2, 'segments': [{'source_start': 0, 'source_end': 1}]}
+        assert client.post('/api/jobs/' + job + '/render', json={'edit_plan': plan}).status_code == 202
+        result = wait(app, job)
+        assert result['status'] == 'error'
+        assert 'TimeoutError' in result['error']
+        assert not list((tmp_path / job).glob('*tmp'))
+        assert not (tmp_path / job / 'output.mp4').exists()
+        assert not list((tmp_path / job).glob('.stage-progress*'))
+        assert client.get('/api/health').status_code == 200
+    finally:
+        app.extensions['job_queue'].close()
+
+
+def test_http_cancel_interrupts_isolated_render(tmp_path, video):
+    app = create_app({'TESTING': True, 'WORKSPACE': str(tmp_path),
+                      'STAGE_TIMEOUT_SECONDS': 60, 'ISOLATE_STAGES': True})
+    try:
+        client = app.test_client()
+        job = upload(client, video)
+        plan = {'render_version': 2, 'segments': [{'source_start': 0, 'source_end': 2}] * 10}
+        assert client.post('/api/jobs/' + job + '/render', json={'edit_plan': plan}).status_code == 202
+        queue, store = app.extensions['job_queue'], app.extensions['job_store']
+        with queue.lock:
+            future = queue.active[job]
+        deadline = time.monotonic() + 5
+        while store.get(job)['status'] != 'rendering' and time.monotonic() < deadline:
+            time.sleep(.01)
+        assert store.get(job)['status'] == 'rendering'
+        assert client.post('/api/jobs/' + job + '/cancel').status_code == 200
+        future.result(timeout=5)
+        assert store.get(job)['status'] == 'cancelled'
+        assert not (tmp_path / job / 'output.mp4').exists()
+        assert not list((tmp_path / job).glob('*tmp'))
+        assert not list((tmp_path / job).glob('.stage-progress*'))
+    finally:
+        app.extensions['job_queue'].close()
+
+
+def test_recovery_rejects_obsolete_plan_without_blocking_startup(setup, video):
+    app, client, _ = setup
+    job = upload(client, video)
+    store, queue = app.extensions['job_store'], app.extensions['job_queue']
+    snapshot = store.get(job)
+    snapshot.update(status='queued', target='render', edit_plan={'segments': [
+        {'source_start': 0, 'source_end': 1, 'video_effects': ['unsupported']}]})
+    store.save(snapshot)
+    queue.recover()
+    assert store.get(job)['status'] == 'error'
+    assert not queue.active
+
+
+def test_events_are_bounded_and_json_limit_is_enforced(setup, video):
+    app, client, _ = setup
+    job = upload(client, video)
+    store = app.extensions['job_store']
+    snapshot = store.get(job)
+    for _ in range(1010):
+        store.save(snapshot)
+    with store.connection() as db:
+        assert db.execute('SELECT count(*) FROM events WHERE job_id=?', (job,)).fetchone()[0] == 1000
+    app.config['MAX_JSON_BYTES'] = 100
+    assert client.post('/api/jobs/' + job + '/analyze', json={'prompt': 'x' * 200}).status_code == 413
 
 
 def test_gunicorn_eight_streams_leave_health_and_status_responsive(tmp_path, setup, video):

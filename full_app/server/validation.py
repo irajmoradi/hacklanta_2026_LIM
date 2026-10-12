@@ -64,6 +64,14 @@ def plan_valid(plan, duration, max_duration=3600):
     if not isinstance(plan, dict) or type(plan.get('render_version', 1)) is not int or plan.get('render_version', 1) not in (1, 2):
         raise ValueError('render_version must be 1 or 2')
     version = plan.get('render_version', 1)
+    # The shipped review UI uses caption for its editable title. Normalize this
+    # one documented alias before applying the renderer's extra-forbid schema.
+    for segment in plan.get('segments', []) if isinstance(plan.get('segments'), list) else []:
+        if isinstance(segment, dict) and 'caption' in segment:
+            caption = segment.pop('caption')
+            if 'title' in segment and segment['title'] != caption:
+                raise ValueError('caption and title disagree')
+            segment['title'] = caption
     # No client-controlled server filesystem reads. An asset API is not exposed.
     if plan.get('music') is not None:
         raise ValueError('HTTP music paths are unsupported; use the music option')
