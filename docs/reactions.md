@@ -81,7 +81,8 @@ Landscape uses bottom-right; vertical uses top-left to leave lower caption space
 The renderer preserves base dimensions, uses 30% of the smaller dimension,
 4% margin, soft offset shadow, short fade/bounce transitions and a subtle idle bob.
 Matted portraits retain their full silhouette; legacy portraits retain the circular crop.
-Enable `show_speaker=True` for a name tag that follows the motion. It does not convert
+Matted portraits show a name tag by default; `show_speaker=False` disables it.
+Legacy portraits still default to no name tag. The tag follows the motion. It does not convert
 landscape to portrait: supply a segment already rendered at the desired aspect ratio.
 Game audio is ducked during the voice clip; voice is mixed at original gain with a
 limiter. Silent bases get an audio track; silent reactions do not duck game audio.
@@ -133,9 +134,13 @@ The color key is the default and needs no ML extras.
 
 Renderer priority is alpha, then mask, then legacy behavior. VP9 alpha is explicitly
 decoded with libvpx-vp9 because native VP9 decoders may discard the alpha plane.
-Prefer alpha assets: mask-only assets retain the original edge RGB. The matting step
-removes the background around the source silhouette; it does not invent missing hair
-or remove clothing already present in the source portrait. Soft Gaussian-splat source
+Prefer alpha assets: mask-only assets retain the original edge RGB.
+The default uses OpenCV's bundled offline face detector on three frames and a fixed,
+median face box to feather a jaw contour, excluding shoulders while retaining upper
+hair, glasses and beards. This does not introduce moving crop jitter. `--portrait`
+keeps the full source silhouette instead. When no face is detected, the tool preserves
+the silhouette and reports `head_box: null`; review those clips manually. Long hair
+below the jaw is clipped by the head contour. Soft Gaussian-splat source
 edges can need per-pack tuning; inspect the QA stills before distributing a new pack.
 
 QA sheets show original / dark synthetic gameplay pattern / bright synthetic gameplay
@@ -145,9 +150,21 @@ Keep faces, voices, masks and all QA media outside git. Local review artifacts b
 
 ```sh
 tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_reactions.py tests/test_reaction_matte.py"
-tools/remote_run.sh "cd full_app && python -m pytest -q -m not\\ live"
+tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live'"
 ```
 
 Synthetic tests cover enclosed glasses, fine hair and beard detail, moving-head trail
 avoidance, idempotency, path validation, matte frame count, before/during/after output,
 both matte formats across 16:9 / 9:16 / 1:1, name tags, original voice sync and ducking.
+
+For final decoded-video QA (all four speakers, three presets, dark and bright frames),
+use existing authorized gameplay, or omit `--gameplay` for synthetic test patterns:
+
+```sh
+cd full_app
+python -m reactions.qa /srv/packs/team /srv/demo_out/react2/gameplay --gameplay /path/to/gameplay.mp4
+```
+
+This creates 24 short videos and before/after stills. Still panels are original reaction,
+gameplay before, gameplay after; outputs remain private. The QA directory must be new
+to prevent accidentally overwriting an earlier review.

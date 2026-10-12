@@ -22,7 +22,7 @@ def layout(width: int, height: int, preset: str) -> tuple[int, int, int]:
 
 
 def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'landscape', *, peak_time: float | None = None,
-                   output_path: str | Path | None = None, show_speaker: bool = False, duck_gain: float = 0.25,
+                   output_path: str | Path | None = None, show_speaker: bool | None = None, duck_gain: float = 0.25,
                    max_duration: float | None = None, position: str | None = None) -> Path:
     """Start a reaction at the peak, clamped to the available clip duration.
 
@@ -65,6 +65,8 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
     voice = any(s['codec_type'] == 'audio' for s in head_info['streams'])
     alpha_file = reaction.alpha_file
     mask_file = reaction.mask_file if not alpha_file else None
+    if show_speaker is None:
+        show_speaker = bool(alpha_file or mask_file)
     key = 'colorkey=0xFFFFFF:0.22:0.08,' if reaction.background == 'light' else ''
     mask = f"if(lte(pow(X-{size}/2,2)+pow(Y-{size}/2,2),pow({size}/2-1,2)),alpha(X,Y),0)"
     graph = ['[0:v]setpts=PTS-STARTPTS[base]']
@@ -78,9 +80,11 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
         graph.append(f"[1:v]setpts=PTS-STARTPTS,format=rgba,{key}null[portrait]")
     # Keep the complete silhouette for matted assets, including hair outside the old circle.
     crop_mask = '' if alpha_file or mask_file else f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{mask}',"
+    geometry = (f'scale={size}:{size}:force_original_aspect_ratio=decrease,'
+                f'pad={size}:{size}:(ow-iw)/2:(oh-ih)/2:color=black@0' if alpha_file or mask_file else
+                f'scale={size}:{size}:force_original_aspect_ratio=increase,crop={size}:{size}')
     graph += [
-        f'[portrait]trim=duration={length},scale={size}:{size}:force_original_aspect_ratio=decrease,'
-        f"pad={size}:{size}:(ow-iw)/2:(oh-ih)/2:color=black@0,format=rgba,{crop_mask}"
+        f'[portrait]trim=duration={length},{geometry},format=rgba,{crop_mask}'
         f'fade=t=in:st=0:d={fade}:alpha=1,fade=t=out:st={length-fade}:d={fade}:alpha=1,'
         f'setpts=PTS+{start}/TB,split[head][shade]',
         '[shade]colorchannelmixer=rr=0:gg=0:bb=0:aa=0.5,gblur=sigma=3[shadow]',

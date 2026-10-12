@@ -14,12 +14,13 @@ import numpy as np
 class LightMatte:
     """Border-connected color key; keep enclosed whites and stabilize static edges."""
 
-    def __init__(self, low=10., high=65., smoothing=.25, segmenter=None):
+    def __init__(self, low=10., high=65., smoothing=.25, segmenter=None, head_box=None):
         if not 0 <= low < high <= 255 or not 0 <= smoothing < 1:
             raise ValueError('Require 0 <= low < high <= 255 and 0 <= smoothing < 1')
         self.low, self.high, self.smoothing = low, high, smoothing
         self.previous = None
         self.segmenter = segmenter
+        self.head_box = head_box
 
     def __call__(self, rgb):
         pixels = rgb.astype(np.float32)
@@ -45,7 +46,8 @@ class LightMatte:
             support = self.segmenter.segment(rgb, 'person head, hair, glasses and beard', support)
             outside = support == 0
         radius = max(3, round(min(rgb.shape[:2])*.025))
-        core = (cv2.erode(support, np.ones((2*radius+1, 2*radius+1), np.uint8)) > 0) | (distance >= self.high)
+        core = ((cv2.erode(support, np.ones((2*radius+1, 2*radius+1), np.uint8)) > 0) |
+                (distance >= self.high)) & (support > 0)
         if not core.any():
             self.previous = np.zeros(rgb.shape[:2], np.float32)
             return np.zeros((*rgb.shape[:2], 4), np.uint8)
@@ -67,8 +69,46 @@ class LightMatte:
         # Undo light background contamination in fractional edge pixels (straight alpha).
         color = (pixels-(1-alpha[..., None])*background) / np.maximum(alpha[..., None], .01)
         color[alpha == 0] = 0
+        if self.head_box is not None:
+            alpha = alpha*head_gate(rgb.shape[:2], self.head_box)
         return np.dstack((np.clip(color, 0, 255).astype(np.uint8),
                           np.rint(alpha*255).astype(np.uint8)))
+
+
+def head_gate(shape, box):
+    """Keep hair above the face, taper below the jaw so clothing cannot become a box."""
+    x, y, w, h = box
+    yy, xx = np.indices(shape, dtype=float)
+    # The upper gate is deliberately broad: the color matte defines hair and glasses.
+    lower = np.clip((yy-(y+h*.55))/(h*.58), 0, 1)
+    half_width = w*.56*np.sqrt(np.maximum(0, 1-lower*lower))
+    side = np.clip((half_width-np.abs(xx-(x+w/2)))/(max(1, w*.025)), 0, 1)
+    bottom = np.clip(((y+h*1.13)-yy)/(max(1, h*.055)), 0, 1)
+    return np.where(yy < y+h*.55, 1., side*bottom)
+
+
+def find_head_box(source):
+    """Use OpenCV's bundled offline face cascade; a failed detection keeps the silhouette."""
+    cascade = cv2.CascadeClassifier(str(Path(cv2.data.haarcascades)/'haarcascade_frontalface_default.xml'))
+    if cascade.empty():
+        return None
+    capture = cv2.VideoCapture(str(source))
+    boxes = []
+    try:
+        count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        for frame in (0, count//2, max(0, count-2)):
+            capture.set(cv2.CAP_PROP_POS_FRAMES, frame)
+            ok, rgb = capture.read()
+            if not ok:
+                continue
+            gray = cv2.cvtColor(rgb, cv2.COLOR_BGR2GRAY)
+            found = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5,
+                                              minSize=(max(20, gray.shape[1]//5),)*2)
+            if len(found):
+                boxes.append(max(found, key=lambda box: box[2]*box[3]))
+    finally:
+        capture.release()
+    return np.median(boxes, axis=0).tolist() if boxes else None
 
 
 def _probe(path):
@@ -100,7 +140,7 @@ def save_check(path, rgb, rgba):
 
 
 def matte_clip(source, alpha_path, mask_path, *, qa_dir=None, low=10., high=65., smoothing=.25,
-               sam_local=False):
+               sam_local=False, head_only=True):
     """Produce lossless grayscale H.264 matte and decontaminated VP9 alpha, matching CFR frames."""
     started = time.monotonic()
     info = _probe(source)
@@ -116,7 +156,8 @@ def matte_clip(source, alpha_path, mask_path, *, qa_dir=None, low=10., high=65.,
         from sam.backends import BoundedBackend, Config
         backend = BoundedBackend(Config(backend='local', checkpoint=os.getenv('SAM2_CHECKPOINT', ''),
                                         timeout=30, budget=120))
-    matte = LightMatte(low, high, smoothing, segmenter=backend)
+    head_box = find_head_box(source) if head_only else None
+    matte = LightMatte(low, high, smoothing, segmenter=backend, head_box=head_box)
     command = ['ffmpeg', '-v', 'error', '-y', '-threads', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba',
                '-s', f'{width}x{height}', '-r', fps, '-i', '-', '-filter_complex_threads', '1',
                '-filter_complex', '[0:v]split[a][m];[m]alphaextract[mask]',
@@ -164,7 +205,7 @@ def matte_clip(source, alpha_path, mask_path, *, qa_dir=None, low=10., high=65.,
                 encode.stdin.close()
             if backend is not None:
                 backend.close()
-    return {'frames': frames, 'seconds': round(time.monotonic()-started, 3)}
+    return {'frames': frames, 'seconds': round(time.monotonic()-started, 3), 'head_box': head_box}
 
 
 def matte_pack(folder, *, qa_dir=None, force=False, only=None, **options):
@@ -172,6 +213,9 @@ def matte_pack(folder, *, qa_dir=None, force=False, only=None, **options):
     root = Path(folder).resolve()
     manifest = root/'pack.json'
     snapshot = json.loads(manifest.read_text(encoding='utf-8'))
+    identifiers = [entry['id'] for entry in snapshot['clips']]
+    if len(set(identifiers)) != len(identifiers):
+        raise ValueError('Duplicate clip ID')
     results = []
     for entry in snapshot['clips']:
         ident = entry['id']

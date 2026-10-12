@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from reactions import load_pack, render_overlay
-from reactions.matte import LightMatte, matte_pack
+from reactions.matte import LightMatte, matte_pack, head_gate
 from reactions.render import layout, probe
 from test_reactions import make_base, frame, tone
 
@@ -112,3 +112,97 @@ def test_matte_path_validation(tmp_path, field):
     (tmp_path/'pack.json').write_text(json.dumps({'clips': [entry]}))
     with pytest.raises(ValueError, match='inside the pack'):
         load_pack(tmp_path)
+
+
+def test_append_during_encode_is_preserved(tmp_path, monkeypatch):
+    import reactions.matte as module
+    entry = dict(id='first', speaker='Test', label='hype', text='beep', file='first.mp4',
+                 duration=1, background='light')
+    manifest = tmp_path/'pack.json'
+    manifest.write_text(json.dumps({'version': 1, 'clips': [entry]}))
+    def encode(source, alpha, mask, **kwargs):
+        # Simulate the producer appending its next batch while FFmpeg runs.
+        latest = json.loads(manifest.read_text())
+        latest['clips'].append({**entry, 'id': 'new', 'file': 'new.mp4'})
+        manifest.write_text(json.dumps(latest))
+        alpha.write_bytes(b'alpha')
+        mask.write_bytes(b'mask')
+        return {'frames': 25, 'seconds': .1}
+    monkeypatch.setattr(module, 'matte_clip', encode)
+    module.matte_pack(tmp_path)
+    clips = json.loads(manifest.read_text())['clips']
+    assert [c['id'] for c in clips] == ['first', 'new']
+    assert clips[0]['alpha_file'] == 'first.alpha.webm'
+    assert 'alpha_file' not in clips[1]
+
+
+def test_failed_encode_leaves_manifest_and_original(tmp_path, monkeypatch):
+    import reactions.matte as module
+    entry = dict(id='first', speaker='Test', label='hype', text='beep', file='first.mp4',
+                 duration=1, background='light')
+    manifest = tmp_path/'pack.json'
+    manifest.write_text(json.dumps({'clips': [entry]}))
+    original = tmp_path/'first.mp4'
+    original.write_bytes(b'original')
+    before = manifest.read_bytes()
+    def fail(source, alpha, mask, **kwargs):
+        alpha.write_bytes(b'partial')
+        raise RuntimeError('encode failed')
+    monkeypatch.setattr(module, 'matte_clip', fail)
+    with pytest.raises(RuntimeError, match='encode failed'):
+        module.matte_pack(tmp_path)
+    assert manifest.read_bytes() == before
+    assert original.read_bytes() == b'original'
+    assert not (tmp_path/'first.alpha.webm').exists()
+    assert not list(tmp_path.glob('.matte-*'))
+
+
+def test_optional_segmenter_fallback():
+    class Unavailable:
+        def segment(self, frame, prompt, seed):
+            return seed  # BoundedBackend's documented fallback on unavailable models.
+    source = portrait()
+    assert np.array_equal(LightMatte()(source), LightMatte(segmenter=Unavailable())(source))
+
+
+def test_head_gate_keeps_hair_glasses_beard_and_removes_shoulders():
+    gate = head_gate((160, 128), (35, 25, 60, 80))
+    assert gate[10, 45] == 1  # hair above face is not cropped
+    assert gate[50, 40] == 1  # glasses at temples
+    assert gate[100, 65] == 1  # beard below the mouth
+    assert gate[100, 20] == 0  # shoulder beside jaw
+    assert gate[130, 65] == 0  # clothing below neck
+    assert np.any((gate > 0) & (gate < 1))  # feathered contour
+    key = LightMatte(head_box=(35, 25, 60, 80))
+    source = portrait()
+    first = key(source)
+    assert np.array_equal(first, key(source))  # gating must not feed back into temporal smoothing
+
+
+def test_watcher_mattes_appended_batch_before_success(tmp_path, monkeypatch):
+    import importlib.util
+    import sys
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location('matte_cli', Path(__file__).resolve().parents[2]/'tools/matte_pack.py')
+    cli = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cli)
+    clips = [{'id': 'first', 'background': 'light'}]
+    manifest = tmp_path/'pack.json'
+    manifest.write_text(json.dumps({'clips': clips}))
+    passes, sleeps = [], []
+    def matte(folder, **kwargs):
+        current = json.loads(manifest.read_text())['clips']
+        passes.append(len(current))
+        for clip in current:
+            clip['mask_file'] = clip['id']+'.mask.mp4'
+            (tmp_path/clip['mask_file']).touch()
+        if len(passes) == 1:
+            # Target count is reached during encoding, but that new clip still needs a matte.
+            current.append({'id': 'appended', 'background': 'light'})
+        manifest.write_text(json.dumps({'clips': current}))
+        return []
+    monkeypatch.setattr(cli, 'matte_pack', matte)
+    monkeypatch.setattr(cli.time, 'sleep', sleeps.append)
+    monkeypatch.setattr(sys, 'argv', ['matte_pack.py', str(tmp_path), '--wait-for', '2'])
+    assert cli.main() == 0
+    assert passes == [1, 2] and sleeps == [300]

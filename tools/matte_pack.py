@@ -21,6 +21,7 @@ def main():
     parser.add_argument('--force', action='store_true', help='Regenerate existing mattes on the first pass')
     parser.add_argument('--only', nargs='+', help='Restrict to these clip IDs')
     parser.add_argument('--sam-local', action='store_true', help='Optional local SAM2 refinement, never remote')
+    parser.add_argument('--portrait', action='store_true', help='Keep shoulders instead of isolating the head')
     parser.add_argument('--wait-for', type=int, default=0)
     parser.add_argument('--wait-minutes', type=float, default=45)
     parser.add_argument('--poll-seconds', type=float, default=300)
@@ -31,13 +32,15 @@ def main():
     report = {'runs': [], 'polls': []}
     while True:
         report['runs'].extend(matte_pack(args.pack, qa_dir=args.qa_dir, force=args.force, only=args.only, low=args.low,
-                                        high=args.high, smoothing=args.smoothing, sam_local=args.sam_local))
+                                        high=args.high, smoothing=args.smoothing, sam_local=args.sam_local,
+                                        head_only=not args.portrait))
         args.force = False
         clips = json.loads((args.pack/'pack.json').read_text())['clips']
         count = len(clips)
         report['polls'].append({'time': time.time(), 'clips': count})
         report['target_reached'] = count >= args.wait_for and all(
-            c.get('background') != 'light' or c.get('alpha_file') or c.get('mask_file')
+            c.get('background') != 'light' or any(c.get(key) and (args.pack/c[key]).is_file()
+                                                 for key in ('alpha_file', 'mask_file'))
             for c in clips if not args.only or c['id'] in args.only)
         if args.report:
             args.report.parent.mkdir(parents=True, exist_ok=True)
