@@ -4,14 +4,12 @@ import argparse
 from contextlib import ExitStack, contextmanager
 from dataclasses import asdict, is_dataclass
 import importlib
-import inspect
 import json
 from pathlib import Path
-import shutil
 import time
 from unittest.mock import patch
 
-from demo.make_demo_gameplay import generate, probe, synthetic_pack
+from demo.make_demo_gameplay import generate, probe
 
 
 class Unavailable(Exception):
@@ -27,25 +25,20 @@ def plain(value):
 
 
 def optional_call(module_name, names, context):
-    """Bind documented names/aliases, never swallow failures in an installed module."""
+    """Call an exact legacy export with explicit arguments; propagate failures."""
     try:
         module = importlib.import_module(module_name)
     except ModuleNotFoundError as exc:
         if exc.name == module_name:
             raise Unavailable(f"{module_name} not merged") from exc
         raise
-    function = next((getattr(module, name) for name in names
-                     if callable(getattr(module, name, None))), None)
-    if function is None:
-        raise Unavailable(f"{module_name}: expected export {' / '.join(names)}; adapter needed")
-    signature = inspect.signature(function)
-    kwargs = {name: context[name] for name, p in signature.parameters.items()
-              if name in context and p.kind != p.POSITIONAL_ONLY}
-    try:
-        signature.bind(**kwargs)
-    except TypeError as exc:
-        raise Unavailable(f"{module_name}.{function.__name__}{signature}: adapter needed ({exc})") from exc
-    return function(**kwargs)
+    # Compatibility helper for older callers: one exact export and its explicit
+    # kwargs. The active demo uses Pipeline directly, without guessed signatures.
+    function = getattr(module, names[0], None)
+    if not callable(function):
+        raise Unavailable(f"{module_name}.{names[0]}: adapter needed")
+    return function(**context)
+
 
 
 class Progress:
@@ -168,143 +161,115 @@ def request_json(client, method, url, **kwargs):
     return response.get_json()
 
 
+def wait_for_job(client, store, job_id, expected, timeout=180):
+    """Poll the public snapshot, then verify the durable stage checkpoint."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        job = request_json(client, "get", f"/api/jobs/{job_id}")
+        if job["status"] in {"error", "cancelled"}:
+            raise AssertionError(f"Job failed: {job['error']}")
+        if job["status"] == expected:
+            # Terminal state is saved just before the worker unregisters itself.
+            return store.get(job_id)
+        time.sleep(.02)
+    raise TimeoutError(f"Job did not reach {expected}")
+
+
 def run(output, duration=150, budget=12):
     output = Path(output).resolve()
     output.mkdir(parents=True, exist_ok=True)
     progress = Progress()
-    report = dict(schema_version=1, offline=True, live_calls=0, budget=budget,
+    report = dict(schema_version=2, offline=True, live_calls=0, budget=budget,
                   progress=progress.events, outputs={}, limitations=[
-                      "Mock window scores are a ground-truth oracle, not model accuracy.",
-                      "Missing signals use overlapping uniform windows.",
-                      "Legacy vertical export uses letterboxing; v2 is used when available.",
-                      "Progress is emitted by the harness; legacy backend has no SSE."])
+                      "Mock provider reads fixture truth: event coverage tests plumbing, not perception.",
+                      "This demo covers the integrated upload/signals/analyze/plan/render/download path.",
+                      "Standalone ingest, audio AI, creative planner, reactions and social libraries are not exercised."])
     started = time.perf_counter()
     try:
         with progress.stage("generate"):
             source, truth = generate(output / "fixture", duration)
             report["ground_truth"] = truth
         with offline() as stack:
-            # Import with a fake legacy client even when a user's key is exported.
-            stack.enter_context(patch("services.gemini_client.GeminiVideoClient"))
-            backend = importlib.import_module("app")
-            workspace = output / "jobs"
-            workspace.mkdir(exist_ok=True)
-            stack.enter_context(patch.object(backend, "WORKSPACE", workspace))
-            stack.enter_context(patch.object(backend, "jobs", {}))
-            client = backend.app.test_client()
-            with progress.stage("upload"):
-                with source.open("rb") as handle:
-                    uploaded = request_json(client, "post", "/api/upload",
-                                            data={"video": (handle, "gameplay.mp4")})
-                job_id = uploaded["job_id"]
-                job = backend.jobs[job_id]
-                source = Path(job["source"])
-                report["job_id"] = job_id
-            prepared = progress.optional("ingest", "ingest", ["prepare"], {"source": source})
-            if prepared is not None:
-                prepared = plain(prepared)
-                source = Path(prepared["path"])
-                job["source"] = str(source)
-                job["meta"] = backend.probe_video(source)
-            candidates = progress.optional("signals", "signals", ["detect_candidates"],
-                                           {"video_path": source, "profile": "auto"})
-            if candidates is None:
-                candidates = fallback_windows(duration)
-            candidates = list(candidates)
-            report["candidates"] = [plain(item) for item in candidates]
-            audio = progress.optional("audio_ai", "audio_ai", ["analyze"],
-                                      {"video_path": source, "use_whisper": False,
-                                       "use_classifier": False, "transcribe": False})
-            report["audio_signals"] = plain(audio)
+            from server.api import create_app
+            from pipeline import Pipeline
+
             class MockVLM:
                 def upload_video(self, path):
-                    if not Path(path).is_file():
-                        raise FileNotFoundError(path)
+                    assert Path(path).is_file()
                     return path
 
+                def score_windows(self, path, candidates):
+                    # Signal extraction remains real; whole-video oracle supplies
+                    # complete fixture beats independently of candidate recall.
+                    return []
+
                 def find_clips(self, uploaded_file, prompt):
-                    return score_windows(candidates, truth)
+                    return score_windows(fallback_windows(duration), truth)
 
                 def plan_edit(self, prompt):
-                    return planned_legacy
+                    available, _ = json.JSONDecoder().raw_decode(
+                        prompt.split("## Available Clips\n", 1)[1].lstrip())
+                    clips = [{**c, "start": c["start_seconds"], "end": c["end_seconds"]}
+                             for c in available]
+                    plan = clean_plan(clips, budget)
+                    plan["resolution"] = 720
+                    return plan
 
-            stack.enter_context(patch.object(backend, "_get_gemini", return_value=MockVLM()))
-            with progress.stage("vlm_window_scoring") as record:
-                clips = request_json(client, "post", "/api/analyze", json={"job_id": job_id})["clips"]
-                record["detail"] = "Mocked VLM scores through real /api/analyze"
-                report["scored_clips"] = clips
-            native_plan = progress.optional("planner_v2", "planner", ["plan_edit", "build_plan", "plan"],
-                                            {"clips": clips, "ranked_clips": clips, "mode": "nice",
-                                             "style": "clean_edit", "target_length": budget,
-                                             "target_duration": budget, "max_duration": budget,
-                                             "aspect": "landscape", "audio_signals": audio,
-                                             "use_llm": False, "refine": False})
-            planned_legacy = legacy_plan(native_plan) if native_plan is not None else clean_plan(clips, budget)
-            with progress.stage("planner") as record:
-                planned_legacy = request_json(client, "post", "/api/plan",
-                                             json={"job_id": job_id, "max_duration": budget,
-                                                   "edit_style": "clean_edit"})["edit_plan"]
-                report["plan"] = plain(native_plan) if native_plan is not None else planned_legacy
-                hits, planned_duration = coverage(planned_legacy, truth)
+                def close(self):
+                    pass
+
+            pipeline = Pipeline()
+            stack.enter_context(patch.object(pipeline, "client", side_effect=lambda *args: MockVLM()))
+            app = create_app({"TESTING": True, "WORKSPACE": str(output / "jobs"),
+                              "JOB_WORKERS": 1, "RECOVER_JOBS": False}, pipeline=pipeline)
+            stack.callback(app.extensions["job_queue"].close)
+            store = app.extensions["job_store"]
+            client = app.test_client()
+            with progress.stage("upload"):
+                with source.open("rb") as handle:
+                    response = client.post("/api/jobs", data={"video": (handle, "gameplay.mp4")})
+                assert response.status_code == 201, response.get_data(as_text=True)
+                job_id = response.get_json()["job_id"]
+                report["job_id"] = job_id
+            with progress.stage("analyze_plan"):
+                response = client.post(f"/api/jobs/{job_id}/analyze", json={
+                    "max_duration": budget, "style": "clean_edit", "privacy": False})
+                assert response.status_code == 202, response.get_data(as_text=True)
+                job = wait_for_job(client, store, job_id, "planned")
+                report.update(candidates=job["candidates"], scored_clips=job["clips"], plan=job["edit_plan"])
+                hits, planned_duration = coverage(job["edit_plan"], truth)
                 report.update(chosen_clips_vs_ground_truth=hits, planned_duration=planned_duration)
-                assert planned_duration <= budget, "Planner exceeded budget"
-                assert set(truth["top_event_ids"]) <= {hit["event_id"] for hit in hits}, "Top events lost"
-                record["detail"] = "v2 plan via legacy API" if native_plan is not None else "Deterministic clean-edit fallback via mocked plan response"
-            reaction = synthetic_pack(output / "synthetic_pack")
-            real_runner = backend.FFmpegRunner
-            for preset, dimensions in [("landscape", (640, 360)), ("vertical", (360, 640))]:
-                preset_dir = Path(job["dir"]) / preset
-                preset_dir.mkdir(exist_ok=True)
-                rendered = progress.optional(f"render_v2_{preset}", "render", ["render_plan", "render"],
-                                             {"source": source, "video_path": source,
-                                              "plan": native_plan if native_plan is not None else planned_legacy,
-                                              "preset": preset, "output_path": preset_dir / "v2.mp4",
-                                              "workspace": preset_dir})
-                def runner_factory(**kwargs):
-                    kwargs.update(workspace=preset_dir, width=dimensions[0], height=dimensions[1])
-                    runner = real_runner(**kwargs)
-                    if rendered is not None:
-                        runner.render = lambda plan: Path(rendered)
-                    return runner
+                assert planned_duration <= budget
+                assert set(truth["top_event_ids"]) <= {hit["event_id"] for hit in hits}
+            for preset in ("landscape", "vertical"):
                 with progress.stage(f"render_{preset}"):
-                    with patch.object(backend, "FFmpegRunner", side_effect=runner_factory):
-                        request_json(client, "post", "/api/render",
-                                     json={"job_id": job_id, "generate_thumbnails": False})
-                reacted = progress.optional(f"reactions_{preset}", "reactions", ["render_overlay"],
-                                             {"base_clip": Path(job["output"]), "reaction": reaction,
-                                              "preset": preset})
-                if reacted is not None:
-                    job["output"] = str(reacted)
-                # Keep a conventional final artifact next to the job metadata for social.
-                shutil.copyfile(job["output"], preset_dir / "montage.mp4")
-                share = progress.optional(f"social_{preset}", "social", ["build_share_kit"],
-                                          {"job_dir": preset_dir, "clips": clips,
-                                           "plan": native_plan if native_plan is not None else planned_legacy,
-                                           "game": "generic"})
-                if share is not None:
-                    assert Path(share).exists(), "Share kit was not created"
+                    response = client.post(f"/api/jobs/{job_id}/render", json={
+                        "preset": preset, "generate_thumbnails": False})
+                    assert response.status_code == 202, response.get_data(as_text=True)
+                    job = wait_for_job(client, store, job_id, "done")
                 with progress.stage(f"download_{preset}"):
-                    response = client.get(f"/api/download/{job_id}")
+                    response = client.get(f"/api/jobs/{job_id}/download")
                     try:
                         assert response.status_code == 200
                         assert response.mimetype == "video/mp4"
                         payload = response.get_data()
-                        assert payload == Path(job["output"]).read_bytes(), "Download differs from render"
+                        assert payload == Path(job["output"]).read_bytes()
                         destination = output / f"montage_{preset}.mp4"
                         destination.write_bytes(payload)
                     finally:
                         response.close()
                     meta = probe(destination)
-                    streams = meta["streams"]
-                    video = next(stream for stream in streams if stream["codec_type"] == "video")
-                    assert any(stream["codec_type"] == "audio" for stream in streams)
+                    video = next(s for s in meta["streams"] if s["codec_type"] == "video")
+                    assert any(s["codec_type"] == "audio" for s in meta["streams"])
                     actual_duration = float(meta["format"]["duration"])
                     assert 0 < actual_duration <= budget + .25
-                    assert abs(actual_duration - planned_duration) < .3, "Rendered timeline drifted"
-                    assert abs(video["width"] / video["height"] - dimensions[0] / dimensions[1]) < .01
+                    assert abs(actual_duration - planned_duration) < .3
+                    expected = 16 / 9 if preset == "landscape" else 9 / 16
+                    assert abs(video["width"] / video["height"] - expected) < .01
                     report["outputs"][preset] = dict(path=str(destination), duration=actual_duration,
-                                                      width=video["width"], height=video["height"],
-                                                      share_kit=str(share) if share else None)
+                                                      width=video["width"], height=video["height"])
+            report["backend_stages"] = job["completed"]
+            report["backend_timings"] = job["timings"]
             report["status"] = "completed"
     except Exception as exc:
         report.update(status="failed", error=f"{type(exc).__name__}: {exc}")

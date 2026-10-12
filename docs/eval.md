@@ -43,7 +43,7 @@ negative footage. Labels treat highlights and lowlights as one notable-moment cl
 Duration is supplied by the dataset author; the loader does not decode every video.
 
 Predictions contain `start`, `end`, and a numeric `score` (higher ranks first).
-Pydantic objects and application `start_seconds`/`end_seconds` fields are accepted.
+Dataclasses (including real signal Candidates), Pydantic objects and application `start_seconds`/`end_seconds` fields are accepted.
 `hype` is accepted as a score alias. If confidence is absent, score defaults to 1
 and input order breaks ties: AP then measures that order, not model confidence.
 Invalid outputs fail that video and produce a nonzero CLI exit, not silent clipping.
@@ -97,29 +97,38 @@ above (or a clip list when cost is unknown).
 
 Built-in integrations are deliberately lazy:
 
-- `gemini-only` wraps existing `services.gemini_client.GeminiVideoClient`, using the
-  same clip-finder prompt and file cleanup behavior. It skips unless an injected
-  mock client or the explicit live smoke flag is supplied.
-- `signals-only` imports `signals.detect_candidates(video_path)` (EXT-01).
-- `signals-vlm` calls that detector, then imports the optional offline/local hook
-  `services.eval_adapter.score_windows(video_path, candidates)`. Alternatively pass
-  `--window-scorer your_module:your_function`. The hook returns the same output
-  dictionary, normalizing provider-specific window scores to `score`. Import failures
-  or missing hooks skip gracefully; inference errors fail rather than masquerading
-  as missing dependencies. The EXT-02 provider interface is not in this checkout,
-  so its integrator must supply this thin hook or a custom callable. Hooks are trusted
-  local/mock code and must not make paid calls. Do not use them to bypass the live budget.
+- `gemini-only` wraps `services.gemini_client.GeminiVideoClient` with the shipped
+  clip-finder prompt. It skips unless explicit live smoke or a fake SDK is supplied.
+  Each invocation closes the provider in `finally`, deleting cached uploaded files
+  on success and inference failure and closing its SDK transport.
+- `signals-only` calls the real `signals.detect_candidates(video_path)`. Its
+  dataclass candidates are normalized at the common metric interval boundary.
+- `signals-vlm` requires an explicit scorer or replay. Without one it reports
+  `No local window scorer configured`, rather than importing a nonexistent hook.
+  Use `--window-scorer eval.pipelines:local_window_scorer` with `LOCAL_VLM_MODEL`
+  and an optional `LOCAL_VLM_BASE_URL` (default `http://localhost:8000/v1`).
+  This adapter calls the shipped `OpenAICompatibleVLMProvider`, preserves candidate
+  metadata, and maps hype to confidence while excluding neutral/dead-player windows.
+  It requires a running loopback VLM server; no Gemini fallback occurs. Missing
+  configuration is a skip, while inference errors fail the video. Custom
+  `module:function(video_path, candidates)` hooks remain trusted local/mock code
+  and must not invoke paid providers or bypass the live budget.
 
 ### Optional live smoke (never CI)
 
-`python -m eval.runner labels.json --live-smoke` enables the legacy AI Studio Gemini
-adapter using runtime `GEMINI_API_KEY`; datasets over three videos are rejected
-before any call, with a second per-adapter three-call cap and no harness retries.
-Legacy cost remains unknown because its return value has no usage metadata.
-This adapter is for the current client; it does not reinterpret a Vertex Express key
-as an AI Studio key. `GOOGLE_API_KEY`/Vertex requires the EXT-02 provider integration
-or an explicitly budgeted external live smoke whose outputs can then be replayed.
-No live calls were needed for EXT-08 validation, and no key file was read.
+`python -m eval.runner labels.json --live-smoke` enables at most three SDK
+`models.generate_content` attempts across the adapter, counting failures too.
+The shared counter is checked immediately before each SDK invocation. Both
+application retries and SDK retries are fixed to one attempt; agentic inference
+is disabled. The harness probes actual source duration and rejects videos longer
+than 600 seconds before client creation/upload, ensuring one chunk per video.
+Datasets over three videos are rejected at the CLI boundary as an additional guard.
+
+AI Studio uses runtime `GEMINI_API_KEY`. Vertex express uses runtime
+`GOOGLE_API_KEY` with `GOOGLE_GENAI_USE_VERTEXAI=true`; credentials are never
+loaded from files by the evaluation adapter or serialized in reports. Provider
+cost remains unknown. All FIX-3 budget tests use fake SDKs, including retryable
+failures, long inputs and Vertex configuration; no live calls were needed.
 
 ## Docker
 
@@ -132,13 +141,12 @@ docker compose up --build
 
 The multi-stage image builds React with Node 22 and serves its compiled assets
 through Flask on Python 3.12 with ffmpeg. Gunicorn uses one process and four threads
-because the current app stores jobs in memory. The container runs as UID 10001.
-The named `workspace` volume persists media; legacy in-memory job IDs do not survive
-restarts until EXT-03 is integrated. The healthcheck queries `/api/info`.
+because the durable queue requires a single workspace owner. The container runs as UID 10001.
+The named `workspace` volume persists media and SQLite job checkpoints across restarts. The healthcheck queries `/api/info`.
 Credentials are runtime environment variables; `.env`, videos, weights, and local
 build/cache directories are excluded from the build context. Compose passes Vertex
-environment variables through for future provider integration; the current app
-uses `GEMINI_API_KEY`. No key is needed for container startup.
+environment variables through. The evaluation provider supports both backends;
+the application pipeline still has a separate GEMINI_API_KEY gate (QA-3 P1-09). No key is needed for container startup.
 
 Optional packages default off:
 
