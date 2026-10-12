@@ -38,6 +38,18 @@ def cache():
 
 
 @pytest.fixture
+def target_backend(monkeypatch):
+    # A coherent mocked target; production spotlight never uses the heuristic fallback.
+    monkeypatch.setenv('SAM_BACKEND', 'local')
+    def segment(self, frame, prompt, seed):
+        h, w = frame.shape[:2]
+        result = np.zeros((h, w), np.uint8)
+        result[int(h*.42):int(h*.60), int(w*.45):int(w*.55)] = 1
+        return result
+    monkeypatch.setattr(BoundedBackend, 'segment', segment)
+
+
+@pytest.fixture
 def endpoint():
     state = {"calls": [], "mode": "ok"}
     class Handler(BaseHTTPRequestHandler):
@@ -129,7 +141,7 @@ def test_missing_local_model_falls_back(video):
 @pytest.mark.slow
 @pytest.mark.parametrize("effect,vertical,duration", [
     ("outline_pulse", False, 1.5), ("background_blur", True, 1.5), ("spotlight_freeze", False, 2.0)])
-def test_render_duration_geometry_audio_and_decode(video, tmp_path, effect, vertical, duration):
+def test_render_duration_geometry_audio_and_decode(video, tmp_path, effect, vertical, duration, target_backend):
     result = render_effect(video, tmp_path/f"{effect}.mp4", .25, 1.75, effect=effect,
                            vertical=vertical, size=(90, 160), kill_time=1, freeze_seconds=.5)
     metadata = json.loads(run("ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(result)))
@@ -163,7 +175,7 @@ def test_render_duration_geometry_audio_and_decode(video, tmp_path, effect, vert
 
 
 @pytest.mark.slow
-def test_silent_video_and_last_frame_freeze(video, tmp_path):
+def test_silent_video_and_last_frame_freeze(video, tmp_path, target_backend):
     silent = tmp_path/"silent.mp4"
     run("ffmpeg", "-v", "error", "-i", str(video), "-c:v", "copy", "-an", str(silent))
     output = render_effect(silent, tmp_path/"out.mp4", 0, 2, effect="spotlight_freeze", kill_time=23/12, freeze_seconds=.5)

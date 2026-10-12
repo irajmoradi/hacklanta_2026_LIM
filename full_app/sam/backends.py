@@ -83,8 +83,10 @@ class RemoteSegmenter:
         ok, encoded = cv2.imencode(".png", cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
         if not ok:
             raise ValueError("Could not encode frame")
+        from .targeting import TargetPrompt
+        spatial = {'point': seed.point, 'box': seed.box} if isinstance(seed, TargetPrompt) else {}
         payload = json.dumps({"image_png": base64.b64encode(encoded).decode(),
-                              "prompt": prompt}).encode()
+                              "prompt": prompt, **spatial}).encode()
         headers = {"Content-Type": "application/json"}
         if self.config.key:
             headers["Authorization"] = "Bearer " + self.config.key
@@ -106,11 +108,17 @@ class LocalSegmenter:
 
     def segment(self, frame, prompt, seed):
         import torch
-        y, x = np.nonzero(seed)
-        box = np.array([x.min(), y.min(), x.max(), y.max()])
+        from .targeting import TargetPrompt
+        spatial = isinstance(seed, TargetPrompt)
+        if spatial:
+            box = np.asarray(seed.box)
+        else:
+            y, x = np.nonzero(seed)
+            box = np.array([x.min(), y.min(), x.max(), y.max()])
         with torch.inference_mode():
             self.predictor.set_image(frame)
-            masks, scores, _ = self.predictor.predict(box=box, multimask_output=True)
+            points = dict(point_coords=np.array([seed.point]), point_labels=np.array([1])) if spatial else {}
+            masks, scores, _ = self.predictor.predict(box=box, multimask_output=True, **points)
         return validate_mask(masks[np.argmax(scores)], frame.shape[:2])
 
 
