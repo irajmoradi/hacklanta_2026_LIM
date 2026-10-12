@@ -169,7 +169,8 @@ class Pipeline:
 
     def plan(self, job, key):
         with self.stage(job, 'edit_plan'):
-            job['edit_plan'] = self.plan_edit(job, key)
+            from .experience import enrich
+            job['edit_plan'] = enrich(job, self.plan_edit(job, key))
             job['planning_settings'] = {k: job['options'].get(k) for k in ('mode', 'style', 'planner', 'max_duration')}
 
     def plan_edit(self, job, key):

@@ -1,6 +1,7 @@
 export const extensionDefaults = {
+  full_experience: false, beat_sync: true, transitions: false, cards: false,
   audio_ai: false, planner_v2: false, window_scoring: false, sam_reframe: false,
-  narration: false, narration_persona: "hype_caster", privacy_blur: true,
+  narration: false, narration_persona: "hype_caster", privacy_blur: false,
   keep_my_name: "", music: "off", music_asset_id: "", chat: false,
   chat_asset_id: "", chat_offset: 0, twitch_vod_id: "", fx_intensity: 0.5,
   share_kit: false, team_mode: "best",

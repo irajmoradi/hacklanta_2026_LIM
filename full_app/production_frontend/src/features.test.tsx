@@ -22,7 +22,7 @@ it("sends only advertised extensions and preserves baseline compatibility", asyn
   fetcher.mockResolvedValue({ ok: true, json: async () => ({ frontend_capabilities: demoCapabilities }) });
   await api.discover();
   await api.analyze("one", { ...options, narration: true, narration_persona: "deadpan_roast", music: "chill", chat: true, twitch_vod_id: "123" });
-  expect(JSON.parse(fetcher.mock.calls[3][1].body)).toMatchObject({ game: "overwatch2", privacy: true, narration_persona: "deadpan_roast", music: true, twitch_vod_id: "123" });
+  expect(JSON.parse(fetcher.mock.calls[3][1].body)).toMatchObject({ game: "overwatch2", privacy: false, narration_persona: "deadpan_roast", music: true, twitch_vod_id: "123" });
   await api.render("one", "vertical", { ...options, fx_intensity: 0.75, keep_my_name: "Alice" }, [], { segments: [], music: { path: "server-owned" } } as any);
   expect(JSON.parse(fetcher.mock.calls[4][1].body)).toMatchObject({ preset: "vertical", fx_intensity: 0.75, keep_my_name: "Alice", edit_plan: { music: { path: "server-owned" } } });
 });
@@ -117,4 +117,20 @@ it("imports a demo VOD only after the ownership checkbox is selected", async () 
   await user.click(screen.getByRole("button", { name: "Import VOD" }));
   await screen.findByText("Source: Imported VOD");
   expect(fetcher).not.toHaveBeenCalled();
+});
+
+
+it("applies full experience while keeping privacy off and editable", async () => {
+  window.history.replaceState({}, "", "/?mock=1");
+  const user = userEvent.setup(); render(<App />);
+  const privacy = screen.getByRole("checkbox", {name: /^Privacy blur/});
+  expect(privacy).not.toBeChecked();
+  await user.click(screen.getByRole("button", {name: "Full experience"}));
+  expect(screen.getByRole("checkbox", {name: /^Captions/})).toBeChecked();
+  expect(screen.getByRole("checkbox", {name: /^Intro and outro/})).toBeChecked();
+  expect(screen.getByRole("checkbox", {name: /^Varied transitions/})).toBeChecked();
+  expect(screen.getByLabelText("Music bed")).toHaveValue("energetic");
+  expect(privacy).not.toBeChecked();
+  await user.click(privacy);
+  expect(privacy).toBeChecked();
 });

@@ -66,7 +66,7 @@ def render_effect(video, output, start, end, *, effect="outline_pulse", kill_tim
     errors use fallback masks; invalid media/parameters and encoding errors raise.
     Output is replaced atomically only after a successful encode.
     """
-    if effect not in {"outline_pulse", "background_blur", "spotlight_freeze"}:
+    if effect not in {"outline_pulse", "background_blur", "spotlight_freeze", "spotlight"}:
         raise ValueError("Unknown mask effect")
     if not math.isfinite(freeze_seconds) or not 0 <= freeze_seconds <= 10:
         raise ValueError("freeze_seconds must be in [0,10]")
@@ -104,7 +104,10 @@ def render_effect(video, output, start, end, *, effect="outline_pulse", kill_tim
                 if not ok:
                     raise ValueError("Video ended during rendering")
                 mask = clip.mask_at((clip.first+index)/clip.fps)
-                normal = frame if effect == "spotlight_freeze" else composite(frame, mask, effect, index/clip.fps)
+                if effect == 'spotlight':
+                    normal = composite(frame, mask, 'spotlight_freeze', index/clip.fps) if abs(index-kill_index) <= clip.fps*.3 else frame
+                else:
+                    normal = frame if effect == "spotlight_freeze" else composite(frame, mask, effect, index/clip.fps)
                 def fit(image):
                     return _vertical(image, track[index][1:3], dimensions) if vertical else cv2.resize(image, dimensions)
                 writer.write(fit(normal))

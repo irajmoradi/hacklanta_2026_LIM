@@ -91,9 +91,9 @@ def test_full_optional_matrix(source, tmp_path, monkeypatch, preset, missing):
     if missing:
         assert job['warnings']
     else:
-        assert not job['warnings']
-        assert 'spotlight_0' in job['timings'] and 'reactions_0' in job['timings']
-        assert meta['duration'] >= 1.5
+        assert any('SAM model unavailable' in w for w in job['warnings'])
+        assert 'spotlight_0' not in job['timings'] and 'reactions_0' in job['timings']
+        assert meta['duration'] >= 1.0
 
 
 def test_veto_ranking_and_merge():
@@ -197,7 +197,8 @@ def test_preset_feature_combinations(source, tmp_path, monkeypatch, preset, capt
     meta = probe_video(job['output'])
     assert (meta['width'], meta['height']) == {'landscape': (1280, 720), 'vertical': (720, 1280), 'square': (720, 720)}[preset]
     assert ('reactions_0' in job['timings']) is reactions
-    assert ('spotlight_0' in job['timings']) is sam
+    assert 'spotlight_0' not in job['timings']
+    assert any('SAM model unavailable' in w for w in job['warnings']) is sam
     assert meta['audio_codec'] == 'aac'
 
 

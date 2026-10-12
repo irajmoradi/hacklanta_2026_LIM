@@ -14,6 +14,31 @@ STOCK_VOICE = "JBFqnCBsd6RMkjVDRZzb"  # George, ElevenLabs stock voice
 MODEL = "eleven_multilingual_v2"
 
 
+def local_synthesize(text, cache_dir):
+    """Optional offline computer voice. No weights, network, or voice cloning."""
+    import shutil
+    import subprocess
+    executable = shutil.which('espeak-ng') or shutil.which('espeak')
+    if not executable:
+        return None
+    path = Path(cache_dir) / (hashlib.sha256(('local-v1:' + text).encode()).hexdigest() + '.wav')
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists():
+        wav_duration(path)
+        return path
+    with tempfile.TemporaryDirectory(dir=path.parent) as directory:
+        raw = Path(directory) / 'voice.wav'
+        output = Path(directory) / 'normalized.wav'
+        subprocess.run([executable, '-s', '175', '-w', str(raw), '--stdin'], input=text,
+                       text=True, capture_output=True, check=True, timeout=30)
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(raw), '-ar', '24000',
+                        '-ac', '1', '-c:a', 'pcm_s16le', str(output)], capture_output=True,
+                       check=True, timeout=30)
+        wav_duration(output)
+        output.replace(path)
+    return path
+
+
 def voice_id() -> str:
     """Only an explicitly consented ID may replace the stock voice."""
     voice = os.getenv("NARRATION_CONSENTED_VOICE_ID", "") or STOCK_VOICE

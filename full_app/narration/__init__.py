@@ -59,7 +59,7 @@ def _words(text: str, limit: int) -> str:
 
 
 def build(clips, plan, persona="hype_caster", *, character_cap=1000,
-          cache_dir=None, allow_network=False) -> NarrationTrack:
+          cache_dir=None, allow_network=False, local_voice=False) -> NarrationTrack:
     """Build on montage seconds; see docs/narration.md for the timeline contract."""
     persona = persona.replace(" ", "_")
     if persona not in PERSONAS:
@@ -85,9 +85,9 @@ def build(clips, plan, persona="hype_caster", *, character_cap=1000,
         # Legacy renderer applies speed effects in addition to segment.speed.
         for effect in segment.get("video_effects", []):
             speed *= {"slow_motion": 0.5, "speed_2x": 2}.get(effect, 1)
-        length = (end - start) / speed
-        offset = track.duration
-        track.duration += length
+        length = segment.get('output_duration', (end - start) / speed)
+        offset = segment.get('output_start', track.duration)
+        track.duration = offset + length
         matches = [c for c in clips if _number(c.get("start", c.get("start_seconds", 0))) < end
                    and _number(c.get("end", c.get("end_seconds", 0))) > start]
         # Ranked input order is authoritative when several clips overlap.
@@ -130,6 +130,8 @@ def build(clips, plan, persona="hype_caster", *, character_cap=1000,
         duration = max(0.5, len(text.split()) / 2)
         try:
             audio = providers.synthesize(text, voice, cache_dir, allow_network=allow_network)
+            if audio is None and local_voice:
+                audio = providers.local_synthesize(text, cache_dir)
             if audio is not None:
                 duration = providers.wav_duration(audio)
         except Exception:
@@ -139,6 +141,8 @@ def build(clips, plan, persona="hype_caster", *, character_cap=1000,
             track.warnings.append("Speech exceeds its safe gap; omitted to protect reactions.")
             continue
         begin = min(max(left, peak - duration / 2), right - duration)
+        if audio is None and not track.warnings:
+            track.warnings.append('Narration audio unavailable; retaining script only. Install espeak/espeak-ng or cache a consented voice.')
         track.segments.append(NarrationSegment(begin, begin + duration, text, audio))
     return track
 

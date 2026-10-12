@@ -148,7 +148,7 @@ def team_source(pipeline, job, scratch):
                     angles.append(Angle(i, start, end, score, videos[i].player))
             angles.sort(key=lambda a: (-a.score, a.video_index))
             render_videos, render_offsets = list(videos), list(offsets)
-            if job['options'].get('privacy', True):
+            if job['options'].get('privacy', False):
                 from .privacy_ranges import private_range
                 from multipov import Alignment
                 for angle in angles[:1 if job['options'].get('team_mode', 'best') == 'best' else 2]:
@@ -220,9 +220,12 @@ def planner_plan(pipeline, job):
                           signals=signals, game_profile=job.get('game', 'generic')))
     if not clips:
         raise ValueError('No eligible clips for this mode')
+    target = options.get('max_duration', 30 if options.get('preset') == 'vertical' else 60)
+    if options.get('cards'):
+        target = max(.5, target - 2*min(1., max(.25, target*.1)))
     result = plan_edit(clips, mode=options.get('mode', 'nice'),
                        style={v: k for k, v in STYLE_IDS.items()}[options.get('style', 'hype_montage')],
-                       target_length=options.get('max_duration', 30 if options.get('preset') == 'vertical' else 60),
+                       target_length=target,
                        fill_target=True, max_clip_length=10,
                        min_clip_length=min(1, min(c['end']-c['start'] for c in clips)),
                        aspect={v: k for k, v in ASPECT_PRESETS.items()}[options.get('preset', 'landscape')])
@@ -233,6 +236,8 @@ def planner_plan(pipeline, job):
         return None
     from planner.adapter import to_render_plan
     adapted = to_render_plan(native)
+    if options.get('captions'):
+        adapted['captions']['transcribe'] = True
     if options.get('fx'):
         catalog = pipeline.hook('fx', 'metadata', job)
         if catalog and 'zoom_punch' in catalog():
@@ -243,7 +248,7 @@ def planner_plan(pipeline, job):
 
 
 def private_source(pipeline, job, source, scratch, suffix=''):
-    if not job['options'].get('privacy', True):
+    if not job['options'].get('privacy', False):
         return source
     sanitize = pipeline.hook('privacy', 'sanitize', job)
     if not sanitize:
@@ -272,12 +277,25 @@ def finish_output(pipeline, job, output, plan, scratch):
         render = pipeline.hook('narration.render', 'render', job)
         if build and render:
             with pipeline.stage(job, 'narration'):
-                track = build(job.get('clips') or [], plan, cache_dir=Path(job['dir']) / 'narration',
-                              allow_network=False)
+                narration_plan = {**plan, 'segments': [dict(s) for s in plan['segments']]}
+                evidence = job.get('render_evidence', {})
+                for segment, timing in zip(narration_plan['segments'], evidence.get('timeline', [])):
+                    segment.update(output_start=timing['start'], output_duration=timing['duration'])
+                narration_plan['reaction_overlays'] = [dict(start=evidence['timeline'][r['segment']]['start']+r['start'],
+                    end=evidence['timeline'][r['segment']]['start']+r['start']+r['duration']) for r in evidence.get('reactions', [])]
+                track = build(job.get('clips') or [], narration_plan, cache_dir=Path(job['dir']) / 'narration',
+                              persona=job['options'].get('narration_persona', 'deadpan_roast' if job['options'].get('mode') == 'mean' else 'hype_caster'),
+                              allow_network=False, local_voice=True)
+                if not any(s.audio_file for s in track.segments):
+                    pipeline.warn(job, 'Narration requested but no audio fit the available speech gaps')
+                from services.probe import probe_video
+                track.duration = probe_video(output)['duration']
                 for warning in track.warnings:
                     pipeline.warn(job, warning)
                 job['narration_track'] = [dict(start=s.start, end=s.end, text=s.text,
                                                has_audio=s.audio_file is not None) for s in track.segments]
+                from narration import filter_graph
+                job.setdefault('render_evidence', {})['narration_graph'] = filter_graph(track)
                 output = render(output, track, scratch / 'narrated.mp4')
     if job['options'].get('social'):
         build = pipeline.hook('social', 'build_share_kit', job)

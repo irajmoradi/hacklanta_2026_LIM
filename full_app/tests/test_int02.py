@@ -83,7 +83,7 @@ def test_trained_head_is_required_and_signals_are_fused(media, tmp_path, monkeyp
 def test_new_planner_render_music_privacy_social_and_narration(media, tmp_path, monkeypatch):
     pipeline = Pipeline()
     state = job(media, tmp_path, planner=True, fx=True, music=True, narration=True,
-                social=True, privacy_options=dict(game='valorant', backend='none', regions={}),
+                social=True, privacy=True, privacy_options=dict(game='valorant', backend='none', regions={}),
                 style='clean_edit', max_duration=3, preset='square')
     monkeypatch.setattr(pipeline, 'client', Mock(side_effect=AssertionError('No network client needed')))
     pipeline.plan(state, None)
