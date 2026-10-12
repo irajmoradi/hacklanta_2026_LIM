@@ -325,6 +325,9 @@ def build_vf_chain(vfx_list: list[str], width: int = 1920, height: int = 1080, f
         if name == "none" or name not in VIDEO_EFFECTS:
             continue
         effect = VIDEO_EFFECTS[name]
+        if name in ('skull_rain', 'fire_rain', 'laugh_rain', 'confetti_ace'):
+            from fx.sprites import filter_for
+            effect = {**effect, 'filter': filter_for(name, width, height)}
         if effect["filter"]:
             selected.append(effect)
         if effect.get("audio_filter"):
@@ -560,6 +563,10 @@ VIDEO_EFFECTS.update({
     "deep_fry": dict(description="Crunchy oversaturated fail", filter="eq=saturation=3:contrast=1.8,unsharp=5:5:2", category="color", audio_filter=None),
     "hitmarker": dict(description="Crosshair hit confirmation", filter="drawtext=text='X':fontfile={fontpath}:fontsize=48:fontcolor=white:borderw=2:x=(w-tw)/2:y=(h-th)/2", category="text", audio_filter=None),
 })
+
+
+from fx.bold import register as _register_bold
+_register_bold(VIDEO_EFFECTS)
 
 
 def effects_for_prompt() -> str:

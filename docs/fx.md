@@ -1,5 +1,58 @@
 # EXT-18 montage FX library
 
+## FX-3 bold montage stacks
+
+`fx.bold.BOLD` adds original procedural punch/blur, earthquake, RGB split, VHS
+and datamosh-style bursts, speed streaks, damage flashes, camera rolls, clutch
+bars, deep-fry flare, kinetic words, failure banners, hitmarkers and sprite rain.
+These are stylizations, not optical-flow blur or actual bitstream corruption.
+`freeze` now holds the event with a white focus outline and yellow pointer in
+the timed v2 path. The pointer assumes the center/crosshair; no enemy location
+detector is implied. Whole-clip legacy freeze remains neutral.
+
+Every catalog VFX has `bold`, `phase`, `word`, `min_visible_duration`, event,
+mood, intensity and recommended length tags. `hype` means nice-compatible,
+`roast` means mean-only and `both` is shared. Old effects remain available for
+existing saved plans. Automatic stacks select only bold effects:
+
+- Build-up: a push-in, camera roll or clutch bars, starting about .6s before peak.
+- Hit: two overlapping layers, including a large X plus flash for a kill.
+- Aftermath: a word, banner, freeze or original sprite rain lasting 1–1.2s.
+
+The aftermath begins at the hit to make the stack readable immediately.
+Slow-motion clips use three bold layers plus the existing speed annotation;
+their hit and aftermath overlap. Other clips use four bold layers. All visual
+placements are at least .35s when the clip permits it. Near a cut, the entire
+effect window moves earlier instead of truncating to a few frames. Clips shorter
+than .35s necessarily use their full duration. Existing transition fades/flashes
+are separate from decorative VFX and keep their transition timing.
+
+Distinct explicit kill timestamps receive additional .4s confirmations when
+the primary marker does not cover them; these semantic repeats are exempt from
+decoration caps. Weighted seeded selection still respects mood/event tags,
+adjacent diversity and montage caps. If a very long montage exhausts a phase's
+inventory, visibility takes priority over decorative caps. Chaos changes
+selection; source cuts and event timestamps are unchanged by restacking.
+
+Sprites under `full_app/assets/vfx/` are original transparent Pillow drawings,
+about 37 KB total, with no font/license download. Rebuild with
+`python full_app/fx/sprites.py`. The renderer reads each selected PNG once and
+moves it through FFmpeg framesync. Geometry, text and cached sprite overlays all
+run in the existing single filter graph per segment in both performance modes;
+no extra encoding pass or ML dependency is introduced.
+
+Offline regression command (from worktree root):
+
+```bash
+tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_vfx_bold.py tests/test_render_stacks.py tests/test_planner_stacks.py"
+```
+
+See `demo_video/fx3/REPORT.md` for saved-evidence renders and visual QA. Its demo
+uses mean mode, privacy off and network calls blocked. Landscape preserves the
+saved 60s cuts; mean vertical locally replans DEMO-02's reviewed keep-list from
+20s to the requested 30s without new analysis. Optional existing center captions
+and reaction packs are disabled in these demos to make the VFX easy to inspect.
+
 FX-2: `fx.catalog.catalog()` inventories every non-`none` entry of
 `models.effects.VIDEO_EFFECTS` and `SOUND_EFFECTS` with event, mood, intensity,
 recommended slice length and timing tags. The lengths are editorial slices,

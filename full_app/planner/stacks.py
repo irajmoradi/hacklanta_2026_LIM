@@ -48,17 +48,21 @@ def decorate_stacks(plan, sources):
         events = events_for(c, sources[c.source_id])
         kinds = {k for k, _ in events}
         current = set()
-        for group, minimum, maximum in [('vfx', 2, 4), ('sfx', 2, 5)]:
-            if group == 'vfx' and c.speed == .5:
-                maximum -= 1  # Count the existing slow-motion annotation.
+        phases = ('build', 'hit', 'after') if c.speed == .5 else ('build', 'hit', 'hit', 'after')
+        kill_times = sorted({t for k,t in events if k in ('kill', 'headshot', 'multikill')})
+        for group, minimum, maximum in [('vfx', 4, 4), ('sfx', 2, 5)]:
+            if group == 'vfx':
+                minimum = maximum = len(phases)
             count = min(maximum, minimum + (1 if plan.mode == 'mean' else 0) +
                         sum(rng.random() < plan.chaos for _ in range(maximum-minimum)))
             for layer in range(count):
                 candidates = [e for e in entries if e['kind'] == group and e['timing'] == 'event'
                               and (group, e['name']) not in previous | current
                               and counts[group, e['name']] < cap
-                              and not (e['name'].startswith('text_') and
-                                       any(k == 'vfx' and n.startswith('text_') for k,n in current))
+                              and (group != 'vfx' or (e['bold'] and
+                                   e['phase'] == phases[layer]))
+                              and not (group == 'vfx' and e['name'].startswith('hitmarker_')
+                                       and (layer != 1 or not kill_times))
                               and (plan.mode == 'mean' or e['mood'] != 'roast')]
                 relevant = [e for e in candidates if kinds.intersection(e['events'])]
                 wildcard = surprises > 0 and layer > 0 and rng.random() < plan.chaos*.2
@@ -66,15 +70,15 @@ def decorate_stacks(plan, sources):
                     surprises -= 1
                 else:
                     candidates = relevant or candidates
-                if group == 'vfx' and layer == 0:
-                    core = {'hitmarker', 'zoom_punch', 'flash_white', 'shake', 'freeze', 'deep_fry'}
-                    if plan.mode == 'mean' and sources[c.source_id].label == 'lowlight':
-                        core = {'text_bruh', 'text_fail', 'text_rip', 'text_lol', 'text_oof'}
-                    focused = [e for e in candidates if e['name'] in core]
-                    candidates = focused or candidates
-                elif group == 'vfx' and layer == 1 and sources[c.source_id].label == 'lowlight':
-                    focused = [e for e in candidates if e['name'] in ('freeze', 'deep_fry')]
-                    candidates = focused or candidates
+                if group == 'vfx' and layer == 1 and kill_times:
+                    markers = [e for e in candidates if e['name'].startswith('hitmarker_')]
+                    candidates = markers or candidates
+                if not candidates and group == 'vfx':
+                    # Visibility wins if an unusually long montage exhausts repeat caps.
+                    candidates = [e for e in entries if e['kind'] == 'vfx' and e['bold']
+                                  and e['phase'] == phases[layer]
+                                  and ('vfx', e['name']) not in current
+                                  and (plan.mode == 'mean' or e['mood'] != 'roast')]
                 if not candidates:
                     break
                 target = (.8 if plan.mode == 'mean' else .45) + rng.uniform(-.15,.15)*plan.chaos
@@ -85,15 +89,39 @@ def decorate_stacks(plan, sources):
                 else:
                     chosen = candidates[max(range(len(weights)), key=lambda i: weights[i])]
                 anchors = [t for k,t in events if k in chosen['events']] or [c.peak]
-                anchor = anchors[layer % len(anchors)]
+                anchor = c.peak if group == 'vfx' else anchors[layer % len(anchors)]
                 start = min(c.start+c.duration-min(.04,c.duration/2), max(c.start, anchor+rng.uniform(-.12,.12)*plan.chaos))
                 duration = min(chosen['length'], c.start+c.duration-start)
+                if group == 'vfx':
+                    duration = min(c.duration, chosen['length'])
+                    offset = -.6 if layer == 0 else -.04
+                    if phases[layer] == 'after':
+                        duration = min(c.duration, max(1., chosen['length']))
+                    if chosen['name'].startswith('hitmarker_') and kill_times:
+                        anchor = min(kill_times, key=lambda t: abs(t-c.peak))
+                    start = min(c.start+c.duration-duration, max(c.start, anchor+offset))
                 common = dict(clip_id=c.id, name=chosen['name'], start=start, duration=duration)
                 if group == 'vfx':
-                    plan.effects.append(Effect(**common))
+                    effect = Effect(**common)
+                    if chosen['name'] == 'freeze':
+                        # Freeze the footage, not a pre-hit composite: downstream
+                        # hitmarkers/flashes must still animate over the held frame.
+                        index = next((i for i,e in enumerate(plan.effects)
+                                      if e.clip_id == c.id and e.name != 'slow_motion'), len(plan.effects))
+                        plan.effects.insert(index, effect)
+                    else:
+                        plan.effects.append(effect)
                 else:
                     gain = (.68 if plan.mode == 'mean' else .48) + rng.uniform(-.1,.1)*plan.chaos
                     plan.sfx.append(Sound(**common, gain=gain))
                 current.add((group, chosen['name']))
                 counts[group, chosen['name']] += 1
+        # A distinct detector kill gets its own confirmation; never invent timestamps.
+        for anchor in kill_times:
+            marker = next((e for e in plan.effects if e.clip_id == c.id and
+                           e.name.startswith('hitmarker_') and e.start <= anchor < e.start+e.duration), None)
+            if marker is None:
+                duration = min(.4, c.duration)
+                start = min(c.start+c.duration-duration, max(c.start, anchor-.04))
+                plan.effects.append(Effect(clip_id=c.id, name='hitmarker_burst', start=start, duration=duration))
         previous = current
