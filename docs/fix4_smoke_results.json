@@ -1,0 +1,63 @@
+{
+  "job_id": "139b8b0ac9a04cb5999a429eea01b54a",
+  "duration": 360.0,
+  "game": "valorant",
+  "game_confidence": 0.909,
+  "candidates": 14,
+  "assessed": 2,
+  "clips": 13,
+  "curve_points": 360,
+  "analysis_calls": 3,
+  "nice": {
+    "meta": {
+      "duration": 8.021333,
+      "width": 1920,
+      "height": 1080,
+      "fps": 30.0,
+      "video_codec": "h264",
+      "audio_codec": "aac"
+    },
+    "timings": {
+      "edit_plan": 0.0247,
+      "privacy": 18.8055,
+      "probe": 0.1429,
+      "profiles": 17.142,
+      "rank_merge": 0.0008,
+      "render": 29.0768,
+      "render_v2": 5.9534,
+      "signals": 93.0453,
+      "social": 4.2998,
+      "subject_track": 0.0002,
+      "whole_video": 55.8527,
+      "window_scoring": 13.4315
+    },
+    "share_downloads": 5
+  },
+  "mean": {
+    "meta": {
+      "duration": 8.021333,
+      "width": 1920,
+      "height": 1080,
+      "fps": 30.0,
+      "video_codec": "h264",
+      "audio_codec": "aac"
+    },
+    "timings": {
+      "edit_plan": 0.0253,
+      "privacy": 1.0485,
+      "probe": 0.1429,
+      "profiles": 17.142,
+      "rank_merge": 0.0008,
+      "render": 11.5536,
+      "render_v2": 6.2923,
+      "signals": 93.0453,
+      "social": 4.1896,
+      "subject_track": 0.0003,
+      "whole_video": 55.8527,
+      "window_scoring": 13.4315
+    },
+    "share_downloads": 5
+  },
+  "calls": 3,
+  "success": true
+}

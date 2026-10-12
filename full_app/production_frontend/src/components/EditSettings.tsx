@@ -17,7 +17,7 @@ export function EditSettings({ options, change, capabilities, legacy, preset, se
     ["reactions", "Meme reactions", "Place reactions around key moments."],
     ["sam", "SAM spotlight", "Highlight the action with a subject mask."],
     ["sam_reframe", "Subject-aware vertical crop", "Follow the subject in vertical exports."],
-    ["privacy_blur", "Privacy blur", "Blur other players’ names when detection is available. Review the result."],
+    ["privacy_blur", "Privacy blur", "Blur kill feed, chat and party HUD regions in the export. Review the result."],
     ["narration", "AI narration", "Add a stock-voice caster when speech synthesis is configured."],
     ["chat", "Twitch chat signal", "Use replay activity to find crowd favorites."],
     ["share_kit", "Share kit", "Prepare covers and posting copy after rendering."],

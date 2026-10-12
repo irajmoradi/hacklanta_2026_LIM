@@ -251,3 +251,15 @@ it("translates discovered backend controls and normalizes real review payloads",
   expect(job.interest[1].score).toBe(100);
   expect(job.share_kit?.downloads).toHaveLength(1);
 });
+
+
+it("does not send a stale reviewed plan when mode changes", async () => {
+  const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({id: "one"})});
+  vi.stubGlobal("fetch", fetcher);
+  const api = new EditorApi("jobs");
+  await api.analyze("one", options);
+  await api.render("one", "landscape", {...options, mode: "mean"}, demoClips, {segments: []});
+  const body = JSON.parse(fetcher.mock.calls[1][1].body);
+  expect(body.mode).toBe("mean");
+  expect(body).not.toHaveProperty("edit_plan");
+});

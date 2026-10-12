@@ -181,7 +181,7 @@ def create_app(config=None, pipeline=None):
             job = dict(id=job_id, _owner=g.owner, dir=str(directory), source=str(source), meta=meta,
                        sources=sources, source_count=len(sources),
                        status='uploaded', stage='upload', progress=1, completed=['upload'],
-                       options={}, clips=None, candidates=[], edit_plan=None, output=None,
+                       options={'multipov': True} if len(sources) > 1 else {}, clips=None, candidates=[], edit_plan=None, output=None,
                        warnings=[], error=None, created_at=time.time(), target=None, elapsed=0)
             store.save(job)
         except Exception:

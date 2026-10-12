@@ -65,8 +65,8 @@ class Pipeline:
     def client(self, job, key):
         from services.provider_config import validate_provider
         from services.call_budget import CallBudget
-        budget = CallBudget(Path(job['dir']) / 'gemini-budget.sqlite3')
         provider = validate_provider(job['options'].get('provider', 'gemini'))
+        budget = CallBudget(Path(job['dir']) / 'gemini-budget.sqlite3' if job.get('dir') else None)
         if provider in ('local', 'local_vlm'):
             from .providers import LocalClient
             return LocalClient(api_key=key, budget=budget)
@@ -74,7 +74,7 @@ class Pipeline:
         client.budget = budget
         client.auto_proxy = True
         if os.getenv('GEMINI_ATTEMPTS'):
-            client.config.attempts = int(os.environ['GEMINI_ATTEMPTS'])
+            client.config = type(client.config).model_validate({**client.config.model_dump(), 'attempts': int(os.environ['GEMINI_ATTEMPTS'])})
         return client
 
     def analyze(self, job, key):
@@ -107,13 +107,20 @@ class Pipeline:
                         from services.gemini_client import GeminiProvider
                         if isinstance(client, GeminiProvider):
                             from services.video_understanding import chunk_ranges
-                            chunks = job.get('_chunks') or [dict(start=0, end=job['meta']['duration'])]
+                            splits = options.get('splits', 1)
+                            length = job['meta']['duration'] / splits
+                            chunks = job.get('_chunks') or [dict(start=i*length, end=(i+1)*length) for i in range(splits)]
                             reserve = sum(len(list(chunk_ranges(c['end']-c['start'], client.config.chunk_seconds,
                                                                client.config.overlap_seconds))) for c in chunks)
                             reserve += 0 if options.get('planner') else 1
+                            reserve *= client.config.attempts
                             count = max(0, (client.budget.remaining - reserve) // client.config.attempts)
-                            candidates = sorted(candidates, key=lambda c: -c['score'])[:min(count, int(os.getenv('GEMINI_TOP_N', '30')))]
-                        scored = [candidate_dict(c) for c in score(source, candidates)]
+                            candidates = sorted(candidates, key=lambda c: -c['score'])[:min(count, max(0, int(os.getenv('GEMINI_TOP_N', '30'))))]
+                        try:
+                            scored = [candidate_dict(c) for c in score(source, candidates)]
+                        except Exception as error:
+                            from services.provider_errors import classify
+                            raise classify(error) from None
                     else:
                         self.warn(job, 'Window scoring unavailable; using signal candidates')
             with self.stage(job, 'whole_video'):
@@ -187,7 +194,11 @@ class Pipeline:
             edit_style=style['label'], style_instructions=style['instructions'], user_prompt=options.get('prompt', ''))
         client = self.client(job, key)
         try:
-            planned = plan_valid(client.plan_edit(prompt), job['meta']['duration'])
+            try:
+                planned = plan_valid(client.plan_edit(prompt), job['meta']['duration'])
+            except Exception as error:
+                from services.provider_errors import classify
+                raise classify(error) from None
             for segment in planned['segments']:
                 clip = next((c for c in job['clips'] if c.get('keep', True) and 'caption' in c
                              and c['start_seconds'] < segment['source_end']

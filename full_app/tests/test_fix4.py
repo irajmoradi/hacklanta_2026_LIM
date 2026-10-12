@@ -102,6 +102,66 @@ def test_safe_error_messages():
     assert 'budget' in str(ProviderFailure('budget'))
 
 
+def test_scoring_uses_top_n_and_reserves_whole_video(video, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from services.gemini_client import GeminiProvider
+    from services.video_understanding import ProviderConfig
+    monkeypatch.setenv('GEMINI_REQUEST_INTERVAL_SECONDS', '0')
+    client = Mock()
+    def generate(**kwargs):
+        schema = kwargs['config'].response_json_schema
+        if 'clips' in schema['properties']:
+            result = {'clips': []}
+        else:
+            result = dict(player_alive=True, kind='highlight', hype=8., caption='Play', reaction='hype')
+        return SimpleNamespace(text=json.dumps(result), usage_metadata=None)
+    client.models.generate_content.side_effect = generate
+    provider = GeminiProvider(client=client, vertexai=True, config=ProviderConfig(attempts=1))
+    provider.budget = CallBudget(tmp_path / 'budget.sqlite3', limit=3)
+    pipeline = Pipeline()
+    monkeypatch.setattr(pipeline, 'client', lambda *args: provider)
+    candidates = [dict(start=float(i), end=float(i+1), score=score, signals={}, events=[])
+                  for i, score in enumerate([1., 10., 5.])]
+    monkeypatch.setattr('signals.detect_candidates', lambda *args, **kwargs: candidates)
+    job = dict(source=str(video), dir=str(tmp_path), options={'planner': True}, warnings=[])
+    pipeline.analyze(job, None)
+    assert [c['score'] for c in job['window_scores']] == [10., 5.]
+    assert provider.budget.remaining == 0
+    assert client.models.generate_content.call_count == 3
+
+
+def test_retries_consume_budget_before_transport(monkeypatch):
+    from services.gemini_client import GeminiProvider
+    from services.video_understanding import ProviderConfig
+    monkeypatch.setenv('GEMINI_REQUEST_INTERVAL_SECONDS', '0')
+    client = Mock()
+    client.models.generate_content.side_effect = TimeoutError('private URL')
+    provider = GeminiProvider(client=client, config=ProviderConfig(attempts=3, backoff_seconds=0))
+    provider.budget = CallBudget(limit=2)
+    with pytest.raises(ProviderFailure, match='budget'):
+        provider._generate(['prompt'], ClipList)
+    assert client.models.generate_content.call_count == 2
+
+
+def test_profile_sampling_and_fallback_are_bounded(video):
+    from profiles import detect_game
+    seen = []
+    def fallback(images):
+        seen.extend(images)
+        return 'valorant', .75
+    assert detect_game(video, ocr=lambda image: [], vlm_fallback=fallback) == ('valorant', .75)
+    assert len(seen) == 3
+
+
+def test_hud_anchors_corroborate_displaced_keywords():
+    from profiles import Box, OCRToken, detect_frames
+    tokens = [OCRToken('BUY PHASE', Box(.4, .45, .6, .50)),
+              OCRToken('100', Box(.3, .9, .35, .95)),
+              OCRToken('1:30', Box(.45, .03, .55, .08))]
+    assert detect_frames([(1280, 720, tokens)])[0] == 'valorant'
+    assert detect_frames([(1280, 720, tokens[1:])]) == ('generic', 0)
+
+
 def test_selected_privacy_cache_and_source_clocks(video, tmp_path, monkeypatch):
     from pipeline.privacy_ranges import selected_source
     from services.probe import probe_video
