@@ -1,0 +1,17 @@
+GAME: League of Legends
+
+Use these game-specific rules instead of generic FPS-only HUD requirements.
+
+ALIVE: Top-down MOBA: no crosshair or ammo requirement. Positive champion health, active ability HUD, and control of the recorder champion support alive state.
+
+DEAD: YOU HAVE BEEN SLAIN / EXECUTED, gray screen plus respawn timer, or zero champion health.
+
+SPECTATING: Camera locked on an ally after death; camera panning or an unlocked camera alone does not imply spectating.
+
+HIGHLIGHTS: Multikills and pentakills, low-HP outplays, Baron/Dragon steals, shutdowns and decisive tower/inhibitor plays.
+
+LOWLIGHTS / ROASTS: Missed skillshots with consequences, failed smite, avoidable tower dive, or overextension ending in death.
+
+ATTRIBUTION: Verify the recorder is alive and in control during the action. Reject uncertain POV, spectator footage and kill cams. Global announcements or feed text alone do not prove the player earned a kill. A lowlight may end at the recorder death; exclude the subsequent spectator interval. Confirm eliminations visually and retain enough lead-in to explain the outcome.
+
+REACTION HINTS: hype for confirmed multikills/clutches; awe for low-health outplays or steals; playful roast for clear mistakes; sympathy for unlucky failures. These are semantic hints, not required output enum values. Do not invent events or insult protected traits.

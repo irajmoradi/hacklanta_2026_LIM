@@ -1,0 +1,148 @@
+{
+  "name": "overwatch2",
+  "display_name": "Overwatch 2",
+  "regions": {
+    "kill_feed": [
+      0.7,
+      0.04,
+      1,
+      0.32,
+      "right"
+    ],
+    "death_banner": [
+      0,
+      0.02,
+      0.48,
+      0.24,
+      "left"
+    ],
+    "spectating": [
+      0.25,
+      0.78,
+      0.75,
+      0.98,
+      "center"
+    ],
+    "round_score": [
+      0.3,
+      0,
+      0.7,
+      0.16,
+      "center"
+    ],
+    "announcements": [
+      0.25,
+      0.15,
+      0.75,
+      0.4,
+      "center"
+    ],
+    "health": [
+      0,
+      0.74,
+      0.28,
+      1,
+      "left"
+    ]
+  },
+  "keywords": {
+    "kill": [
+      "kill",
+      "elimination",
+      "abate",
+      "eliminación"
+    ],
+    "death": [
+      "killed by",
+      "eliminated by",
+      "eliminado por",
+      "respawn",
+      "ressurgir",
+      "reaparecer",
+      "ressurgirá em",
+      "respawn in",
+      "eliminado por"
+    ],
+    "assist": [
+      "assist",
+      "assistance",
+      "assistência",
+      "asistencia"
+    ],
+    "multikill": [
+      "double kill",
+      "triple kill",
+      "quadra kill",
+      "abate duplo",
+      "asesinato doble"
+    ],
+    "teamwipe": [
+      "team kill",
+      "ace",
+      "pentakill",
+      "team kill",
+      "aniquilação de equipe"
+    ],
+    "round_won": [
+      "victory",
+      "round won",
+      "vitória",
+      "victoria"
+    ],
+    "round_lost": [
+      "defeat",
+      "round lost",
+      "derrota"
+    ],
+    "objective_taken": [
+      "objective captured",
+      "objetivo capturado",
+      "payload delivered",
+      "checkpoint reached",
+      "objective captured",
+      "ponto capturado",
+      "carga entregue"
+    ]
+  },
+  "detection_keywords": {
+    "death_banner": [
+      "eliminated by",
+      "eliminado por"
+    ],
+    "spectating": [
+      "kill cam",
+      "câmera de abates",
+      "change hero"
+    ],
+    "announcements": [
+      "team kill"
+    ],
+    "round_score": [
+      "payload",
+      "checkpoint reached"
+    ]
+  },
+  "signal_weights": {
+    "ocr": 1.2,
+    "announcements": 1.3,
+    "motion": 1.1,
+    "audio": 1,
+    "objective": 1.3
+  },
+  "aspect_notes": "Approximate 16:9 search regions, not pixel-exact UI contracts. Native 16:10/ultrawide retains height-relative HUD size with left/right/center anchors; stretched or customized HUDs need calibration. For pillarbox/letterbox footage use pixels(..., letterboxed=True) or crop to the content first. UI scale, patches and spectator overlays can shift regions.",
+  "alive_rules": [
+    "Player crosshair, hero health, ability cooldowns and direct aim control support alive state; ammo is hero dependent."
+  ],
+  "dead_rules": [
+    "Top-left ELIMINATED BY or KILLED BY, top-right respawn timer, or death tint with other death evidence."
+  ],
+  "spectating_rules": [
+    "Bottom-center KILL CAM / CÂMERA DE ABATES, change-hero prompt, or following a teammate after death."
+  ],
+  "highlights": [
+    "Team kills, ultimate combos, environmental eliminations, clutch point contests or payload pushes."
+  ],
+  "lowlights": [
+    "Wasted ultimate, stagger death, missed saves, or abandoning a contested objective."
+  ]
+}

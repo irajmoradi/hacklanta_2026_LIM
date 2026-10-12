@@ -1,0 +1,159 @@
+{
+  "name": "league_of_legends",
+  "display_name": "League of Legends",
+  "regions": {
+    "kill_feed": [
+      0.78,
+      0.35,
+      1,
+      0.75,
+      "right"
+    ],
+    "death_banner": [
+      0.25,
+      0.12,
+      0.75,
+      0.35,
+      "center"
+    ],
+    "spectating": [
+      0.3,
+      0.72,
+      0.72,
+      1,
+      "center"
+    ],
+    "round_score": [
+      0.3,
+      0,
+      0.7,
+      0.16,
+      "center"
+    ],
+    "announcements": [
+      0.25,
+      0.15,
+      0.75,
+      0.4,
+      "center"
+    ],
+    "health": [
+      0.3,
+      0.86,
+      0.66,
+      1,
+      "center"
+    ]
+  },
+  "keywords": {
+    "kill": [
+      "kill",
+      "elimination",
+      "abate",
+      "eliminación",
+      "enemy slain",
+      "you have slain",
+      "shutdown",
+      "neutralizado"
+    ],
+    "death": [
+      "killed by",
+      "eliminated by",
+      "eliminado por",
+      "respawn",
+      "ressurgir",
+      "reaparecer",
+      "you have been slain",
+      "executed",
+      "você foi abatido",
+      "has sido asesinado"
+    ],
+    "assist": [
+      "assist",
+      "assistance",
+      "assistência",
+      "asistencia"
+    ],
+    "multikill": [
+      "double kill",
+      "triple kill",
+      "quadra kill",
+      "abate duplo",
+      "asesinato doble",
+      "quadra kill",
+      "quadrakill"
+    ],
+    "teamwipe": [
+      "team kill",
+      "ace",
+      "pentakill",
+      "pentakill",
+      "penta kill",
+      "ace"
+    ],
+    "round_won": [
+      "victory",
+      "round won",
+      "vitória",
+      "victoria"
+    ],
+    "round_lost": [
+      "defeat",
+      "round lost",
+      "derrota"
+    ],
+    "objective_taken": [
+      "objective captured",
+      "objetivo capturado",
+      "baron slain",
+      "dragon slain",
+      "turret destroyed",
+      "tower destroyed",
+      "inhibitor destroyed",
+      "barão",
+      "dragão",
+      "torre destruída"
+    ]
+  },
+  "detection_keywords": {
+    "death_banner": [
+      "you have been slain",
+      "has sido asesinado",
+      "você foi abatido"
+    ],
+    "announcements": [
+      "pentakill",
+      "penta kill",
+      "shutdown",
+      "enemy slain"
+    ],
+    "round_score": [
+      "baron",
+      "dragon",
+      "turret destroyed"
+    ]
+  },
+  "signal_weights": {
+    "ocr": 1.7,
+    "announcements": 1.8,
+    "motion": 0.4,
+    "audio": 0.8,
+    "objective": 1.5
+  },
+  "aspect_notes": "Approximate 16:9 search regions, not pixel-exact UI contracts. Native 16:10/ultrawide retains height-relative HUD size with left/right/center anchors; stretched or customized HUDs need calibration. For pillarbox/letterbox footage use pixels(..., letterboxed=True) or crop to the content first. UI scale, patches and spectator overlays can shift regions.",
+  "alive_rules": [
+    "Top-down MOBA: no crosshair or ammo requirement. Positive champion health, active ability HUD, and control of the recorder champion support alive state."
+  ],
+  "dead_rules": [
+    "YOU HAVE BEEN SLAIN / EXECUTED, gray screen plus respawn timer, or zero champion health."
+  ],
+  "spectating_rules": [
+    "Camera locked on an ally after death; camera panning or an unlocked camera alone does not imply spectating."
+  ],
+  "highlights": [
+    "Multikills and pentakills, low-HP outplays, Baron/Dragon steals, shutdowns and decisive tower/inhibitor plays."
+  ],
+  "lowlights": [
+    "Missed skillshots with consequences, failed smite, avoidable tower dive, or overextension ending in death."
+  ]
+}

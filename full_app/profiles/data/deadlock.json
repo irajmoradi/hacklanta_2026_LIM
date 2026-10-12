@@ -1,0 +1,146 @@
+{
+  "name": "deadlock",
+  "display_name": "Deadlock",
+  "regions": {
+    "kill_feed": [
+      0.7,
+      0.04,
+      1,
+      0.32,
+      "right"
+    ],
+    "death_banner": [
+      0.72,
+      0.28,
+      1,
+      0.9,
+      "right"
+    ],
+    "spectating": [
+      0.28,
+      0.7,
+      0.72,
+      1,
+      "center"
+    ],
+    "round_score": [
+      0.3,
+      0,
+      0.7,
+      0.16,
+      "center"
+    ],
+    "announcements": [
+      0.25,
+      0.15,
+      0.75,
+      0.4,
+      "center"
+    ],
+    "health": [
+      0,
+      0.55,
+      0.25,
+      0.98,
+      "left"
+    ]
+  },
+  "keywords": {
+    "kill": [
+      "kill",
+      "elimination",
+      "abate",
+      "eliminación"
+    ],
+    "death": [
+      "killed by",
+      "eliminated by",
+      "eliminado por",
+      "respawn",
+      "ressurgir",
+      "reaparecer",
+      "incoming damage",
+      "last death",
+      "killing blow",
+      "shop upgrade"
+    ],
+    "assist": [
+      "assist",
+      "assistance",
+      "assistência",
+      "asistencia"
+    ],
+    "multikill": [
+      "double kill",
+      "triple kill",
+      "quadra kill",
+      "abate duplo",
+      "asesinato doble"
+    ],
+    "teamwipe": [
+      "team kill",
+      "ace",
+      "pentakill"
+    ],
+    "round_won": [
+      "victory",
+      "round won",
+      "vitória",
+      "victoria"
+    ],
+    "round_lost": [
+      "defeat",
+      "round lost",
+      "derrota"
+    ],
+    "objective_taken": [
+      "objective captured",
+      "objetivo capturado",
+      "urn delivered",
+      "spirit urn",
+      "patron destroyed",
+      "guardian destroyed",
+      "urna entregue",
+      "patrono destruído"
+    ]
+  },
+  "detection_keywords": {
+    "death_banner": [
+      "incoming damage",
+      "last death",
+      "killing blow"
+    ],
+    "spectating": [
+      "shop upgrade",
+      "respawn in"
+    ],
+    "round_score": [
+      "spirit urn",
+      "urn delivered",
+      "patron destroyed"
+    ]
+  },
+  "signal_weights": {
+    "ocr": 1.3,
+    "announcements": 1.2,
+    "motion": 1,
+    "audio": 1,
+    "objective": 1.3
+  },
+  "aspect_notes": "Approximate 16:9 search regions, not pixel-exact UI contracts. Native 16:10/ultrawide retains height-relative HUD size with left/right/center anchors; stretched or customized HUDs need calibration. For pillarbox/letterbox footage use pixels(..., letterboxed=True) or crop to the content first. UI scale, patches and spectator overlays can shift regions.",
+  "alive_rules": [
+    "Third-person hero control, positive health, active abilities and reticle support alive state."
+  ],
+  "dead_rules": [
+    "Bottom-center Respawn in banner with Shop & Upgrade; right-side INCOMING DAMAGE (LAST DEATH) or Killing Blow; grayscale plus respawn evidence."
+  ],
+  "spectating_rules": [
+    "Camera following another hero after death; the grayed ability bar may remain visible."
+  ],
+  "highlights": [
+    "Confirmed multikills, soul-denial outplays, urn delivery/steals, and decisive Patron or guardian fights."
+  ],
+  "lowlights": [
+    "Lost urn, overextension, failed ability combo, or avoidable death losing souls/objectives."
+  ]
+}
