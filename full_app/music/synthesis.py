@@ -3,9 +3,11 @@
 import numpy as np
 
 from .audio import SAMPLE_RATE, finish
+from .models import Section
 
 
-def synthesize(style: str, length: float, bpm: float, beats, sections, seed: int):
+def synthesize(style: str, length: float, bpm: float, beats: list[float],
+               sections: list[Section], seed: int) -> np.ndarray:
     samples = np.zeros(round(length * SAMPLE_RATE), dtype=np.float32)
     rng = np.random.default_rng(seed)
     period = 60 / bpm

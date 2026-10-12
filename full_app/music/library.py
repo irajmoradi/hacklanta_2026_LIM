@@ -1,5 +1,6 @@
 """Validated local library manifests and deterministic style/mode selection."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 import json
 import math
@@ -19,7 +20,7 @@ class LibraryTrack:
     attribution: str | None
 
 
-def number(value, name, minimum, maximum):
+def number(value: float, name: str, minimum: float, maximum: float) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name} must be a number")
     value = float(value)
@@ -28,13 +29,13 @@ def number(value, name, minimum, maximum):
     return value
 
 
-def _tags(value, name):
+def _tags(value, name: str) -> tuple[str, ...]:
     if not isinstance(value, list) or any(not isinstance(v, str) or not v.strip() for v in value):
         raise ValueError(f"{name} must be a list of nonempty strings")
     return tuple(v.strip().lower() for v in value)
 
 
-def load_manifest(path) -> list[LibraryTrack]:
+def load_manifest(path: str | Path) -> list[LibraryTrack]:
     path = Path(path).resolve()
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("version") != 1 or not isinstance(data.get("tracks"), list):
@@ -64,7 +65,7 @@ def load_manifest(path) -> list[LibraryTrack]:
     return tracks
 
 
-def select_track(tracks, style, mode=None):
+def select_track(tracks: Iterable[LibraryTrack], style: str, mode: str | None = None) -> LibraryTrack | None:
     target = .85 if style == "energetic" else .30
     moods = {"energetic", "hype", "intense"} if style == "energetic" else {"chill", "calm", "relaxed"}
     candidates = [track for track in tracks

@@ -1,27 +1,30 @@
 """Bounded, shell-free preview rendering and an opt-in external RIFE adapter."""
 
-import json
 from pathlib import Path
 import subprocess
 import warnings
 from typing import Callable
 
 from . import Effect, Timing
+from .media import probe as probe_media
 
 
-def run(args):
+def run(args: list) -> subprocess.CompletedProcess[str]:
     result = subprocess.run([str(a) for a in args], capture_output=True, text=True, timeout=180)
     if result.returncode:
         raise RuntimeError(f"{args[0]} failed ({result.returncode}): {result.stderr[-3000:]}")
     return result
 
 
-def probe(source):
-    return json.loads(run(["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", source]).stdout)
+def probe(source: str | Path) -> dict:
+    try:
+        return probe_media(source, timeout=180)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(f"ffprobe failed ({exc.returncode}): {exc.stderr[-3000:]}") from exc
 
 
 def render_preview(source, output, effect: Effect, timing: Timing, *,
-                   rife_hook: Callable[[Path, Path, float], None] | None = None, **params):
+                   rife_hook: Callable[[Path, Path, float], None] | None = None, **params) -> Path:
     """Video-only preview. A trusted RIFE hook may replace the encoded preview.
 
     Hook(source_preview, candidate_path, fps) must retain geometry and duration.

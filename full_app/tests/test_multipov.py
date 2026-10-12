@@ -40,6 +40,7 @@ def recordings(tmp_path_factory):
     return result
 
 
+@pytest.mark.slow
 def test_sync_offsets_drift_and_voice_chat_within_one_frame(recordings):
     alignments = sync(recordings)
     assert alignments[0] == Alignment(0)
@@ -50,6 +51,7 @@ def test_sync_offsets_drift_and_voice_chat_within_one_frame(recordings):
         assert actual.to_local(actual.to_match(7)) == pytest.approx(7)
 
 
+@pytest.mark.slow
 def test_candidates_use_shared_clock_and_signals_score(recordings):
     offsets = [Alignment(0), Alignment(2.375, 1.0015)]
     local = offsets[1]
@@ -65,6 +67,7 @@ def test_candidates_use_shared_clock_and_signals_score(recordings):
     assert len(candidates[1].angles) == 1
 
 
+@pytest.mark.slow
 def test_distinct_events_and_same_pov_do_not_merge(recordings):
     result = team_candidates(recordings[:2], [
         [dict(start=5, end=9, score=1, event_id="kill"), dict(start=6, end=10, score=2)],
@@ -75,6 +78,7 @@ def test_distinct_events_and_same_pov_do_not_merge(recordings):
     assert len(result[0].angles) == 1
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("mode", ["best", "split", "pip"])
 def test_render_valid_pixels_audio_names_and_duration(recordings, tmp_path, mode):
     offsets = [Alignment(0), Alignment(2.375, 1.0015)]
@@ -101,6 +105,7 @@ def test_render_valid_pixels_audio_names_and_duration(recordings, tmp_path, mode
     assert np.any(np.all(pixels[332:352, 8:500] > 180, axis=2))  # team credit
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("audio", [None, "anullsrc=r=8000", "sine=f=440:r=8000"])
 def test_unusable_audio_rejected(tmp_path, audio):
     path = tmp_path / "unusable.mp4"
@@ -115,6 +120,7 @@ def test_unusable_audio_rejected(tmp_path, audio):
         sync([path, second])
 
 
+@pytest.mark.slow
 def test_invalid_inputs_and_source_protection(recordings, tmp_path):
     with pytest.raises(ValueError):
         sync([])
@@ -131,6 +137,7 @@ def test_invalid_inputs_and_source_protection(recordings, tmp_path):
         render_montage(recordings[:1], [candidate], tmp_path / "invalid.mp4", offsets=[Alignment(5)])
 
 
+@pytest.mark.slow
 def test_render_without_audio_with_manual_alignment(tmp_path):
     path = tmp_path / "silent.mp4"
     ffmpeg("-f", "lavfi", "-i", "testsrc2=s=320x180:r=30:d=3", "-c:v", "libx264", "-threads", "2", path)
@@ -139,6 +146,7 @@ def test_render_without_audio_with_manual_alignment(tmp_path):
     ffmpeg("-i", result, "-f", "null", "-")
 
 
+@pytest.mark.slow
 def test_split_replay_corrects_visual_event_timing(tmp_path):
     videos, offsets = [], [Alignment(0), Alignment(-1, 1.01)]
     for index, clock in enumerate(offsets):
@@ -158,6 +166,7 @@ def test_split_replay_corrects_visual_event_timing(tmp_path):
             assert bool(np.all(frame[180, x] > 200)) == expected_white
 
 
+@pytest.mark.slow
 def test_unrelated_recordings_rejected(recordings, tmp_path):
     path = tmp_path / "different_match.mp4"
     ffmpeg("-f", "lavfi", "-i", "testsrc2=s=160x120:r=30:d=10", "-f", "lavfi", "-i",

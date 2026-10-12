@@ -32,14 +32,14 @@ instrumentation and volume; the final section fades out. Edge cases can have a
 zero-length intro or a very short drop/outro. Tiny beds are valid but cannot
 contain a musically complete phrase. Synthesis uses repeating four-bar harmony,
 bass, arpeggios, synthesized kick, and noise percussion. Finished beds have fades
-and are not intended to be seamlessly repeated in their entirety.
+and are not intended to loop in their entirety.
 
 Outputs are mono 16-bit PCM WAV, peak limited to 0.9. The caller owns cleanup;
 without `output_dir` files go to the system temp directory under `lim-music/`.
 This is a standalone API: the Flask endpoints and renderer defaults are unchanged.
 An integrator can supply `str(bed.path)` as the renderer's music input, mix/duck it
 against gameplay, and use the timing metadata for cuts. No renderer wiring is
-included because it is outside this task's allowed paths.
+included in this package.
 
 For the existing opt-in renderer, pass the bed directly in a `RenderPlan`:
 
@@ -157,21 +157,3 @@ provenance, input validation, ffmpeg decoding, and optional dependency fallbacks
 An integration test renders a synthetic video with a generated bed through the
 existing renderer and checks output duration and audio format. Tests use no Gemini
 calls or external media.
-
-### EXT-22 verification record (2026-10-12)
-
-All commands below ran on the Linux runner through `tools/remote_run.sh`:
-
-| Command argument | Result | Exit |
-| --- | --- | --- |
-| `cd full_app && python -m pytest -q tests/test_music.py` | 57 passed | 0 |
-| `cd full_app && python -m pytest -q` | 217 passed, 5 skipped, 4 failed | 1 |
-| `cd full_app && python -m pytest -q eval/test_app_smoke.py tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render --tb=short` | Same 4 failures independently of music tests | 1 |
-
-The unrelated failures are `eval/test_app_smoke.py::test_app_pipeline` (expects
-the removed `app.WORKSPACE` attribute) and three parametrizations in
-`tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render` (expects
-five warnings; the pipeline returns four). Their real render stages succeed.
-These existing tests/application code were not changed by EXT-22. The initial
-music-only run found two high-tempo autocorrelation failures; onset smoothing
-fixed them before the passing runs above. No paid/live calls were made.

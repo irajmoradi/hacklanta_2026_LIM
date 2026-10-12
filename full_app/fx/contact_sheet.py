@@ -7,7 +7,7 @@ from . import REGISTRY, Timing
 from .preview import probe, run
 
 
-def generate(output: Path, source: Path | None = None):
+def generate(output: Path, source: Path | None = None) -> Path:
     output.mkdir(parents=True, exist_ok=True)
     if source is None:
         source = output / "synthetic.mp4"
@@ -15,7 +15,6 @@ def generate(output: Path, source: Path | None = None):
              "testsrc2=s=320x180:r=30:d=2", "-c:v", "libx264", "-threads", "2", source])
     if float(probe(source)["format"]["duration"]) < 2:
         raise ValueError("Contact sheet source must contain at least two seconds")
-    tiles = []
     for index, (name, effect) in enumerate(REGISTRY.items()):
         timing = Timing(2, 0.5, 1.1)
         preview = effect.preview(source, output / f"{name}.mp4", timing)
@@ -25,10 +24,9 @@ def generate(output: Path, source: Path | None = None):
         run(["ffmpeg", "-v", "error", "-y", "-ss", position, "-i", preview,
              "-vf", f"scale=320:180,pad=320:210:0:0:black,drawtext=text='{name}':fontsize=17:fontcolor=white:x=8:y=186",
              "-frames:v", "1", "-threads", "1", tile])
-        tiles.append(tile)
     sheet = output / "contact-sheet.png"
     run(["ffmpeg", "-v", "error", "-y", "-framerate", "1", "-i", output / "tile-%02d.png",
-         "-vf", f"tile=4x3:nb_frames={len(tiles)}", "-frames:v", "1", "-threads", "1", sheet])
+         "-vf", f"tile=4x3:nb_frames={len(REGISTRY)}", "-frames:v", "1", "-threads", "1", sheet])
     return sheet
 
 

@@ -169,6 +169,7 @@ def amplitude(path, start, frequency):
                    for i, x in enumerate(samples))) / len(samples)
 
 
+@pytest.mark.slow
 def test_render_ducks_and_mixes(video, tmp_path):
     voice = tmp_path / "voice.wav"
     subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i",

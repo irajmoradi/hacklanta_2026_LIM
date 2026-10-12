@@ -1,6 +1,8 @@
-"""Offline audio fingerprint correlation and robust affine clock fitting."""
-import json
+"""Offline audio fingerprint correlation and affine clock fitting."""
 import subprocess
+from pathlib import Path
+
+from fx.media import probe as probe_media
 
 import numpy as np
 
@@ -14,16 +16,18 @@ class SyncError(ValueError):
     """Recordings have insufficient, ambiguous, or inconsistent shared audio."""
 
 
-def run(command, *, timeout=300):
-    result = subprocess.run(command, capture_output=True, timeout=timeout)
+def run(command: list[str], *, timeout: float = 300, cwd: str | Path | None = None) -> bytes:
+    result = subprocess.run(command, capture_output=True, timeout=timeout, cwd=cwd)
     if result.returncode:
         raise RuntimeError(result.stderr.decode(errors="replace")[-2000:])
     return result.stdout
 
 
-def probe(path):
-    data = json.loads(run(["ffprobe", "-v", "error", "-show_streams", "-show_format",
-                           "-of", "json", str(path)]))
+def probe(path: str | Path) -> tuple[float, bool]:
+    try:
+        data = probe_media(path, timeout=300)
+    except subprocess.CalledProcessError as exc:
+        raise RuntimeError(exc.stderr[-2000:]) from exc
     if not any(s["codec_type"] == "video" for s in data["streams"]):
         raise ValueError(f"No video stream: {path}")
     duration = float(data["format"]["duration"])
@@ -32,8 +36,8 @@ def probe(path):
     return duration, any(s["codec_type"] == "audio" for s in data["streams"])
 
 
-def _features(path):
-    duration, has_audio = probe(path)
+def _features(path: str | Path) -> np.ndarray:
+    _, has_audio = probe(path)
     if not has_audio:
         raise SyncError(f"No audio for synchronization: {path}")
     raw = run(["ffmpeg", "-nostdin", "-v", "error", "-i", str(path), "-vn",
@@ -63,7 +67,7 @@ def _features(path):
     return features / np.maximum(scale, 1e-4)
 
 
-def _match(reference, query):
+def _match(reference: np.ndarray, query: np.ndarray) -> tuple[int, float] | None:
     """Normalized multiband cross-correlation, all valid reference positions."""
     n, m = len(reference), len(query)
     query = query - query.mean(axis=0)
@@ -85,7 +89,7 @@ def _match(reference, query):
     return peak, confidence
 
 
-def _align(reference, other):
+def _align(reference: np.ndarray, other: np.ndarray) -> Alignment:
     window = 400  # two seconds: tolerate slight clock drift within each match
     points = []
     for start in np.unique(np.linspace(0, len(other) - window, 19).astype(int)):
@@ -118,7 +122,7 @@ def _align(reference, other):
     return Alignment(float(offset), float(rate), float(np.clip(points[best, 2].mean(), 0, 1)))
 
 
-def sync(videos):
+def sync(videos) -> list[Alignment]:
     """Return Alignment records in input order, relative to the first recording.
 
     Positive offset means the recording starts later in the match. Negative

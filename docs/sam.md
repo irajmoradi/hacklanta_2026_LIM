@@ -140,16 +140,14 @@ tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_sam.py"
 
 Tests generate synthetic motion with ffmpeg `drawtext` and `sine`, check mask
 shape/content and cache reuse, track movement and smoothness, mock the remote
-contract and malformed/slow responses, exercise missing local dependencies,
+contract and malformed responses, exercise missing local dependencies,
 decode all effects, verify duration/dimensions/audio (including silence insertion),
 and check compositor pixels, silent input, final-frame freezes, and atomic output.
 Real SAM 3 quality and GPU SAM 2 inference require separately provisioned models;
 they are not established by these offline tests.
 
-EXT-07 validation on the Linux runner (2026-10-12):
-
-- `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_sam.py"`:
-  17 passed, exit 0 at the implementation milestone.
-- `tools/remote_run.sh "cd full_app && python -m pytest -q"`:
-  20 passed, exit 0 after adding CLI, post-freeze playback, total-budget, and
-  render-with-failed-provider coverage. No live API calls were made.
+Deadline tests use a controlled clock and worker connection to cover startup,
+response timeouts, total budgets, cleanup, and the per-clip circuit breaker without
+sleeping or wall-clock assertions. Loopback HTTP tests still exercise the real
+remote protocol and spawned worker. Media and worker integration tests carry the
+`slow` marker; pure compositor and deadline tests do not.

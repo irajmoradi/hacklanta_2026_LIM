@@ -1,5 +1,7 @@
 """Tempo/energy estimates with lazy, optional librosa and a NumPy fallback."""
 
+from pathlib import Path
+
 import numpy as np
 
 from .audio import SAMPLE_RATE, read_audio
@@ -55,6 +57,6 @@ def analyze_samples(samples: np.ndarray, *, use_librosa: bool = True) -> TrackAn
     return TrackAnalysis(bpm, energy, duration, "autocorrelation")
 
 
-def analyze_track(path, *, use_librosa: bool = True) -> TrackAnalysis:
+def analyze_track(path: str | Path, *, use_librosa: bool = True) -> TrackAnalysis:
     """Analyze up to the first ten minutes; energy is amplitude RMS, not mood."""
     return analyze_samples(read_audio(path), use_librosa=use_librosa)

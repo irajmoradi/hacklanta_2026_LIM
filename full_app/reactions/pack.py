@@ -2,6 +2,7 @@
 import json
 import math
 import random
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -19,7 +20,7 @@ class Reaction:
     background: str
 
 
-def load_pack(folder):
+def load_pack(folder: str | Path) -> list[Reaction]:
     root = Path(folder).resolve()
     data = json.loads((root / 'pack.json').read_text(encoding='utf-8'))
     clips, ids = [], set()
@@ -46,13 +47,14 @@ def load_pack(folder):
 
 class ReactionSelector:
     """Create one per montage/job; selection history is not shared between users."""
-    def __init__(self, reactions, seed=None):
+    def __init__(self, reactions: Iterable[Reaction], seed: int | None = None) -> None:
         self.reactions = list(reactions)
         self.rng = random.Random(seed)
         self.last_id = self.last_speaker = None
-        self.counts = {}
+        self.counts: dict[str, int] = {}
 
-    def select(self, label='', score=0.5, mode='nice', suggested_reaction_label=None):
+    def select(self, label: str = '', score: float = 0.5, mode: str = 'nice',
+               suggested_reaction_label: str | None = None) -> Reaction | None:
         if mode not in ('nice', 'mean'):
             raise ValueError('Mode must be nice or mean')
         candidates = [r for r in self.reactions

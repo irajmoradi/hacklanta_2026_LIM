@@ -1,6 +1,7 @@
 """Sampled OCR with spatial union and temporal hold; text never enters tracks."""
 import math
 import unicodedata
+from pathlib import Path
 
 import cv2
 
@@ -9,16 +10,16 @@ from .ocr import get_reader
 from .profiles import regions_for
 
 
-def normalized_name(text):
+def normalized_name(text: str) -> str:
     return unicodedata.normalize("NFKC", text).strip().casefold()
 
 
-def overlap(a, b):
+def overlap(a: BlurBox, b: BlurBox) -> bool:
     return (a.x < b.x + b.width and b.x < a.x + a.width and
             a.y < b.y + b.height and b.y < a.y + a.height)
 
 
-def smooth(boxes):
+def smooth(boxes: list[BlurBox]) -> list[BlurBox]:
     """Merge touching time windows with overlapping boxes of the same kind."""
     output = []
     for current in sorted(boxes, key=lambda b: b.start):
@@ -34,7 +35,7 @@ def smooth(boxes):
     return output
 
 
-def detect_video(source, options=None, *, reader=None):
+def detect_video(source: str | Path, options: PrivacyOptions | dict | None = None, *, reader=None) -> BlurTrack:
     """Accept a PrivacyOptions or JSON-like API dict; return a serializable track.
 
     An injected reader implements read(BGR_frame) -> list[Word]. Missing/failed
@@ -101,7 +102,7 @@ def detect_video(source, options=None, *, reader=None):
                         continue
                     boxes.append(BlurBox(x=x/width, y=y/height, width=(right-x)/width, height=(bottom-y)/height,
                                          start=max(0, t-interval), end=min(duration, t+interval+options.hold_seconds), kind=kinds[0]))
-            if reader is not None and index and index < count - 1 and not warnings:
+            if index and index < count - 1 and not warnings:
                 raise ValueError("source ended before its declared frame count")
         return BlurTrack(width=width, height=height, duration=duration, boxes=smooth(boxes), warnings=warnings)
     finally:

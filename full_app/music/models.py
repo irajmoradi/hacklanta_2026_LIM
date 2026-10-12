@@ -1,5 +1,6 @@
 """Public, renderer-independent music metadata (all times are seconds)."""
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -30,10 +31,8 @@ class TrackAnalysis:
     method: str
 
 
-def timeline(length: float, climax_at: float, bpm: float):
+def timeline(length: float, climax_at: float, bpm: float) -> tuple[list[float], list[Section]]:
     """Anchor the beat grid to the drop, even for a non-beat-aligned climax."""
-    import math
-
     period = 60.0 / bpm
     first = math.ceil(-climax_at / period)
     last = math.ceil((length - climax_at) / period)

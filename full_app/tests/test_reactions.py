@@ -3,10 +3,11 @@ import json
 import math
 import subprocess
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
-from reactions import ReactionSelector, apply_reaction, load_pack, render_overlay
+from reactions import Reaction, ReactionSelector, apply_reaction, load_pack, render_overlay
 from reactions.demo import generate_pack
 from reactions.render import layout, probe
 
@@ -40,7 +41,11 @@ def tone(path, start, frequency):
                        for i, value in enumerate(samples))) / len(samples)
 
 
-def test_selection(pack):
+def test_selection():
+    pack = [Reaction(str(i), speaker, label, 'Beep!', Path('unused.mp4'), 1, 'light')
+            for i, (speaker, label) in enumerate([
+                ('Dot', 'sick_kill'), ('Bop', 'sick_kill'),
+                ('Dot', 'wholesome'), ('Bop', 'roast')])]
     selector = ReactionSelector(pack, seed=4)
     a = selector.select('fail', suggested_reaction_label='sick_kill')
     b = selector.select('fail', suggested_reaction_label='sick_kill')
@@ -60,7 +65,7 @@ def test_selection(pack):
 @pytest.mark.parametrize('change', [{'file': '../outside.mp4'}, {'duration': -1},
                                    {'duration': float('nan')}, {'label': 'unknown'},
                                    {'background': 'unknown'}, {'text': None}])
-def test_invalid_pack(pack, tmp_path, change):
+def test_invalid_pack(tmp_path, change):
     (tmp_path / 'inside.mp4').write_bytes(b'placeholder')
     entry = dict(id='test', speaker='Dot', label='hype', text='beep', file='inside.mp4',
                  duration=1, background='light')
@@ -70,6 +75,7 @@ def test_invalid_pack(pack, tmp_path, change):
         load_pack(tmp_path)
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize('preset,size,width,height', [('landscape','320x180',320,180),
                                                       ('vertical','180x320',180,320)])
 def test_render_timing_position_audio(pack, tmp_path, preset, size, width, height):
@@ -105,6 +111,7 @@ def test_render_timing_position_audio(pack, tmp_path, preset, size, width, heigh
     assert tone(out, .4, 880) < .01
 
 
+@pytest.mark.slow
 def test_silent_inputs_and_boundary(pack, tmp_path):
     base = make_base(tmp_path / 'silent.mp4', audio=False)
     out = render_overlay(base, pack[0], peak_time=100)
@@ -117,6 +124,7 @@ def test_silent_inputs_and_boundary(pack, tmp_path):
         render_overlay(base, pack[0], output_path=base)
 
 
+@pytest.mark.slow
 def test_hook(pack, tmp_path):
     base = make_base(tmp_path / 'base.mp4')
     selector = ReactionSelector(pack)
@@ -128,6 +136,7 @@ def test_hook(pack, tmp_path):
     assert apply_reaction(base, {}, ReactionSelector([]), enabled=True) == base
 
 
+@pytest.mark.slow
 def test_short_segment_and_existing_output(pack, tmp_path):
     original = make_base(tmp_path / 'base.mp4')
     short = tmp_path / 'short.mp4'
