@@ -27,8 +27,11 @@ def catalog():
             length = (1.8 if kind == 'sfx' else .65)
             if name.startswith('text_') or name in ('vignette', 'slow_motion', 'speed_2x'):
                 length = 1.5
+            if name == 'flash_white':
+                length = .12
             result[f'{kind}:{name}'] = dict(name=name, kind=kind, description=entry['description'],
                 events=list(SPECIAL.get(name, FAIL if roast else HYPE)), mood='roast' if roast else 'hype',
                 intensity=.9 if intense else .45, length=length,
-                timing='segment-speed' if name in ('slow_motion', 'speed_2x') else 'event')
+                timing=('segment-speed' if name in ('slow_motion', 'speed_2x') else
+                        'transition' if name in ('fade_in', 'fade_out') else 'event'))
     return result
