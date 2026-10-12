@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lim-vjepa"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+hf = ["torch>=2.6", "torchvision>=0.21", "transformers>=4.56,<6"]
+modal = ["modal>=1.0"]
+test = ["pytest>=8"]
+
+[tool.setuptools]
+packages = ["vjepa"]
+package-dir = {vjepa = "."}
