@@ -13,6 +13,9 @@ def _peak(clip: RankedClip) -> float:
     for value in (s.action_time, s.fail_time if clip.label == "lowlight" else s.kill_time):
         if value is not None:
             return value
+    if s.events:
+        preferred = [e for e in s.events if (e.kind in ('death', 'whiff')) == (clip.label == 'lowlight')]
+        return min(preferred or s.events, key=lambda e: (abs(e.time-(clip.start+clip.end)/2), e.time)).time
     return (clip.start + clip.end) / 2
 
 
@@ -58,20 +61,7 @@ def _decorate(plan: RenderPlan, sources: dict[str, RankedClip]) -> None:
         beat = window(c.peak, 1.5)
         if c.speed == 0.5:
             plan.effects.append(Effect(**whole, name="slow_motion"))
-        if cinematic:
-            plan.effects.append(Effect(**whole, name="vignette"))
-        if loud and original.signals.kill_time is not None:
-            kill = c.start + (original.signals.kill_time - c.source_start) / c.speed
-            if c.start <= kill < end:
-                hit = window(kill, 0.15)
-                plan.effects.append(Effect(**hit, name="flash_white"))
-                plan.sfx.append(Sound(**window(kill, 0.4), name="impact_hit"))
-        if loud and original.signals.multikill:
-            plan.effects.append(Effect(**window(c.peak, 0.4), name="zoom_in_center"))
         if original.label == "lowlight" and plan.mode == "mean":
-            if loud:
-                plan.effects.append(Effect(**beat, name="text_bruh"))
-                plan.sfx.append(Sound(**window(c.peak, 0.8), name="spongebob_fail"))
             plan.text.append(Text(**beat, content="Confidence: 100. Accuracy: 0.", role="meme", position="center"))
         if original.caption:
             plan.text.append(Text(**whole, content=original.caption))
@@ -112,16 +102,16 @@ def _decorate(plan: RenderPlan, sources: dict[str, RankedClip]) -> None:
 def plan_edit(
     clips: Iterable[RankedClip | dict], *, mode="nice", style="hype montage",
     target_length=30, aspect="16:9", min_clip_length=1, max_clip_length=6,
-    refiner=None, fill_target=False,
+    refiner=None, fill_target=False, chaos=None, seed=0,
 ) -> RenderPlan:
     """Plan a montage; a higher score means a stronger moment of either label.
 
     The hook repeats a teaser of the climax. All other source IDs occur once.
-    An optional refiner receives a prompt and returns caption-only JSON patches.
+    An optional refiner receives a prompt and returns caption and tagged-effect JSON patches.
     """
     options = PlannerOptions(mode=mode, style=style, target_length=target_length,
         aspect=aspect, min_clip_length=min_clip_length, max_clip_length=max_clip_length,
-        fill_target=fill_target)
+        fill_target=fill_target, chaos=(.6 if mode == "mean" else .35) if chaos is None else chaos, seed=seed)
     # Revalidate models too: callers may have mutated an already validated input.
     ranked = [RankedClip.model_validate(c.model_dump() if isinstance(c, RankedClip) else c) for c in clips]
     sources = {c.id: c for c in ranked}
@@ -231,8 +221,11 @@ def plan_edit(
     if len(plan.clips) == 2:
         plan.notes.append("Only hook and climax fit; no distinct build-up/setup beat.")
     _decorate(plan, sources)
+    from .stacks import decorate_stacks
+    decorate_stacks(plan, sources)
     plan = RenderPlan.model_validate(plan.model_dump())
     if refiner is not None:
         from .refinement import refine_captions
-        plan = refine_captions(plan, refiner)
+        from .stacks import events_for
+        plan = refine_captions(plan, refiner, {c.id: events_for(c, sources[c.source_id]) for c in plan.clips})
     return plan

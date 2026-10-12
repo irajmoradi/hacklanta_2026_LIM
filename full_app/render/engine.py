@@ -115,7 +115,7 @@ class Renderer:
                 if segment.timed_effects:
                     from .placements import effects_graph
                     graph = graph.replace('[v]', '[placement_input]')
-                    graph += effects_graph(segment.timed_effects, plan.size, plan.fps)
+                    graph += effects_graph(segment.timed_effects, plan.size, plan.fps, duration)
                 vf, _ = build_vf_chain(segment.video_effects, *plan.size, plan.fps)
                 if segment.fx:
                     from fx import Request, Timing, compose
@@ -135,23 +135,13 @@ class Renderer:
                     write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title, texts=texts)
                     graph = graph.replace('[outv]', '[uncaptioned]')
                     graph += f';[uncaptioned]ass={ass.name}[outv]'
-                if self.runner.perf and segment.sound_effects:
-                    from models.effects import SOUND_EFFECTS
-                    labels = ['[outa]']
-                    next_input = 1 if has_audio else 2
-                    for s in segment.sound_effects:
-                        file = SOUND_EFFECTS.get(s.sfx_key, {}).get('file')
-                        if not file or not Path(file).is_file():
-                            continue
-                        args += ['-i', str(self.runner.cache.audio(file))]
-                        trim = f'atrim=duration={s.duration},' if s.duration else ''
-                        graph += (f';[{next_input}:a]{trim}adelay={int(s.offset_in_segment*1000)}:all=1,'
-                                  f'volume={s.gain}[sfx{next_input}]')
-                        labels.append(f'[sfx{next_input}]')
-                        next_input += 1
-                    if len(labels) > 1:
-                        graph += ''.join([';', *labels, f'amix=inputs={len(labels)}:duration=first[mixed]'])
-                        graph = graph.replace('[outa]', '[baseaudio]').replace('[mixed]', '[outa]')
+                if segment.sound_effects:
+                    from .audio import sfx_graph
+                    graph = graph.replace('[outa]', '[baseaudio]')
+                    inputs, mix = sfx_graph(segment.sound_effects, 1 if has_audio else 2,
+                                            duration, self.runner.cache if self.runner.perf else None)
+                    args += inputs
+                    graph += mix
                 args += ["-filter_complex", graph, "-map", "[outv]", "-map", "[outa]",
                          "-t", str(duration)]
                 self.encode(args, path, directory)
@@ -184,11 +174,6 @@ class Renderer:
                                             for t in texts if t.start < duration]
                 if segment.title:
                     segment_captions[index].append(dict(start=0, end=min(3, duration), text=segment.title))
-                # Reuse the existing meme SFX registry and mixer in this isolated workspace.
-                if segment.sound_effects and not self.runner.perf:
-                    from services.ffmpeg_runner import FFmpegRunner
-                    helper = FFmpegRunner(directory, self.source, *plan.size, plan.fps)
-                    path = helper.overlay_sfx(path, [s.model_dump() for s in segment.sound_effects], index)
                 if self.segment_processor:
                     path, duration = self.segment_processor(path, index, segment, duration, directory)
                 return path, duration
@@ -245,6 +230,8 @@ class Renderer:
                     "-b:a", "192k", "-t", str(total), "-movflags", "+faststart", str(muxed)],
                     "v2 music mux")
                 joined = muxed
+            from .audio import master_audio
+            joined = master_audio(joined, directory / 'mastered.mp4')
             output = self.workspace / "final_edit.mp4"
             joined.replace(output)
             return output

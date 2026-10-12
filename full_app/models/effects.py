@@ -553,6 +553,15 @@ SOUND_EFFECTS = {
 }
 
 
+# Timed v2 effects; legacy callers also get valid, inexpensive filter snippets.
+VIDEO_EFFECTS.update({
+    "zoom_punch": dict(description="Quick centered impact zoom", filter="crop=iw/1.15:ih/1.15,scale={width}:{height}", category="distortion", audio_filter=None),
+    "freeze": dict(description="Hold the event frame", filter="null", category="distortion", audio_filter=None),
+    "deep_fry": dict(description="Crunchy oversaturated fail", filter="eq=saturation=3:contrast=1.8,unsharp=5:5:2", category="color", audio_filter=None),
+    "hitmarker": dict(description="Crosshair hit confirmation", filter="drawtext=text='X':fontfile={fontpath}:fontsize=48:fontcolor=white:borderw=2:x=(w-tw)/2:y=(h-th)/2", category="text", audio_filter=None),
+})
+
+
 def effects_for_prompt() -> str:
     """Format video effects list for the Gemini prompt."""
     lines = []

@@ -30,4 +30,4 @@ def to_render_plan(value):
             reactions=[dict(label=r.label, position=r.position, duck_game_audio=r.duck_game_audio,
                             **local(r)) for r in owned(plan.reactions)]))
     return RenderPlan(segments=segments, preset=ASPECT_PRESETS[plan.aspect],
-                      captions={'enabled': True}).model_dump(mode='json')
+                      chaos=plan.chaos, seed=plan.seed, captions={'enabled': True}).model_dump(mode='json')

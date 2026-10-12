@@ -1,5 +1,16 @@
 # EXT-18 montage FX library
 
+FX-2: `fx.catalog.catalog()` inventories every non-`none` entry of
+`models.effects.VIDEO_EFFECTS` and `SOUND_EFFECTS` with event, mood, intensity,
+recommended slice length and timing tags. The lengths are editorial slices,
+not claims about asset file duration. The planner varies selections and stack
+depth using chaos/seed; the renderer supports the complete timed VFX inventory.
+New legacy-compatible IDs are `zoom_punch`, `freeze`, `deep_fry`, and `hitmarker`.
+Freeze's dynamic hold is implemented in the v2 timed path; its legacy whole-clip
+filter is neutral because a freeze requires a timestamp. No new media assets or
+heavy dependencies are added. See `docs/planner.md` for option semantics and the
+HTTP integration boundary, and `docs/rendering.md` for the unified mixer.
+
 `full_app/fx` provides pure FFmpeg filter builders, a planner catalog, a composition
 helper, and video-only previews. No API key, network, ML package, or model download
 is needed. Importing `fx` does not probe hardware or launch FFmpeg.

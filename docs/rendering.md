@@ -194,3 +194,31 @@ placements. Missing local transcription remains a warning, never a download.
 Legacy preparation retimes words/tracks/FX using measured output duration and
 preserves titles. Legacy fade-out now uses actual speed-adjusted duration;
 chromatic aberration retains audio effects and normalized output geometry.
+
+# FX-2 stacked effects
+
+Every timed registry effect is rendered in list order, so overlapping windows
+compose rather than replace one another. Timed text gates use their placement
+clock even after two seconds. Zoom punch, deterministic shake, chromatic shift,
+freeze and deep fry use CPU FFmpeg filters; slow motion uses segment speed and
+`atempo`, preserving output-local placement clocks. Freeze holds the event frame
+without extending the segment. Time-changing `speed_ramp` remains a prepared
+source operation in the separate `fx` library.
+
+Both performance modes now use the same SFX graph: one input per assigned sound,
+trim/reset timestamps, explicit gain, 40 ms fade-out and millisecond delay.
+Game audio drops to 72% during the union of SFX windows. `amix` has N+1 inputs
+for N sounds and disables automatic normalization. A non-auto-leveling 0.95
+limiter protects the sum; latency compensation preserves sync. After concatenation
+and optional music, a final 0.85 limiter leaves AAC encoding headroom while
+copying video unchanged. Missing registered
+files and unknown names fail visibly instead of silently dropping sounds. Asset
+paths resolve relative to `full_app`, independent of the working directory.
+
+Run `python ../demo_video/fx2/render_saved.py` from `full_app` on runner 1 to
+rebuild the three saved DEMO-02 plans. It preserves reviewed cuts and privacy
+masks, disables optional reactions to isolate VFX/SFX, makes no analysis/API
+calls, and writes MP4s, sub-20-MB Discord versions, JSON plans, metadata and a
+per-clip effects table under `/srv/demo_out/fx2/`. The Discord encoder also checks
+decoded float samples and, if AAC overshoots full scale, lowers audio gain and
+remuxes the existing video until the headroom check passes.
