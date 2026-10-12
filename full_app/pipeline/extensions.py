@@ -188,6 +188,15 @@ def planner_plan(pipeline, job):
         reaction = c.get('suggested_reaction_label', c.get('reaction_label', c.get('label')))
         signals = dict(clutch=evidence.get('clutch') is True or reaction == 'clutch',
                        multikill=evidence.get('multikill') is True)
+        kinds = {'kill', 'headshot', 'multikill', 'clutch', 'death', 'whiff', 'ability', 'play'}
+        signals['events'] = []
+        for event in [*evidence.get('events', []), *c.get('events', [])]:
+            kind, time = event.get('kind', event.get('type')), event.get('time')
+            normalized = dict(kind=kind, time=time)
+            if (kind in kinds and type(time) in (int, float)
+                    and c['start_seconds'] <= time < c['end_seconds']
+                    and normalized not in signals['events']):
+                signals['events'].append(normalized)
         for name in ('action_time', 'kill_time', 'fail_time'):
             value = evidence.get(name)
             if isinstance(value, (float, int)) and c['start_seconds'] <= value < c['end_seconds']:
@@ -224,6 +233,8 @@ def planner_plan(pipeline, job):
     if options.get('cards'):
         target = max(.5, target - 2*min(1., max(.25, target*.1)))
     result = plan_edit(clips, mode=options.get('mode', 'nice'),
+                       chaos=options.get('chaos', .6 if options.get('mode') == 'mean' else .35),
+                       seed=options.get('seed', 0),
                        style={v: k for k, v in STYLE_IDS.items()}[options.get('style', 'hype_montage')],
                        target_length=target,
                        fill_target=True, max_clip_length=10,
@@ -231,6 +242,7 @@ def planner_plan(pipeline, job):
                        aspect={v: k for k, v in ASPECT_PRESETS.items()}[options.get('preset', 'landscape')])
     native = candidate_dict(result)
     job['planner_plan'] = native
+    job['seed'] = native['seed']
     if not native['clips']:
         pipeline.warn(job, 'Planner produced no eligible clips; using legacy planner')
         return None

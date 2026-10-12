@@ -27,6 +27,16 @@ function Editor() {
   );
 }
 describe("review timeline", () => {
+  it('shows the new VFX and SFX after a reroll plan arrives', () => {
+    const plan = {segments: [{source_start: 1, source_end: 3,
+      timed_effects: [{name: 'shake'}], sound_effects: [{sfx_key: 'bruh', offset_in_segment: .5}]}]};
+    const view = render(<Timeline job={{...job, plan}} onSeek={vi.fn()} />);
+    expect(screen.getByText(/shake.*bruh/)).toBeInTheDocument();
+    view.rerender(<Timeline job={{...job, plan: {segments: [{...plan.segments[0],
+      timed_effects: [{name: 'zoom_punch'}]}]}}} onSeek={vi.fn()} />);
+    expect(screen.getByText(/zoom_punch.*bruh/)).toBeInTheDocument();
+    expect(screen.queryByText(/shake/)).not.toBeInTheDocument();
+  });
   it("shows interest, candidates and clips and seeks to a selected moment", async () => {
     const seek = vi.fn();
     render(<Timeline job={job} onSeek={seek} />);

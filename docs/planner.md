@@ -43,15 +43,14 @@ accepts the same options, preserves the saved native cuts and returns
 `chaos` and `seed` as provenance; rendering an already assigned plan does not
 reroll it.
 
-HTTP/UI integration boundary: `server/validation.py::options_valid` rejects
-chaos/seed, and `pipeline/extensions.py::planner_plan` does not forward them. Both are outside
-FX-2 allowed paths; neither was modified. The integrator must allowlist these
-two fields (finite chaos in [0,1], integer seed), forward them to `plan_edit`
-(or call `restack_saved_job` when rerolling an existing job), and add both to
-the plan-invalidation keys in `server/queue.py::JobQueue.submit` so rerolls
-reuse analysis but regenerate the plan. There is no existing chaos UI field. A future Reroll
-button should send a fresh seed and retain the returned value. Library/service
-and render JSON options work now; HTTP settings do not yet expose the knob.
+FINAL-1 exposes `chaos` (finite number in [0,1]) and `seed` (integer in
+[0,4294967295]) over HTTP. Both invalidate planning and preserve saved analysis.
+The pipeline forwards all supported event kinds from clip and signal event lists,
+deduplicated with their original source timestamps. Job status returns the seed used.
+The production UI includes a 0–100% Chaos slider and a review-screen Reroll button.
+Reroll selects a fresh seed, enables local planning, disables the paid Director,
+and shows the resulting VFX/SFX assignments. It makes no provider calls. Failed
+local replanning reports an error rather than falling through to paid planning.
 
 `full_app/planner` produces a deterministic, validated Pydantic `RenderPlan`.
 It needs no network, media files, model weights, or new dependencies. The optional
@@ -165,7 +164,7 @@ Effect choices:
   reaction intent and an outro. Meme text is specific to mean mode.
 - Reaction slots occur at clutch/multikill/climax peaks, excluding separate
   teasers. Preferred labels are respected except roast/bruh/fail become wholesome
-  in nice mode. Corners are top-right for vertical and bottom-right otherwise.
+  in nice mode. Planned reactions use the bottom-right corner for every aspect.
   The reaction selector resolves actual assets, speaker rotation, and repeats;
   it may truncate/omit a reaction when the remaining slot is too short.
 - Music starts energetic for the teaser, drops for build-up, rises to the climax,

@@ -27,6 +27,15 @@ export function EditSettings({ options, change, capabilities, legacy, preset, se
   ] as const;
   return <details className="edit-settings" open>
     <summary>Edit settings</summary>
+    <label>Chaos {Math.round(o.chaos * 100)}%<input aria-label="Chaos" type="range" min="0" max="100"
+      disabled={!supports('chaos')} value={Math.round(o.chaos * 100)}
+      onChange={e => change('chaos', Number(e.target.value) / 100)} /></label>
+    <label>Reaction size<select disabled={!supports('reaction_size')} value={o.reaction_size}
+      onChange={e => change('reaction_size', e.target.value)}>
+      <option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option>
+    </select></label>
+    <label><input type="checkbox" disabled={!supports('clean')} checked={o.clean}
+      onChange={e => change('clean', e.target.checked)} />Clean reactions (exclude explicit clips)</label>
     <button type="button" disabled={!supports("full_experience")} onClick={() => {
       change("full_experience", true);
       for (const key of ["planner_v2", "audio_ai", "captions", "reactions", "sam", "sam_reframe", "beat_sync", "transitions", "cards", "narration", "share_kit", "use_signals"] as const) change(key, true);

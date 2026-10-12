@@ -25,6 +25,7 @@ from .validation import clips_valid, options_valid, plan_valid
 def public(job):
     data = {k: v for k, v in job.items() if k not in ('dir', 'source', 'output', 'sources') and not k.startswith('_')}
     data.update(job_id=job['id'], plan=job['edit_plan'], source_url=f"/api/stream/{job['id']}",
+                seed=(job.get('edit_plan') or {}).get('seed', job.get('seed')),
                 has_clips=job['clips'] is not None, has_plan=job['edit_plan'] is not None,
                 has_output=job['output'] is not None,
                 download_url=f"/api/jobs/{job['id']}/download" if job['output'] else None)

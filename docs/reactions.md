@@ -70,16 +70,27 @@ Nice mode excludes roast; mean mode allows all labels and defaults to roast.
 Valid VLM suggestions outrank clip labels, then fallback uses score/mode. Never
 repeat an ID consecutively; when no alternative exists, skip the overlay. Rotate
 speakers within the preferred label when possible, then favor less-used takes.
-The same speaker may recur if only that speaker covers the preferred label.
+The pipeline enables speaker coverage: use unseen eligible speakers first, then
+balance speaker counts before matching labels. Short montages may have fewer
+slots than speakers. Repeated event labels vary across eligible labels.
+
+Pack entries accept `explicit: true` and `style: "genalpha"`. Mean mode allows
+explicit clips; nice mode prefers available non-explicit clips. Both modes allow
+genalpha. HTTP `clean: true` excludes explicit clips entirely, including fallback
+selection. Omitted metadata means non-explicit and no style tag.
 
 `render_overlay(base_clip, reaction, preset) -> Path` also works directly; keyword
 options are `peak_time`, `show_speaker`, `duck_gain` (default 0.25) and `output_path`.
 Unique output filenames prevent collisions. Existing outputs are never overwritten.
 Errors propagate so the backend can report them; disabled/empty hooks return the base.
 
-Landscape uses bottom-right; vertical uses top-left to leave lower caption space.
-The renderer preserves base dimensions, uses 30% of the smaller dimension,
-4% margin, soft offset shadow, short fade/bounce transitions and a subtle idle bob.
+Landscape/square use bottom-right; direct vertical overlays use bottom-left
+(explicit planned placements use bottom-right). `reaction_size` is small, medium,
+or large (default). Large targets 33% of landscape height, 27% of vertical width,
+and 30% of square height. Medium/small multiply that by .78/.55. A fixed union of
+sampled alpha/mask bounds removes transparent portrait padding before sizing the
+visible head. Heads overlap the bottom/side edge slightly. Soft offset shadow,
+short fade/bounce transitions and subtle idle bob remain enabled.
 Matted portraits retain their full silhouette; legacy portraits retain the circular crop.
 Matted portraits show a name tag by default; `show_speaker=False` disables it.
 Legacy portraits still default to no name tag. The tag follows the motion. It does not convert

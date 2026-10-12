@@ -15,6 +15,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
+it('rerolls locally with a distinct seed and forwards chaos without requesting analysis', async () => {
+  const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({})});
+  vi.stubGlobal('fetch', fetcher);
+  vi.stubGlobal('crypto', {getRandomValues: (values: Uint32Array) => {values[0] = 42; return values;}});
+  const api = new EditorApi('jobs');
+  expect(await api.reroll('one', {...options, chaos: .8}, 'vertical', 42)).toBe(43);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(fetcher.mock.calls[0][0]).toBe('/api/jobs/one/plan');
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toMatchObject({seed: 43, chaos: .8, planner: true});
+  expect(normalizeJob({id: 'one', seed: 43}).seed).toBe(43);
+});
 describe("jobs API", () => {
   it("normalizes legacy timestamps and wrapped jobs", () => {
     const j = normalizeJob({

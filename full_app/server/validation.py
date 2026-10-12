@@ -145,7 +145,7 @@ def options_valid(data, styles):
     allowed = {'mode' , 'style', 'provider', 'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam',
                'prompt', 'splits', 'max_duration', 'preset', 'generate_thumbnails', 'edit_plan',
                'attitude', 'edit_style', 'job_id', 'api_key', 'game', 'privacy_options',
-               'chat', 'team_mode', 'narration_persona', 'music_mood'} | EXTENSION_FLAGS
+               'chat', 'team_mode', 'narration_persona', 'music_mood', 'chaos', 'seed', 'reaction_size', 'clean'} | EXTENSION_FLAGS
     if set(data) - allowed:
         raise ValueError('unknown options: ' + ', '.join(sorted(set(data) - allowed)))
     result = {k: v for k, v in data.items() if k not in ('api_key', 'job_id', 'attitude', 'edit_style', 'edit_plan')}
@@ -159,7 +159,13 @@ def options_valid(data, styles):
         raise ValueError('unknown style')
     if result.get('preset', 'landscape') not in ('landscape', 'vertical', 'square'):
         raise ValueError('unknown preset')
-    for name in EXTENSION_FLAGS | {'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam', 'generate_thumbnails'}:
+    if 'chaos' in result:
+        number(result['chaos'], 'chaos', 0, 1)
+    if 'seed' in result and (type(result['seed']) is not int or not 0 <= result['seed'] <= 2**32-1):
+        raise ValueError('seed must be an integer from 0 to 4294967295')
+    if result.get('reaction_size', 'large') not in ('small', 'medium', 'large'):
+        raise ValueError('reaction_size must be small, medium or large')
+    for name in EXTENSION_FLAGS | {'clean', 'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam', 'generate_thumbnails'}:
         if name in result and not isinstance(result[name], bool):
             raise ValueError(f'{name} must be boolean')
     for name in ('prompt', 'provider'):

@@ -1,4 +1,5 @@
 export const extensionDefaults = {
+  chaos: .35, seed: 0, reaction_size: 'large', clean: false,
   full_experience: false, beat_sync: true, transitions: false, cards: false,
   audio_ai: false, planner_v2: false, window_scoring: false, sam_reframe: false,
   narration: false, narration_persona: "hype_caster", privacy_blur: false,

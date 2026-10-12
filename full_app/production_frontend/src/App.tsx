@@ -192,7 +192,10 @@ export default function App() {
         );
   };
   const option = <K extends keyof Options>(key: K, value: Options[K]) => {
-    setOptions((o) => ({ ...o, [key]: value }));
+    setOptions((o) => ({ ...o, [key]: value,
+      ...(key === 'chaos' ? {planner_v2: true} : {}),
+      ...(key === 'mode' && o.chaos === (o.mode === 'mean' ? .6 : .35)
+        ? {chaos: value === 'mean' ? .6 : .35} : {}) }));
     if (clips.length && ["game", "profile", "style", "provider", "use_signals", "audio_ai", "planner_v2", "window_scoring", "chat", "chat_offset", "twitch_vod_id", "fx_intensity"].includes(key)) setNeedsAnalysis(true);
   };
   const kept = clips.filter((c) => c.keep);
@@ -338,6 +341,16 @@ export default function App() {
             {job && (
               <Timeline affectedClip={affectedClip} job={{ ...job, clips }} onSeek={(time) => seek(time)} />
             )}
+            {job && clips.length > 0 && mode === 'jobs' && capabilities.options.includes('seed') && <div>
+              <button disabled={working || needsAnalysis} onClick={() => void run(async () => {
+                if (dirtyRef.current) await save();
+                const seed = await api.reroll(job.id, options, preset, job.seed ?? options.seed ?? 0);
+                setOptions(o => ({...o, seed, planner_v2: true}));
+                directorPlan.current = undefined; lastPlan.current = undefined;
+                dirtyRef.current = false; setDirty(false); await refresh();
+              })}>🎲 Reroll</button>
+              {job.seed !== undefined && <span>Seed: {job.seed}</span>}
+            </div>}
             {job && (clips.length > 0 || job.plan || directorPlan.current) && mode === 'jobs' && <Director key={job.id} api={api} jobId={job.id} canRender={kept.length > 0}
               disabled={busy || needsAnalysis || (!directorBusy && working)} subscribe={subscribeDirector}
               onBusy={value => { setDirectorBusy(value); if (value) {

@@ -165,7 +165,8 @@ def _render_job(pipeline, job, key):
                 apply = pipeline.hook('reactions', 'apply_reaction', job)
                 if load and factory and apply:
                     try:
-                        selector = factory(load(pack), seed=0, cover_speakers=options.get('full_experience', False))
+                        selector = factory(load(pack), seed=options.get('seed', 0), cover_speakers=True,
+                                           clean=options.get('clean', False))
                     except (OSError, ValueError, KeyError):
                         pipeline.warn(job, 'REACTION_PACK unavailable or invalid; reactions skipped')
             else:
@@ -200,6 +201,10 @@ def _render_job(pipeline, job, key):
                         peak = clip.get('signals', {}).get('kill_time', clip.get('peak_time'))
                         local_peak = ((peak-original_segments[index]['source_start']) / segment.speed
                                       if isinstance(peak, (float, int)) else duration/2)
+                        native_clips = job.get('planner_plan', {}).get('clips', [])
+                        if peak is None and index < len(native_clips):
+                            native = native_clips[index]
+                            local_peak = native['peak']-native['start']
                         local_peak = min(max(0, local_peak), max(0, duration-1/validated.fps))
                         spotlight(path, output, 0, duration, effect='spotlight',
                                   kill_time=local_peak, freeze_seconds=0)
@@ -209,7 +214,8 @@ def _render_job(pipeline, job, key):
             if selector and apply and not segment.reactions and 'reactions' not in original_segments[index]:
                 with pipeline.stage(job, f'reactions_{index}'):
                     path = apply(path, clip_metadata[index], selector, validated.preset,
-                                 enabled=True, mode=options.get('mode', 'nice'))
+                                 enabled=True, mode=options.get('mode', 'nice'),
+                                 reaction_size=options.get('reaction_size', 'large'))
             if selector and segment.reactions:
                 from reactions.render import render_overlay
                 for event in segment.reactions:
@@ -217,10 +223,13 @@ def _render_job(pipeline, job, key):
                                                options.get('mode', 'nice'), event.label)
                     if reaction:
                         applied_reactions.append(dict(segment=index, id=reaction.id, speaker=reaction.speaker,
-                                                      label=reaction.label, start=event.start, duration=min(event.duration, reaction.duration)))
+                                                      label=reaction.label, text=reaction.text, explicit=reaction.explicit,
+                                                      start=min(event.start, max(0, duration-min(event.duration, reaction.duration))),
+                                                      duration=min(event.duration, reaction.duration)))
                         with pipeline.stage(job, f'reactions_{index}'):
                             path = render_overlay(path, reaction, validated.preset, peak_time=event.start,
                                                   max_duration=event.duration, position=event.position,
+                                                  reaction_size=options.get('reaction_size', 'large'),
                                                   duck_gain=.25 if event.duck_game_audio else 1)
             return path, duration
 

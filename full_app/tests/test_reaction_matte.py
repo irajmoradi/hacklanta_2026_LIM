@@ -98,7 +98,14 @@ def test_matte_render_all_presets(matted, tmp_path, preset, size, width, height,
     center = (y+side//2, x+side//2)
     assert np.ptp(during[center]) > 35
     assert np.ptp(before[center]) < 10 and np.ptp(after[center]) < 10
-    assert during[y+side//2, x+2].max() < 65  # no white box/halo
+    # The tightly cropped head can touch this edge; brown foreground is valid,
+    # while a white matte box/halo would brighten all three channels.
+    assert during[y+side//2, x+2].min() < 65
+    changed_y, changed_x = np.nonzero(np.max(np.abs(during.astype(int)-before.astype(int)), axis=2) > 25)
+    extent = (changed_x.max()-changed_x.min()+1)/width if preset == 'vertical' else (changed_y.max()-changed_y.min()+1)/height
+    # Fine low-contrast hair disappears at this tiny 240px export/threshold.
+    low, high = (.22, .34) if preset == 'vertical' else ((.25, .35) if preset == 'square' else (.28, .39))
+    assert low <= extent <= high, extent
     assert tone(out, 1.4, 880) > .04  # audio comes from original, alpha video is silent
     assert tone(out, .4, 880) < .01 and tone(out, 2.4, 880) < .01
     assert tone(out, 1.4, 220) < tone(out, .4, 220)*.4

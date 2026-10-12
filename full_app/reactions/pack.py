@@ -20,6 +20,8 @@ class Reaction:
     background: str
     alpha_file: Path | None = None
     mask_file: Path | None = None
+    explicit: bool = False
+    style: str = ''
 
 
 def load_pack(folder: str | Path) -> list[Reaction]:
@@ -42,6 +44,8 @@ def load_pack(folder: str | Path) -> list[Reaction]:
             raise ValueError('Background must be light, transparent or opaque')
         if not isinstance(entry.get('text'), str):
             raise ValueError('Reaction text must be a string')
+        if type(entry.get('explicit', False)) is not bool or not isinstance(entry.get('style', ''), str):
+            raise ValueError('Invalid explicit/style reaction metadata')
         mattes = {}
         for key in ('alpha_file', 'mask_file'):
             value = entry.get(key)
@@ -54,35 +58,44 @@ def load_pack(folder: str | Path) -> list[Reaction]:
                 raise ValueError('Matte file must exist inside the pack')
             mattes[key] = matte
         clips.append(Reaction(**{k: entry[k] for k in ('id', 'speaker', 'label', 'text', 'background')},
-                              file=path, duration=duration, **mattes))
+                              file=path, duration=duration, explicit=entry.get('explicit', False),
+                              style=entry.get('style', ''), **mattes))
         ids.add(entry['id'])
     return clips
 
 
 class ReactionSelector:
     """Create one per montage/job; selection history is not shared between users."""
-    def __init__(self, reactions: Iterable[Reaction], seed: int | None = None, cover_speakers: bool = False) -> None:
+    def __init__(self, reactions: Iterable[Reaction], seed: int | None = None, cover_speakers: bool = False, clean: bool = False) -> None:
         self.reactions = list(reactions)
         self.rng = random.Random(seed)
         self.last_id = self.last_speaker = None
         self.counts: dict[str, int] = {}
         self.cover_speakers = cover_speakers
         self.speakers_seen = set()
+        self.clean = clean
+        self.speaker_counts = {}
 
     def select(self, label: str = '', score: float = 0.5, mode: str = 'nice',
                suggested_reaction_label: str | None = None) -> Reaction | None:
         if mode not in ('nice', 'mean'):
             raise ValueError('Mode must be nice or mean')
         candidates = [r for r in self.reactions
-                      if (mode == 'mean' or r.label != 'roast') and r.id != self.last_id]
+                      if (mode == 'mean' or r.label != 'roast') and r.id != self.last_id
+                      and not (self.clean and r.explicit)]
         if not candidates:
             return None  # Silence is preferable to repeating a singleton pack.
+        if mode == 'nice':
+            candidates = [r for r in candidates if not r.explicit] or candidates
         preferred = suggested_reaction_label if suggested_reaction_label in LABELS else label
         if preferred not in LABELS:
             preferred = ('hype' if float(score) >= 0.7 else 'wholesome') if mode == 'nice' else 'roast'
         unseen = [r for r in candidates if r.speaker not in self.speakers_seen]
         if self.cover_speakers and unseen:
             candidates = unseen
+        elif self.cover_speakers:
+            minimum = min(self.speaker_counts.get(r.speaker, 0) for r in candidates)
+            candidates = [r for r in candidates if self.speaker_counts.get(r.speaker, 0) == minimum]
         matching = [r for r in candidates if r.label == preferred]
         candidates = matching or candidates
         rotating = [r for r in candidates if r.speaker != self.last_speaker]
@@ -91,5 +104,6 @@ class ReactionSelector:
         chosen = self.rng.choice([r for r in candidates if self.counts.get(r.id, 0) == minimum])
         self.counts[chosen.id] = minimum + 1
         self.speakers_seen.add(chosen.speaker)
+        self.speaker_counts[chosen.speaker] = self.speaker_counts.get(chosen.speaker, 0) + 1
         self.last_id, self.last_speaker = chosen.id, chosen.speaker
         return chosen

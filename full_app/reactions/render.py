@@ -3,27 +3,53 @@ import math
 import subprocess
 import tempfile
 import uuid
+from functools import lru_cache
 from pathlib import Path
 
 from fx.media import probe
 from .pack import Reaction
 
-PRESETS = {'landscape': 'bottom-right', 'vertical': 'top-left', 'square': 'top-right'}
+PRESETS = {'landscape': 'bottom-right', 'vertical': 'bottom-left', 'square': 'bottom-right'}
 
 
-def layout(width: int, height: int, preset: str) -> tuple[int, int, int]:
+def layout(width: int, height: int, preset: str, reaction_size: str = 'large') -> tuple[int, int, int]:
     if preset not in PRESETS:
         raise ValueError(f'Unknown reaction preset: {preset}')
     corner = PRESETS[preset]
-    size = max(16, int(min(width, height) * 0.30) // 2 * 2)
-    margin = max(8, int(min(width, height) * 0.04))
-    return (size, width - size - margin if corner.endswith('right') else margin,
-            height - size - margin if corner.startswith('bottom') else margin)
+    if reaction_size not in ('small', 'medium', 'large'):
+        raise ValueError('Unknown reaction size')
+    fraction = {'landscape': .33, 'vertical': .27, 'square': .30}[preset]
+    size = max(16, int(min(width, height) * fraction * {'small': .55, 'medium': .78, 'large': 1}[reaction_size]) // 2 * 2)
+    margin = max(2, int(size * .025))
+    return (size, width - size + margin if corner.endswith('right') else -margin,
+            height - size + margin)
+
+
+@lru_cache(maxsize=128)
+def matte_bounds(path: str, modified: int, alpha: bool):
+    """Union of sampled visible matte pixels; fixed crop avoids animated resizing."""
+    import numpy as np
+    command = ['ffmpeg', '-v', 'error']
+    if alpha:
+        command += ['-c:v', 'libvpx-vp9']
+    command += ['-i', path, '-vf', ('alphaextract,' if alpha else '') + 'fps=4,scale=256:256',
+                '-t', '30', '-f', 'rawvideo', '-pix_fmt', 'gray', '-']
+    raw = subprocess.run(command, capture_output=True, check=True).stdout
+    if not raw:
+        raise ValueError('Empty reaction matte')
+    visible = np.frombuffer(raw, np.uint8).reshape(-1, 256, 256).max(axis=0) > 24
+    ys, xs = np.nonzero(visible)
+    if not len(xs):
+        raise ValueError('Empty reaction silhouette')
+    # Small padding retains feathered hair edges.
+    return (max(0, int(xs.min())-2)/256, max(0, int(ys.min())-2)/256,
+            min(256, int(xs.max())+3)/256, min(256, int(ys.max())+3)/256)
 
 
 def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'landscape', *, peak_time: float | None = None,
                    output_path: str | Path | None = None, show_speaker: bool | None = None, duck_gain: float = 0.25,
-                   max_duration: float | None = None, position: str | None = None) -> Path:
+                   max_duration: float | None = None, position: str | None = None,
+                   reaction_size: str = 'large') -> Path:
     """Start a reaction at the peak, clamped to the available clip duration.
 
     Returns a new MP4 Path. Never modifies the source. Requires ffmpeg/ffprobe.
@@ -54,13 +80,13 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
         raise ValueError('peak_time must be finite')
     start = min(max(0, peak), max(0, duration - length))
     end, fade = start + length, min(0.16, length / 3)
-    size, x, y = layout(video['width'], video['height'], preset)
+    size, x, y = layout(video['width'], video['height'], preset, reaction_size)
     if position is not None:
         if position not in ('top_right', 'bottom_right'):
             raise ValueError('Unknown reaction position')
-        margin = max(8, int(min(video['width'], video['height']) * .04))
-        x = video['width'] - size - margin
-        y = margin if position == 'top_right' else video['height'] - size - margin
+        margin = max(2, int(size * .025))
+        x = video['width'] - size + margin
+        y = margin if position == 'top_right' else video['height'] - size + margin
     audio = any(s['codec_type'] == 'audio' for s in info['streams'])
     voice = any(s['codec_type'] == 'audio' for s in head_info['streams'])
     alpha_file = reaction.alpha_file
@@ -83,6 +109,20 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
     geometry = (f'scale={size}:{size}:force_original_aspect_ratio=decrease,'
                 f'pad={size}:{size}:(ow-iw)/2:(oh-ih)/2:color=black@0' if alpha_file or mask_file else
                 f'scale={size}:{size}:force_original_aspect_ratio=increase,crop={size}:{size}')
+    if alpha_file or mask_file:
+        matte_path = Path(alpha_file or mask_file)
+        left, top, right, bottom = matte_bounds(str(matte_path), matte_path.stat().st_mtime_ns, bool(alpha_file))
+        portrait_info = next(s for s in probe(matte_path)['streams'] if s['codec_type'] == 'video')
+        ratio = portrait_info['width']*(right-left)/(portrait_info['height']*(bottom-top))
+        # Landscape sizes the visible height; portrait exports size visible width.
+        head_width = size if preset == 'vertical' else max(2, round(size*ratio/2)*2)
+        head_height = max(2, round(size/ratio/2)*2) if preset == 'vertical' else size
+        margin = max(2, int(size*.025))
+        x = video['width']-head_width+margin if position or PRESETS[preset].endswith('right') else -margin
+        y = margin if position == 'top_right' else video['height']-head_height+margin
+        geometry = (f'crop=iw*{right-left}:ih*{bottom-top}:iw*{left}:ih*{top},'
+                    f'scale={head_width}:{head_height}')
+        size = head_height
     graph += [
         f'[portrait]trim=duration={length},{geometry},format=rgba,{crop_mask}'
         f'fade=t=in:st=0:d={fade}:alpha=1,fade=t=out:st={length-fade}:d={fade}:alpha=1,'
@@ -100,7 +140,7 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
         if show_speaker:
             (cwd / 'speaker.txt').write_text(reaction.speaker, encoding='utf-8')
             graph.append(f"[pip]drawtext=textfile=speaker.txt:expansion=none:fontsize={max(12,size//9)}:"
-                         f"fontcolor=white:box=1:boxcolor=black@0.65:x={x}:y='{motion}+{size-18}':"
+                         f"fontcolor=white:box=1:boxcolor=black@0.65:x={max(4,x)}:y='{motion}+{size*.75}':"
                          f"enable='between(t,{start},{end})'[v]")
         else:
             graph.append('[pip]null[v]')
