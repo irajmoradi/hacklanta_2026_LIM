@@ -8,7 +8,7 @@ import subprocess
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 
-SIZES = {"youtube": (1280, 720), "vertical": (1080, 1920)}
+SIZES = {"youtube": (1280, 720), "vertical": (1080, 1920), "square": (1080, 1080)}
 logger = logging.getLogger(__name__)
 
 

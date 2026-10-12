@@ -59,6 +59,8 @@ class GeminiProvider(VideoUnderstandingProvider):
         self._cache_lock = threading.RLock()
         self._agentic_warned = False
         self.budget = CallBudget()
+        self.image_model = os.getenv("GEMINI_IMAGE_MODEL", "gemini-3.1-flash-image")
+        self.image_budget = CallBudget(limit=4)
         self.parallel_scoring = True
 
     def upload_video(self, video_path: str | Path) -> VideoSource:
@@ -242,17 +244,39 @@ class GeminiProvider(VideoUnderstandingProvider):
     def plan_edit(self, prompt: str) -> dict:
         return self._generate([prompt], EditPlan, temperature=0.7).model_dump()
 
-    def generate_thumbnail(self, image_path, prompt, output_path) -> Path:
+    def generate_thumbnail(self, image_path, prompt, output_path, *, image_budget=None) -> Path:
+        """One transport attempt, charged to both the image and shared job budgets.
+
+        Accept one frame or a list of frames/cutouts. Callers may supply a durable
+        per-job image ledger; no SDK/application retries can multiply image calls.
+        """
+        import io
+        from PIL import Image
+
         output_path = Path(output_path)
-        response = with_retries(lambda: (self.budget.reserve(), self.client.models.generate_content(
-            model="gemini-3.1-flash-image-preview",
-            contents=[types.Part.from_bytes(data=Path(image_path).read_bytes(), mime_type="image/jpeg"), prompt],
-            config=types.GenerateContentConfig(response_modalities=["IMAGE", "TEXT"]),
-        ))[1], self.config, "thumbnail")
+        paths = image_path if isinstance(image_path, (list, tuple)) else [image_path]
+        contents = []
+        for path in paths[:4]:
+            with Image.open(path) as reference:
+                data = io.BytesIO()
+                reference.convert("RGBA").save(data, format="PNG")
+                contents.append(types.Part.from_bytes(data=data.getvalue(), mime_type="image/png"))
+        (image_budget if image_budget is not None else self.image_budget).reserve()
+        self.budget.reserve()
+        response = self.client.models.generate_content(
+            model=self.image_model, contents=[*contents, prompt],
+            config=types.GenerateContentConfig(
+                response_modalities=["IMAGE", "TEXT"],
+                image_config=types.ImageConfig(aspect_ratio="16:9"),
+                http_options=types.HttpOptions(retry_options=types.HttpRetryOptions(attempts=1)),
+            ),
+        )
         for candidate in response.candidates or []:
-            for part in candidate.content.parts or []:
-                if part.inline_data:
-                    output_path.write_bytes(part.inline_data.data)
+            for part in getattr(candidate.content, "parts", None) or []:
+                inline = part.inline_data
+                if inline and (inline.mime_type or "").startswith("image/"):
+                    with Image.open(io.BytesIO(inline.data)) as generated:
+                        generated.convert("RGB").save(output_path)
                     return output_path
         raise RuntimeError("Gemini did not return an image")
 

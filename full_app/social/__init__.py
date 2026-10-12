@@ -6,12 +6,11 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from PIL import Image
-
 from vjepa.media import probe_media
 
 from .metadata import build_metadata, chapter_text, seconds, timeline
 from .thumbnails import SIZES, render_thumbnail, select_frame
+from .image_candidates import candidates
 
 __all__ = ["build_share_kit"]
 logger = logging.getLogger(__name__)
@@ -55,19 +54,20 @@ def _captions(job, plan, destination, duration):
             shutil.copy2(_local_file(job, name), destination)
 
 
-def build_share_kit(job_dir, clips, plan, game, *, client=None) -> Path:
+def build_share_kit(job_dir, clips, plan, game, *, client=None, job=None) -> Path:
     """Export to job_dir.parent/share/job_dir.name; return its Path.
 
     Network is disabled unless client is explicitly supplied AND an associated
     plan['social'] flag is true. Client follows GeminiVideoClient's interface.
     Existing destinations are rejected; no previous exports are overwritten.
     """
+    job_state = job
     job = Path(job_dir).resolve(strict=True)
     if not job.is_dir():
         raise ValueError("job_dir must be a directory")
     clips = [c.model_dump() if hasattr(c, "model_dump") else dict(c) for c in clips]
     plan = plan.model_dump() if hasattr(plan, "model_dump") else dict(plan)
-    options = plan.get("social", {})
+    options = {**(job_state.get("options", {}) if job_state is not None else {}), **plan.get("social", {})}
     video_name = options.get("video_path")
     if not video_name:
         video_name = next((name for name in ("final_with_thumbs.mp4", "final_edit.mp4") if (job / name).is_file()), None)
@@ -106,27 +106,30 @@ def build_share_kit(job_dir, clips, plan, game, *, client=None) -> Path:
         frame, selection = select_frame(source, start, end)
         selection["timebase"] = timebase
         selection["clip"] = top["title"]
-        image_provider = "local"
-        if client is not None and options.get("gemini_image"):
-            try:
-                reference = Path(temporary) / "reference.jpg"
-                frame.save(reference)
-                generated = client.generate_thumbnail(
-                    reference, "Enhance this gameplay frame with dramatic lighting. Preserve the action; add no text.",
-                    Path(temporary) / "enhanced.jpg",
-                )
-                with Image.open(generated) as enhanced:
-                    frame = enhanced.convert("RGB")
-                image_provider = "gemini"
-            except Exception:
-                logger.warning("Image generation unavailable; using local frame")
-        title = options.get("thumbnail_text") or top["title"]
+        warnings = []
+        budget_dir = Path(job_state["dir"]) if job_state is not None and job_state.get("dir") else job
+        title, images = candidates(frame, options, game, client, Path(temporary), budget_dir, warnings)
+        selected = next((info["id"] for _, info in images if info["provider"] == "gemini"), 1)
+        metadata["thumbnail_candidates"] = []
         metadata["thumbnails"] = {}
-        for variant, size in SIZES.items():
-            thumbnail, details = render_thumbnail(frame, title, size, options.get("subject_cutout", False))
-            filename = f"thumbnail_{variant}.jpg"
-            thumbnail.save(staging / filename, quality=94)
-            metadata["thumbnails"][variant] = {"file": filename, "provider": image_provider, **details}
+        for image, evidence in images:
+            variants = {}
+            for variant, size in SIZES.items():
+                thumbnail, details = render_thumbnail(image, title, size, options.get("subject_cutout", False))
+                filename = f"thumbnail_candidate_{evidence['id']}_{variant}.jpg"
+                thumbnail.save(staging / filename, quality=94)
+                variants[variant] = {"file": filename, **evidence, **details}
+                if evidence["id"] == selected:
+                    selected_file = f"thumbnail_{variant}.jpg"
+                    shutil.copy2(staging / filename, staging / selected_file)
+                    metadata["thumbnails"][variant] = {**variants[variant], "file": selected_file}
+            metadata["thumbnail_candidates"].append({**evidence, "variants": variants})
+        metadata["selected_thumbnail_candidate"] = selected
+        metadata["warnings"] = warnings
+        for warning in warnings:
+            logger.warning(warning)
+            if job_state is not None and warning not in job_state.setdefault("warnings", []):
+                job_state["warnings"].append(warning)
         metadata["frame_selection"] = selection
         metadata["video"] = "video.mp4"
         metadata["duration"] = duration
