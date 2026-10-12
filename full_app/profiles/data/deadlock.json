@@ -3,11 +3,11 @@
   "display_name": "Deadlock",
   "regions": {
     "kill_feed": [
-      0.7,
-      0.04,
-      1,
-      0.32,
-      "right"
+      0.025,
+      0.18,
+      0.36,
+      0.45,
+      "left"
     ],
     "death_banner": [
       0.72,
@@ -31,17 +31,17 @@
       "center"
     ],
     "announcements": [
-      0.25,
-      0.15,
-      0.75,
-      0.4,
+      0.2,
+      0.125,
+      0.84,
+      0.3,
       "center"
     ],
     "health": [
-      0,
-      0.55,
-      0.25,
-      0.98,
+      0.19,
+      0.62,
+      0.3,
+      0.91,
       "left"
     ]
   },
@@ -101,7 +101,11 @@
       "patron destroyed",
       "guardian destroyed",
       "urna entregue",
-      "patrono destruído"
+      "patrono destruído",
+      "walker destroyed",
+      "shrine destroyed",
+      "guardian defeated",
+      "walker defeated"
     ]
   },
   "detection_keywords": {
@@ -121,13 +125,13 @@
     ]
   },
   "signal_weights": {
-    "ocr": 1.3,
-    "announcements": 1.2,
-    "motion": 1,
+    "ocr": 1.5,
+    "announcements": 1.4,
+    "motion": 0.85,
     "audio": 1,
-    "objective": 1.3
+    "objective": 1.6
   },
-  "aspect_notes": "Approximate 16:9 search regions, not pixel-exact UI contracts. Native 16:10/ultrawide retains height-relative HUD size with left/right/center anchors; stretched or customized HUDs need calibration. For pillarbox/letterbox footage use pixels(..., letterboxed=True) or crop to the content first. UI scale, patches and spectator overlays can shift regions.",
+  "aspect_notes": "Calibrated on the CC BY No Copyright Gameplay 1080p60 VOD: upper-left cream/red feed, bottom-left mint souls, bottom-right four-lane map, top portrait/souls bar and bottom-centre abilities. HUD patches and custom scales may need recalibration. Native aspect anchors preserve height-relative size; crop baked-in borders before detection.",
   "alive_rules": [
     "Third-person hero control, positive health, active abilities and reticle support alive state."
   ],
@@ -142,5 +146,37 @@
   ],
   "lowlights": [
     "Lost urn, overextension, failed ability combo, or avoidable death losing souls/objectives."
-  ]
+  ],
+  "detection_layout": {
+    "timer": [
+      0.485,
+      0,
+      0.52,
+      0.025
+    ],
+    "souls": [
+      0.012,
+      0.85,
+      0.13,
+      0.907
+    ],
+    "minimap": [
+      0.79,
+      0.64,
+      0.985,
+      0.97
+    ],
+    "team_bar": [
+      0.165,
+      0,
+      0.835,
+      0.115
+    ],
+    "required": [
+      "timer",
+      "souls",
+      "minimap",
+      "team_bar"
+    ]
+  }
 }

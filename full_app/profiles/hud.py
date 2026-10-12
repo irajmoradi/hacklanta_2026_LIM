@@ -21,6 +21,9 @@ def layout_evidence(png, profile, reader):
     frame = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
     if frame is None or not profile.detection_layout:
         return {}
+    if profile.name == 'deadlock':
+        from .deadlock_hud import evidence
+        return evidence(frame, profile.detection_layout, reader)
     h, w = frame.shape[:2]
     def crop(box):
         x1, y1, x2, y2 = box
