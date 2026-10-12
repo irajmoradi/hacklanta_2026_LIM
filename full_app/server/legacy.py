@@ -61,11 +61,6 @@ def _seconds_to_mmss(seconds: float) -> str:
     s = seconds % 60
     return f"{m:02d}:{s:05.2f}"
 
-def _fmt_time(seconds: float) -> str:
-    m = int(seconds // 60)
-    s = seconds % 60
-    return f"{m}:{s:05.2f}"
-
 SPLIT_LABELS = {
     2: ["part 1 of 2 (first half)", "part 2 of 2 (second half)"],
     3: ["part 1 of 3 (first third)", "part 2 of 3 (middle third)", "part 3 of 3 (final third)"],

@@ -1,93 +1,166 @@
-# SEC-01 security review
+# Server security boundaries
 
-Reviewed the Extension upload, ingest, URL import, job/download routes, render text,
-Discord and capture boundaries. This is a code review plus offline regression tests,
-not a penetration test or a claim that an Internet deployment is safe by default.
-All changes stay in SEC-01's allowed paths. No paid API calls or credentials used.
+The default `create_app` now installs application authentication and ownership.
+`create_secure_app` is a compatibility alias. Run `python app.py` for loopback-only
+local use. Compose also binds its published port to loopback, but its bridge peer
+requires a configured application token. Use TLS and an authenticated client for
+shared deployment. The browser frontend does not yet attach bearer headers.
 
-## Fixed in this task
+Configure `LIM_API_TOKEN` for a single owner or `LIM_API_TOKENS` as a JSON object
+of stable owner names to distinct random tokens. Tokens have 32-4096 visible ASCII
+characters. Provision them through the runtime environment, never committed files,
+command-line arguments, URL query strings or download links. All API routes except
+`GET /api/health` require auth when tokens are configured. With no tokens, only
+literal loopback peers are accepted; forwarded headers never grant access.
+`X-API-Key` and the legacy `api_key` field are provider credentials, not auth.
 
-| Boundary | Change |
-| --- | --- |
-| Ingest media | Container signature sniffing before ffprobe; reject archives, images and playlists regardless of extension. Actual streams still validated. Probe timeout 30 seconds; encode timeout 3600 seconds; bounded probe analysis and individual FFmpeg allocations. Only local file protocol and listed video demuxers. Reject duration over 12 hours, over 4K pixels, over 240 FPS or over 4K60 pixel throughput before encoding. Existing byte/duration limits remain. These bounds are defense in depth, not a decoder sandbox. |
-| URL syntax | Exact initial YouTube/Twitch hosts, HTTPS/443 only, no credentials, controls, whitespace, fragments or ambiguous backslashes. Invalid ports produce safe errors. Structured yt-dlp options, no shell command construction or caller-supplied arguments. |
-| URL network | Private urllib transport validates provider/CDN suffixes at every request/redirect, rejects nonpublic and mixed DNS results, connects to the checked numeric address while retaining TLS hostname verification. No ambient proxy, cookies or Authorization forwarding. Reject HTTP compression before decompression. Streaming response byte budget, 8 MiB maximum whole-response read, 30-second socket timeout, 30-minute checked import deadline. DNS itself uses the OS resolver and is not covered by the socket timeout. |
-| URL downloader fallback | Only a single progressive HTTPS format is accepted. HLS/DASH/RTMP are intentionally rejected because external downloader fallback could bypass the protected socket boundary. This reduces availability, especially Twitch VODs and high-resolution YouTube formats. Restore manifest support only with equivalent protection on every fragment/key/redirect and no unguarded subprocess networking. |
-| Errors and cleanup | yt-dlp logger suppressed; user errors omit raw provider diagnostics and FFmpeg stderr. Each download has private staging, including direct adapter calls; failure removes partial files, successful publication rejects existing destinations. Existing ingest staging/cache locks remain. |
-| Paths | Portable component validator rejects traversal, separators, drive/ADS syntax, device names, controls and option-like names. Resolved safe paths reject escaping symlinks. Capture/Discord validate returned job IDs; Discord strips both POSIX/Windows filename paths and checks containment at write time. Private roots must not be writable by hostile local users; resolve checks do not eliminate filesystem races against such users. |
-| Discord | Public-address resolver also rejects multicast, transition and standard NAT64 addresses. Source fetch validates HTTPS and host allowlist even if invoked outside source selection. Compressed media refused, partial transfers removed. Global active-job cap defaults to 4 (`DISCORD_MAX_ACTIVE_JOBS`); cooldown identity state capped at 4096. Existing per-user cooldown/channel gates retained. Gateway intents are limited to guilds, guild messages and message content. |
-| API clients | Capture and Discord send optional `LIM_API_TOKEN` as Bearer auth only to the configured API. Remote token-bearing connections require HTTPS; loopback HTTP remains supported. Tokens are not sent to source media/CDNs or placed in filenames, state or download URLs. Capture ignores ambient proxy configuration. |
-| Capture state | Exclusive random temporary file and atomic replacement prevent a predictable `.tmp` symlink from redirecting state writes; failed staging is removed. |
-| Text | `escape_drawtext` escapes both FFmpeg parser layers, for an **unquoted** `text=` argv filter value with `expansion=none`. Real FFmpeg tests compare pixels against literal `textfile=` rendering, including apostrophes, backslashes, colons, filter separators, percent expressions and edge spaces. |
+Every new job persists its owner identifier (never its token). Every job/media/SSE
+route and mutation checks that identity, including legacy POST body job IDs.
+Cross-owner access returns the same 404 as a nonexistent job. Ownerless existing
+jobs remain local-only when authentication is enabled; there is no implicit
+migration to whichever user first accesses them. Tokens can rotate without
+changing ownership by keeping the same owner name. Snapshots omit owner and
+private filesystem fields. Downloads resolve inside the authorized job directory.
 
-The transport uses yt-dlp's Request/Response interface. Its built-in urllib handler
-has other protocols, proxy support and whole-response decompression, motivating a
-separate restricted transport ([upstream implementation](https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/networking/_urllib.py)).
-Optional dependencies remain optional; install yt-dlp to use URL import. No live
-YouTube/Twitch compatibility claim is made; transport and orchestration tests are offline.
+The limiter allows 600 API requests per peer per minute, including failed auth,
+with bounded identity memory. API responses use no-store and nosniff. Configure
+trusted-proxy rate limits separately; forwarded peer headers are intentionally
+ignored. Native video tags, links and EventSource need an authenticated proxy or
+frontend fetch/blob transport; never put a bearer token in a URL.
 
-## Opt-in API authentication and rate limits
+## Resource and input controls
 
-`server.security.create_secure_app` is an immediately usable factory wrapping the
-existing API. Configure a random `LIM_API_TOKEN` of at least 32 visible ASCII
-characters in the process environment (not JSON/config files, CLI arguments or
-URLs). Capture and Discord read the same variable at runtime. From `full_app`:
+See [api.md](api.md#admission-streaming-and-resource-bounds-fix-1) for the full
+configuration table. Uploads reserve Content-Length before multipart parsing,
+cap concurrent admission, and check per-owner/workspace bytes, free disk and job
+count. All recordings use signature-checked, local-protocol, container-allowlisted
+probing under a process-group deadline and memory limit. Duration, resolution,
+frame rate, pixel rate and total frame count are checked before storing a job.
+Action JSON is limited to 2 MiB. Unknown nested plan/effect/SFX fields, malformed
+clocks, excessive collections, source overruns and overlong output plans fail
+before queue mutation. Client-controlled music paths are rejected; no authorized
+music asset-ID API is currently exposed.
+
+The production pipeline runs each stage in a fresh child process group. Provider
+keys travel only over stdin. Linux address-space and per-file limits are inherited
+by media subprocesses. Deadline, cancellation and storage-limit failures terminate
+the process group and clean scratch/partial output. Compose caps total memory and
+PIDs. Stage progress is published through an atomic file containing only stage,
+timings and warnings; it is removed after the stage. Injected/test pipelines keep
+their cooperative contract so offline mocks remain effective. Forced termination
+can interrupt remote provider cleanup; external provider retention is separate.
+
+Eight SSE slots and 16 Gunicorn threads preserve request capacity under streams;
+heartbeats, idle/terminal closure and 30-second lifetimes bound occupation. There
+is one queue owner and one workspace lease; never increase Gunicorn workers.
+Retention expires inactive jobs after seven days and caps replay to 1000 events
+per job. Active jobs are excluded. Capture/Discord credentials remain separate
+from source-media downloads and source CDN requests.
+
+## Remaining deployment limits
+
+These controls are not a decoder sandbox. Linux per-process address-space limits
+do not bound aggregate process memory outside a container/cgroup. Windows tree
+termination uses taskkill and has not been verified on the Linux runner; it has
+no RLIMIT memory enforcement. Library callers outside the HTTP production stage
+wrapper retain their own subprocess policies. Stage disk checks run every 0.2
+seconds and can overshoot between polls; use filesystem/project quotas for a hard
+aggregate disk ceiling. Shared optional library caches outside the job workspace
+need their own retention. Long request-body reads need proxy timeouts. Enabling
+auth does not supply the missing browser transport or provider configuration fix.
+
+The ingest URL transport continues to use allowlisted HTTPS hosts, public-address
+checks at connection time, bounded reads, and no token propagation to CDNs.
+Optional ML backends remain optional. Model providers are mocked in non-live tests.
+FIX-1 makes no paid calls and does not read the supplied Gemini key.
+
+## FIX-1 audit disposition
+
+- P1-01: fixed for server routes, local binding and Compose port exposure. Browser
+  authentication transport remains outside allowed paths.
+- P1-02: fixed with bounded streams/subscribers and single-owner concurrent server.
+- P1-06: partially fixed: admission and duration enforcement are implemented; unsafe music paths fail closed.
+  Authorized music asset IDs are not implemented because no asset service exists.
+- P1-10: partially fixed: production Linux deadlines, cancellation, quotas and retention implemented.
+  Strict aggregate filesystem quotas and non-HTTP library subprocess migration
+  remain deployment/out-of-scope work; Windows memory enforcement is not supplied.
+- P2-11: API/security docs reconciled for this server scope. P2-12: unused Docker
+  pytesseract removed and Gunicorn pinned; cross-project dependency locking remains
+  outside scope. P2-13 jobs tests already patch the correct lookup in this checkout.
+- P3: removed uncalled `_fmt_time`; corrected Docker's queue ownership comment.
+
+## FIX-1 validation (2026-10-12)
+
+Branch: `ext/FIX-1`. Implementation milestones: `9caddc6` and `692c9aa`;
+the final follow-up preserves the Flask 3.0 dependency floor and records results.
+No push or merge was performed. All test commands below used the Linux runner.
+The supplied key file was not read and no paid smoke test was performed.
 
 ```sh
-python -m flask --app server.security:create_secure_app run --host 127.0.0.1 --port 8000 --no-reload
+tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live'"
 ```
 
-Use the project's production WSGI deployment and TLS reverse proxy for remote
-use, with one queue-owning process. Without a token, this factory preserves local
-unauthenticated behavior. Setting the token alone does **not** change `app.py` or
-`server.api:create_app`; select the secure factory or integrate the hook below.
+Exit **0: 934 passed, 19 skipped, 1 deselected** (446.68 seconds). This run
+includes all new regressions. The final request-limit compatibility adjustment
+was additionally verified by the focused command below on both the normal runner
+environment and Flask 3.0.3. Skipped tests are not claimed as covered.
 
-All `/api` routes (including legacy APIs, reads, video streams, logs and SSE) require
-`Authorization: Bearer <token>` when configured. `X-API-Key` remains a Gemini
-provider credential and does not authenticate the application. Auth uses constant
-time comparison. API responses are no-store and nosniff. The in-process limiter
-allows 120 requests per peer per 60-second fixed window, counts failed auth too,
-caps identity memory at 4096, and returns 429/Retry-After. It deliberately ignores
-forwarded headers; configure rate limiting at a trusted reverse proxy for deployments
-behind one. SSE connections and global disk usage require separate proxy quotas.
-This shared token grants access to every job; it is not per-user ownership.
-
-For default-factory integration, the owner of `server/api.py` should call this
-after `app.config.update(config or {})` and before handling requests:
-
-```python
-from .security import install_api_security
-install_api_security(app)
+```sh
+tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_jobs.py tests/test_server_limits.py tests/test_security_helpers.py tests/test_security_clients.py"
 ```
 
-Browser fetches, video tags, native EventSource and direct download links currently
-do not supply Bearer headers. The production frontend owner must add an authenticated
-session/proxy or header-capable fetch/blob/SSE handling before enabling auth there.
-Discord file attachments continue to work; its oversized-file link requires an
-authenticated download client. Never append the shared token to a public link.
+The final focused run exited **0: 110 passed, 3 skipped** (39.32 seconds). It covers authenticated
+ownership across every route alias, malformed plan rejection without mutation,
+caption/title compatibility, real isolated rendering, HTTP cancellation, hung
+process-group cleanup, inherited memory/file limits, upload quotas, retention,
+event bounds, JSON body bounds and eight concurrent real Gunicorn streams with
+timely health/status requests. Gunicorn was installed on the runner using:
 
-## Findings requiring owners outside allowed paths
+```sh
+tools/remote_run.sh "python -m pip install -q gunicorn==23.0.0 && cd full_app && python -m pytest -q tests/test_jobs.py tests/test_server_limits.py tests/test_security_helpers.py tests/test_security_clients.py --tb=short"
+```
 
-| Priority | Location | Finding / required follow-up |
-| --- | --- | --- |
-| High | `full_app/app.py`, `server/api.py` | Default entry point binds all interfaces and has no API auth/rate limiting. Use the secure factory now; integrate the hook before advertising a remote deployment. Restrict access at the proxy pending integration. |
-| High | `services/probe.py`, `server/api.py:upload` | HTTP upload currently bypasses `ingest.media.probe`, so the new ingest protections do **not** protect that route yet. The request size cap (2 GiB default) exists, but ffprobe has no timeout/protocol/dimension limits. Wire signature sniffing and the protected probe into upload; preserve video/audio codec fields needed by downstream callers. Check metadata before persisting or queueing. Apply body/time/concurrent-upload/disk quotas at the proxy. |
-| High | `services/*`, `render/engine.py`, other render helpers | Other FFmpeg/probe subprocesses lack the new ingest timeouts and resource policy. Enforce process deadlines/cancellation and use OS/container CPU, memory, disk and egress isolation for hostile media. `-max_alloc` limits an allocation, not total memory. Ingest normalization still needs an output/disk quota. |
-| Medium | `server/api.py:stream/download`, `server/store.py` | Route IDs are SQL parameters, not directly joined to disk; filenames are generated UUIDs and original upload names are unused. No direct request path traversal found. Stream/download still trust persisted absolute paths; resolve them beneath the job workspace with `safe_path` before serving to defend against corrupted state/symlinks. Deletion already checks resolved directory parent. |
-| Medium | `server/queue.py` | Queue sanitizes provider exceptions to type names before persistence/logging, but per-job provider keys remain in memory after success/error until cancellation/deletion/close. Clear keys in terminal cleanup when retries no longer need them. Cancellation marks state but does not interrupt running FFmpeg/provider work. |
-| Medium | frontend / API integration | Shared token is not authorization between users. Add per-job ownership for multi-tenant use; authenticated browser transport and download behavior must be addressed as above. |
-| Medium | job/cache retention | Upload and ingest staging have cleanup paths, but completed jobs, cache entries, lock files and events have no total quota/retention policy. Add bounded retention outside active work and monitor free disk. |
-| Low | render text | Existing legacy drawtext labels are fixed allowlisted strings; reactions use generated `speaker.txt` plus `expansion=none`. No current user-text drawtext interpolation found there. Keep textfile mode for new labels, or use the tested helper exactly as documented. Never interpret user text as filter options. |
-| Test | `tests/test_capture.py:test_synthetic_video_flows_through_real_api` | Its unrestricted `Mock()` synthesizes `run_stage`, which `JobQueue.run` detects with `hasattr`; intended analyze/plan callbacks are therefore never called. Replace with `SimpleNamespace`/a spec or delete `run_stage` on the mock. The new authenticated end-to-end regression uses explicit methods. |
+That earlier focused run exited **0: 103 passed, 3 skipped** before the final
+regressions were added. The Flask floor check used an isolated temporary package
+directory (not a change to project dependencies):
 
-Discord installation should request only bot/application-command scopes and channel
-View Channel, Send Messages, Attach Files (Read Message History only where reply
-behavior needs it), never Administrator, Manage Guild or member/presence intents.
-Message Content is currently used for automatic attachment/link submission; scope
-the bot to configured channels and do not log message bodies. Bot token repr is
-already suppressed. OBS passwords come from their named environment variable;
-use a local websocket or WSS for remote OBS. Do not enable verbose HTTP/Discord
-diagnostics with credentials in a shared log.
+```sh
+tools/remote_run.sh "cd full_app && python - <<'PY'
+import os, subprocess, sys, tempfile
+with tempfile.TemporaryDirectory(prefix='fix1-flask30-') as target:
+ subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '--target', target, 'Flask==3.0.3'], check=True)
+ env = dict(os.environ, PYTHONPATH=target + os.pathsep + os.getcwd())
+ result = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_jobs.py', 'tests/test_server_limits.py', 'tests/test_security_helpers.py', 'tests/test_security_clients.py'], env=env)
+ sys.exit(result.returncode)
+PY"
+```
+
+Exit **0: 110 passed, 3 skipped** (43.45 seconds). Local `git diff --check`
+also exited **0**. No Docker image build or Windows resource-limit test was run.
+
+Intermediate failure ledger: the initial focused commands exited 1 with 29 and
+then 6 failures while probe memory/thread defaults, isolated test mocks, idle SSE
+expectations and process-reaping assertions were corrected. The first full run
+(`-m 'not live' --tb=short`) exited 1 with **925 passed, 1 failed, 19 skipped,
+1 deselected**: the killed child disappeared during a `/proc` assertion. The
+corrected subsequent full run exited 0 with **930 passed, 19 skipped,
+1 deselected**, before the last four regression cases were added.
+
+Changed files: `Dockerfile`, `docker-compose.yml`, `full_app/app.py`,
+`full_app/server/{api,auth,legacy,media,queue,resources,security,stage_worker,store,validation}.py`,
+`full_app/tests/test_jobs.py`, `full_app/tests/test_server_limits.py`,
+`docs/api.md`, and `docs/security.md`.
+
+To try: run `python full_app/app.py` and open `http://127.0.0.1:8000`, or follow
+the upload/analyze/plan/render requests in [api.md](api.md). Shared/Compose API
+clients must supply an application bearer token. Synthetic explicit-plan render
+tests exercise rendering without model calls. Remaining work and deployment
+limits are listed above; no unsupported music path is silently accepted.
+
+## Historical SEC-01 evidence
+
+The following is the earlier SEC-01 validation ledger, not the current FIX-1 suite
+result. Its failure descriptions refer to that earlier snapshot.
 
 ## Verification
 

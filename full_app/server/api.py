@@ -1,16 +1,18 @@
 """Application factory and compatible HTTP adapters."""
 import atexit
-import math
 import os
 import shutil
 import time
 import uuid
+import threading
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, request, send_file, send_from_directory
+from flask import Flask, Response, g, jsonify, request, send_file, send_from_directory
 from werkzeug.exceptions import HTTPException
 from models.effects import VIDEO_EFFECTS, SOUND_EFFECTS
-from services.probe import probe_video
+from .resources import Resources, IsolatedPipeline, probe
+from .auth import install_auth
+from .security import validate_media_metadata
 from .legacy import EDIT_STYLES
 from .pipeline import Pipeline, ROOT
 from .ownership import WorkspaceLease
@@ -40,13 +42,38 @@ def create_app(config=None, pipeline=None):
     app.config.update(WORKSPACE=os.getenv('JOB_WORKSPACE', str(ROOT / 'workspace')),
                       MAX_CONTENT_LENGTH=int(os.getenv('MAX_UPLOAD_BYTES', 2 * 1024**3)),
                       JOB_WORKERS=int(os.getenv('JOB_WORKERS', 2)), JOB_CAPACITY=32,
-                      SSE_INTERVAL=1, RECOVER_JOBS=True)
+                      SSE_INTERVAL=1, SSE_MAX_SECONDS=30, SSE_MAX_SUBSCRIBERS=8, RECOVER_JOBS=True,
+                      MAX_JOBS=200, MAX_UPLOADS=2, MAX_JSON_BYTES=2 * 1024**2, WORKSPACE_BYTES=20 * 1024**3,
+                      OWNER_BYTES=10 * 1024**3, JOB_BYTES=4 * 1024**3,
+                      DISK_HEADROOM_BYTES=512 * 1024**2, JOB_TTL_SECONDS=7 * 86400,
+                      RETENTION_INTERVAL=60, STAGE_TIMEOUT_SECONDS=1800,
+                      STAGE_MEMORY_BYTES=8 * 1024**3, PROBE_TIMEOUT_SECONDS=20,
+                      PROBE_MEMORY_BYTES=1024**3, MAX_MEDIA_DURATION=43200,
+                      MAX_MEDIA_PIXELS=3840 * 2160, MAX_MEDIA_FPS=120,
+                      MAX_MEDIA_PIXEL_RATE=3840 * 2160 * 60, MAX_MEDIA_FRAMES=3000000)
+    # Numeric limits can be configured without custom application code.
+    for name in tuple(app.config):
+        if name.startswith(('SSE_', 'MAX_', 'WORKSPACE_BYTES', 'OWNER_BYTES', 'JOB_BYTES',
+                            'DISK_HEADROOM', 'JOB_TTL', 'RETENTION_', 'STAGE_', 'PROBE_')) and 'LIM_' + name in os.environ:
+            app.config[name] = int(os.environ['LIM_' + name])
     app.config.update(config or {})
     workspace = Path(app.config['WORKSPACE']).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
     lease = WorkspaceLease(workspace / '.worker.lock')
     store = JobStore(workspace / 'jobs.sqlite3')
-    queue = JobQueue(store, pipeline or Pipeline(), app.config['JOB_WORKERS'], app.config['JOB_CAPACITY'], lease)
+    try:
+        owned = install_auth(app, store)
+    except Exception:
+        lease.close()
+        raise
+    resources = Resources(workspace, store, app.config)
+    default_pipeline = (Pipeline() if app.testing and not app.config.get('ISOLATE_STAGES')
+                        else IsolatedPipeline(resources))
+    queue = JobQueue(store, pipeline if pipeline is not None else default_pipeline,
+                     app.config['JOB_WORKERS'], app.config['JOB_CAPACITY'], lease)
+    streams = threading.BoundedSemaphore(app.config['SSE_MAX_SUBSCRIBERS'])
+    uploads = threading.BoundedSemaphore(app.config['MAX_UPLOADS'])
+    queue.start_retention(resources, app.config['RETENTION_INTERVAL'])
     app.extensions.update(job_store=store, job_queue=queue)
     atexit.register(queue.close)
     # Only UUID job directories under this workspace are owned by this backend.
@@ -89,6 +116,10 @@ def create_app(config=None, pipeline=None):
         response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
         return response
 
+    @app.get('/api/health')
+    def health():
+        return jsonify(status='ok')
+
     @app.get('/api/info')
     def info():
         return jsonify(model=os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview'),
@@ -100,6 +131,30 @@ def create_app(config=None, pipeline=None):
     @app.post('/api/upload')
     @app.post('/api/jobs')
     def upload():
+        if request.content_length is None and not request.mimetype:
+            raise ValueError('No video file provided (multipart field: video)')
+        if request.content_length is None:
+            return jsonify(error='Content-Length required for upload reservation'), 411
+        if request.content_length > app.config['MAX_CONTENT_LENGTH']:
+            return jsonify(error='Upload too large'), 413
+        if not uploads.acquire(blocking=False):
+            return jsonify(error='Upload capacity exhausted'), 429
+        try:
+            resources.reap(queue)
+            with resources.upload(g.owner, request.content_length):
+                return receive_upload()
+        finally:
+            uploads.release()
+
+    def metadata(path):
+        meta = validate_media_metadata(probe(path, app.config),
+            max_duration=app.config['MAX_MEDIA_DURATION'], max_pixels=app.config['MAX_MEDIA_PIXELS'],
+            max_fps=app.config['MAX_MEDIA_FPS'], max_pixel_rate=app.config['MAX_MEDIA_PIXEL_RATE'])
+        if meta['duration'] * meta['fps'] > app.config['MAX_MEDIA_FRAMES']:
+            raise ValueError('Video exceeds frame count limit')
+        return meta
+
+    def receive_upload():
         video = request.files.get('video')
         if not video or not video.filename:
             raise ValueError('No video file provided (multipart field: video)')
@@ -109,9 +164,7 @@ def create_app(config=None, pipeline=None):
         temporary = directory / 'upload.part'
         try:
             video.save(temporary)
-            meta = probe_video(temporary)
-            if not math.isfinite(meta['duration']) or meta['duration'] <= 0 or meta['width'] <= 0 or meta['height'] <= 0 or meta['fps'] <= 0:
-                raise ValueError('Invalid video metadata')
+            meta = metadata(temporary)
             source = directory / 'source.mp4'
             temporary.replace(source)
             videos = request.files.getlist('video')
@@ -121,9 +174,9 @@ def create_app(config=None, pipeline=None):
             for index, extra in enumerate(videos[1:], 1):
                 path = directory / f'source_{index}.mp4'
                 extra.save(path)
-                probe_video(path)
+                metadata(path)
                 sources.append(str(path))
-            job = dict(id=job_id, dir=str(directory), source=str(source), meta=meta,
+            job = dict(id=job_id, _owner=g.owner, dir=str(directory), source=str(source), meta=meta,
                        sources=sources, source_count=len(sources),
                        status='uploaded', stage='upload', progress=1, completed=['upload'],
                        options={}, clips=None, candidates=[], edit_plan=None, output=None,
@@ -141,10 +194,11 @@ def create_app(config=None, pipeline=None):
 
     def start(job_id, target, data, legacy=False, analysis_request=False):
         options = options_valid(data, EDIT_STYLES)
-        job = store.get(job_id)
+        job = owned(job_id)
         if 'edit_plan' in data and target != 'render':
             raise ValueError('edit_plan is only accepted by render')
-        custom = plan_valid(data['edit_plan'], job['meta']['duration']) if 'edit_plan' in data else None
+        custom = plan_valid(data['edit_plan'], job['meta']['duration'],
+                            options.get('max_duration', job['options'].get('max_duration', 180))) if 'edit_plan' in data else None
         key = request.headers.get('X-API-Key') or data.get('api_key')
         if key is not None and (not isinstance(key, str) or len(key) > 4096):
             raise ValueError('Invalid API key')
@@ -223,25 +277,36 @@ def create_app(config=None, pipeline=None):
             store.save(job)
             return jsonify(public(job))
 
+    def media_path(job, path):
+        directory = Path(job['dir']).resolve()
+        target = Path(path).resolve()
+        if directory != workspace / job['id'] or not target.is_relative_to(directory):
+            raise KeyError(job['id'])
+        return target
+
     @app.get('/api/jobs/<job_id>/download')
     @app.get('/api/download/<job_id>')
     def download(job_id):
         job = store.get(job_id)
         if job['status'] != 'done' or not job['output'] or not Path(job['output']).is_file():
             return jsonify(error='No rendered output yet'), 404
-        return send_file(job['output'], mimetype='video/mp4', as_attachment=True,
+        return send_file(media_path(job, job['output']), mimetype='video/mp4', as_attachment=True,
                          download_name=f'highlight_{job_id}.mp4')
 
     @app.get('/api/stream/<job_id>')
     def stream(job_id):
-        return send_file(store.get(job_id)['source'], mimetype='video/mp4', conditional=True)
+        job = store.get(job_id)
+        return send_file(media_path(job, job['source']), mimetype='video/mp4', conditional=True)
 
     @app.get('/api/jobs/<job_id>/share/<path:filename>')
     def share(job_id, filename):
         job = store.get(job_id)
         if job['status'] != 'done' or not job.get('share_kit'):
             return jsonify(error='No share kit yet'), 404
-        return send_from_directory(Path(job['dir']) / 'share', filename, as_attachment=True)
+        target = media_path(job, Path(job['dir']) / 'share' / filename)
+        if not target.is_relative_to((Path(job['dir']) / 'share').resolve()) or not target.is_file():
+            raise KeyError(job_id)
+        return send_file(target, as_attachment=True)
 
     @app.get('/api/log/<job_id>')
     def log(job_id):
@@ -258,9 +323,25 @@ def create_app(config=None, pipeline=None):
         except (ValueError, TypeError):
             raise ValueError('Last-Event-ID / after must be a nonnegative integer') from None
 
+        if not streams.acquire(blocking=False):
+            return jsonify(error='Event subscriber capacity exhausted'), 429, {'Retry-After': '1'}
+        released = False
+        def release():
+            nonlocal released
+            if not released:
+                released = True
+                streams.release()
+
         def generate():
             cursor = after
-            while True:
+            deadline = time.monotonic() + app.config['SSE_MAX_SECONDS']
+            try:
+                yield from replay(cursor, deadline)
+            finally:
+                release()
+
+        def replay(cursor, deadline):
+            while time.monotonic() < deadline:
                 rows = store.events(job_id, cursor)
                 for seq, data in rows:
                     cursor = seq
@@ -271,10 +352,18 @@ def create_app(config=None, pipeline=None):
                     except KeyError:
                         return
                     yield ': heartbeat\n\n'
-                # Keep idle jobs connected so later actions arrive on the same stream.
-                time.sleep(app.config['SSE_INTERVAL'])
-        return Response(generate(), mimetype='text/event-stream',
-                        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+                try:
+                    current = store.get(job_id)
+                except KeyError:
+                    return
+                # Drain all replay pages, then close inactive/terminal jobs.
+                if len(rows) < 100 and current['status'] not in ('queued', 'analyzing', 'planning', 'rendering'):
+                    return
+                time.sleep(min(app.config['SSE_INTERVAL'], max(0, deadline - time.monotonic())))
+        response = Response(generate(), mimetype='text/event-stream',
+                            headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
+        response.call_on_close(release)
+        return response
 
     @app.delete('/api/jobs/<job_id>')
     def delete(job_id):
