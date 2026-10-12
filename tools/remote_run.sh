@@ -17,7 +17,8 @@ rsync -az --delete -e "ssh -i $KEY -o StrictHostKeyChecking=accept-new" \
 set -e
 NAME="$1"; CMD="$2"; cd "/srv/lim/$NAME"
 REQ=$(cat full_app/requirements*.txt 2>/dev/null | sha256sum | cut -c1-16)
-if [ "$(cat .venv/.req 2>/dev/null)" != "$REQ" ]; then
+if [ ! -x .venv/bin/python ] || [ "$(cat .venv/.req 2>/dev/null)" != "$REQ" ]; then
+  rm -rf .venv
   python3 -m venv .venv >/dev/null && . .venv/bin/activate
   pip install -q --upgrade pip >/dev/null
   for f in full_app/requirements*.txt; do pip install -q -r "$f"; done
