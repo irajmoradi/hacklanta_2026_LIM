@@ -77,7 +77,7 @@ def main():
         # Keep portrait footage clear of the title and copy.
         dest=EDIT/(name+'.mp4')
         a.encode(['-loop','1','-i',str(base),'-i',str(OUT/('montage_'+name+'.mp4'))],
-            '[1:v]scale=432:768,setsar=1[s];[0:v][s]overlay=1440:210,fps=30[v];[1:a]alimiter=limit=0.95:level=0[a]',dest,15)
+            '[1:v]scale=432:768,setsar=1[s];[0:v][s]overlay=1440:210,fps=30[v];[1:a]alimiter=limit=0.95:level=0[a]',dest,20 if name=='mean_vertical' else 15)
         parts.append(dest)
     parts.append(a.still('04_limits',a.card('limits','QUALITY / LIMITS','Review before sharing.',
         ['Window scoring covers the strongest local candidates, not every second.',
@@ -88,11 +88,12 @@ def main():
     output=OUT/'extension_demo_v2.mp4'
     a.run(['-f','concat','-safe','0','-i',str(manifest),'-c','copy','-movflags','+faststart',str(output)])
     duration=float(a.probe(output)['format']['duration'])
-    # Two-pass target of 18 MB leaves room for AAC and container overhead below 20 MB.
+    # Budget video plus AAC at 18 MB, with buffer/container headroom below 20 MB.
     bitrate=max(100000,int(18_000_000*8/duration)-64000)
-    shared=['-i',str(output),'-vf','scale=1280:720','-c:v','libx264','-preset','fast','-threads','4','-b:v',str(bitrate),'-passlogfile',str(EDIT/'discord-pass')]
-    a.run([*shared,'-pass','1','-an','-f','null','/dev/null'])
-    a.run([*shared,'-pass','2','-c:a','aac','-b:a','64k','-movflags','+faststart',str(OUT/'extension_demo_v2_discord.mp4')])
+    a.run(['-i',str(output),'-vf','fps=30,scale=1280:720','-c:v','libx264',
+           '-preset','fast','-threads','4','-crf','24','-maxrate',str(bitrate),
+           '-bufsize',str(bitrate*2),'-r','30','-c:a','aac','-b:a','64k',
+           '-movflags','+faststart',str(OUT/'extension_demo_v2_discord.mp4')])
     a.run(['-i',str(output),'-vf',f'fps=1/{duration/12},scale=480:270,tile=4x3','-frames:v','1',str(OUT/'contact_sheet.jpg')])
     files=['extension_demo_v2.mp4','extension_demo_v2_discord.mp4','montage_landscape.mp4','montage_vertical.mp4','montage_mean_vertical.mp4','ui_walkthrough.mp4','comparison.mp4']
     manifest={name:dict(bytes=(OUT/name).stat().st_size,probe=a.probe(OUT/name)) for name in files}
