@@ -15,7 +15,7 @@ from google.genai import types
 
 from models.schemas import ClipList, EditPlan
 from services.video_understanding import (
-    ProviderConfig, VideoUnderstandingProvider, log_usage, video_duration, with_retries,
+    VideoUnderstandingProvider, log_usage, with_retries,
 )
 
 LOG = logging.getLogger(__name__)
@@ -146,13 +146,6 @@ class GeminiProvider(VideoUnderstandingProvider):
                       temperature=temperature)
         if video:
             kwargs["media_resolution"] = self.media_resolution
-            # Only send an agentic flag when the installed SDK explicitly models it.
-            fields = types.GenerateContentConfig.model_fields
-            if self.agentic and "video_processing_mode" in fields:
-                kwargs["video_processing_mode"] = "AGENTIC"
-            elif self.agentic and not self._agentic_warned:
-                LOG.warning("Agentic video processing is unavailable in this SDK generate_content surface; using standard sampling")
-                self._agentic_warned = True
         return types.GenerateContentConfig(**kwargs)
 
     def _generate(self, contents, schema, temperature=0.3, video=False):
@@ -167,12 +160,42 @@ class GeminiProvider(VideoUnderstandingProvider):
                 usage = getattr(response, "usage_metadata", None)
                 log_usage("gemini", self.model, started, {
                     "prompt_tokens": getattr(usage, "prompt_token_count", 0),
-                    "completion_tokens": getattr(usage, "candidates_token_count", 0),
+                    "completion_tokens": (getattr(usage, "candidates_token_count", 0) or 0) + (getattr(usage, "thoughts_token_count", 0) or 0),
                 }, self.config)
         return with_retries(request, self.config, "generate_content")
 
     def _infer(self, video_path, prompt, schema):
+        if self.agentic:
+            interactions = None if self.vertexai else getattr(self.client, "interactions", None)
+            if not self.vertexai and callable(getattr(interactions, "create", None)):
+                return self._infer_agentic(video_path, prompt, schema)
+            if not self._agentic_warned:
+                LOG.warning("Agentic video processing is unavailable for this SDK/backend; using standard sampling")
+                self._agentic_warned = True
         return self._generate([self._video_part(video_path), prompt], schema, video=True)
+
+    def _infer_agentic(self, video_path, prompt, schema):
+        uploaded = self._upload_file(video_path)
+        def request():
+            started = time.monotonic()
+            response = None
+            try:
+                response = self.client.interactions.create(
+                    model=self.model,
+                    input=[{"type": "video", "uri": uploaded.uri, "mime_type": uploaded.mime_type,
+                            "processing": "agentic", "resolution": self.media_resolution.removeprefix("MEDIA_RESOLUTION_").lower()},
+                           {"type": "text", "text": prompt}],
+                    response_format={"type": "text", "mime_type": "application/json", "schema": schema.model_json_schema()},
+                    timeout=self.config.timeout_seconds,
+                )
+                return schema.model_validate_json(response.output_text or "")
+            finally:
+                usage = getattr(response, "usage", None)
+                log_usage("gemini_agentic", self.model, started, {
+                    "prompt_tokens": (getattr(usage, "total_input_tokens", 0) or 0) + (getattr(usage, "total_tool_use_tokens", 0) or 0),
+                    "completion_tokens": (getattr(usage, "total_output_tokens", 0) or 0) + (getattr(usage, "total_thought_tokens", 0) or 0),
+                }, self.config)
+        return with_retries(request, self.config, "agentic_video")
 
     def find_clips(self, uploaded_file, prompt: str) -> list[dict]:
         if isinstance(uploaded_file, VideoSource):

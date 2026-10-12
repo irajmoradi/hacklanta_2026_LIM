@@ -274,15 +274,44 @@ def test_legacy_upload_analyze_plan_render(video, tmp_path):
     assert 0.8 <= video_duration(output) <= 1.3
 
 
-def test_agentic_unsupported_warns_once(caplog, monkeypatch):
-    from google.genai import types
-    fields = {k: v for k, v in types.GenerateContentConfig.model_fields.items() if k != "video_processing_mode"}
-    monkeypatch.setattr(types.GenerateContentConfig, "__pydantic_fields__", fields)
-    provider = GeminiProvider(client=sdk_client(), agentic=True)
+def test_agentic_unsupported_warns_once(video, caplog):
+    client = sdk_client([{"clips": []}, {"clips": []}])
+    client.interactions = None
+    provider = GeminiProvider(client=client, agentic=True)
     with caplog.at_level(logging.WARNING):
-        provider._generation_config(ClipList, 0.3, True)
-        provider._generation_config(ClipList, 0.3, True)
+        provider.analyze_video(video)
+        provider.analyze_video(video)
     assert caplog.text.count("Agentic video processing is unavailable") == 1
+
+
+def test_agentic_structured_request(video):
+    client = sdk_client()
+    client.interactions.create.return_value = SimpleNamespace(output_text='{"clips": []}', usage=None)
+    provider = GeminiProvider(client=client, agentic=True)
+    assert provider.analyze_video(video).clips == []
+    request = client.interactions.create.call_args.kwargs
+    assert request["input"][0]["processing"] == "agentic"
+    assert request["input"][0]["resolution"] == "low"
+    assert request["response_format"]["schema"] == ClipList.model_json_schema()
+    assert request["timeout"] == 120
+    client.models.generate_content.assert_not_called()
+
+
+def test_vertex_agentic_falls_back_to_inline(video, caplog):
+    client = sdk_client([{"clips": []}])
+    provider = GeminiProvider(client=client, vertexai=True, agentic=True)
+    with caplog.at_level(logging.WARNING):
+        assert provider.analyze_video(video).clips == []
+    assert "using standard sampling" in caplog.text
+    client.interactions.create.assert_not_called()
+    client.files.upload.assert_not_called()
+
+
+def test_sdk_httpx_transport_retry(video):
+    from httpx import ReadTimeout
+    client = sdk_client([ReadTimeout("timeout"), {"clips": []}])
+    assert GeminiProvider(client=client, config=config()).analyze_video(video).clips == []
+    assert client.models.generate_content.call_count == 2
 
 
 def test_local_http_payload_headers_and_timeout(monkeypatch):

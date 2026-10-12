@@ -11,6 +11,7 @@ import tempfile
 import time
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from httpx import TransportError
 
 from models.schemas import ClipList, ScoredWindow, ScoringCandidate, WindowAssessment
 
@@ -73,7 +74,7 @@ def video_slice(path, start, end, timeout):
              "-ss", str(start), "-i", str(path), "-t", str(end - start),
              "-map", "0:v:0", "-map", "0:a?", "-c:v", "libx264",
              "-preset", "veryfast", "-crf", "25", "-pix_fmt", "yuv420p",
-             "-c:a", "aac", "-avoid_negative_ts", "make_zero", str(output)],
+             "-c:a", "aac", str(output)],
             capture_output=True, check=True, timeout=timeout,
         )
         yield output
@@ -83,7 +84,7 @@ def retryable(error):
     code = getattr(error, "status_code", None) or getattr(error, "code", None)
     if code is not None:
         return str(code) in {"408", "429", "500", "502", "503", "504"}
-    return isinstance(error, (TimeoutError, ConnectionError, ValidationError, json.JSONDecodeError))
+    return isinstance(error, (TimeoutError, ConnectionError, TransportError, ValidationError, json.JSONDecodeError))
 
 
 def with_retries(operation, config, label):
