@@ -54,6 +54,21 @@ class _Adapter:
 
 
 class YouTube(_Adapter):
+    def _thumbnail(self, copy, video_id, auth):
+        if not copy["thumbnail"]:
+            return "not provided"
+        try:
+            thumbnail = Path(copy["thumbnail"])
+            if thumbnail.stat().st_size > 50_000_000:
+                return "manual: thumbnail exceeds API size limit"
+            expect(request(self.client, "POST", "https://www.googleapis.com/upload/youtube/v3/thumbnails/set",
+                params={"videoId": video_id, "uploadType": "media"},
+                headers={**auth, "Content-Type": "image/jpeg"}, content=thumbnail.read_bytes()), {200})
+            return "uploaded"
+        except (PublishError, OSError):
+            # The video already exists: keep its ID so callers do not duplicate it.
+            return "manual: thumbnail failed; video upload succeeded"
+
     def upload(self, kit, *, dry_run=True, confirm=False, privacy="private", chunk_size=8 * 1024 * 1024):
         if privacy not in ("private", "unlisted", "public"):
             raise ValueError("Invalid privacy status")
@@ -95,7 +110,7 @@ class YouTube(_Adapter):
                     if not isinstance(video_id, str) or not video_id:
                         raise PublishError("Upload completed without a video ID; do not blindly retry")
                     return {**result, "video_id": video_id, "status": "uploaded",
-                            "thumbnail_status": "manual: select a Shorts cover in YouTube"}
+                            "thumbnail_status": self._thumbnail(copy, video_id, auth)}
                 match = re.fullmatch(r"bytes=0-(\d+)", response.headers.get("Range", ""))
                 next_offset = int(match[1]) + 1 if match else 0
                 if response.headers.get("Range") and not match:

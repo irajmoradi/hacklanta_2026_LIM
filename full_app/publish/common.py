@@ -54,9 +54,13 @@ def json_body(response):
 def upload_url(value, domain):
     if not isinstance(value, str):
         raise PublishError("Missing upload URL")
-    parsed = urlsplit(value)
-    if (parsed.scheme != "https" or parsed.username or parsed.password
-            or parsed.port not in (None, 443) or not parsed.hostname
-            or not (parsed.hostname == domain or parsed.hostname.endswith("." + domain))):
+    try:
+        parsed = urlsplit(value)
+        valid = (parsed.scheme == "https" and not parsed.username and not parsed.password
+                 and parsed.port in (None, 443) and parsed.hostname
+                 and (parsed.hostname == domain or parsed.hostname.endswith("." + domain)))
+    except ValueError:
+        valid = False
+    if not valid:
         raise PublishError("Untrusted upload URL")
     return value

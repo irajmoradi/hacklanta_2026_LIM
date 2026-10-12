@@ -9,15 +9,23 @@ import pytest
 from publish import OAuth, PublishError, TikTok, TokenStore, YouTube
 
 
-@pytest.fixture
-def kit(tmp_path, video):
+@pytest.fixture(scope="module")
+def base_kit(tmp_path_factory):
     from social import build_share_kit
-    job = tmp_path / "job"
+    import subprocess
+    job = tmp_path_factory.mktemp("publish") / "job"
     job.mkdir()
-    import shutil
-    shutil.copy2(video, job / "final_edit.mp4")
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+                    "testsrc2=size=160x120:rate=10:duration=6", "-c:v", "libx264",
+                    str(job / "final_edit.mp4")], check=True, timeout=30)
     return build_share_kit(job, [{"start": 0, "end": 6, "description": "Test play"}],
                            {"segments": [{"start": 0, "end": 6}]}, "valorant")
+
+
+@pytest.fixture
+def kit(tmp_path, base_kit):
+    import shutil
+    return shutil.copytree(base_kit, tmp_path / "kit")
 
 
 class Auth:
@@ -51,6 +59,10 @@ def test_youtube_chunks_recover_partial_ack(kit):
     calls = []
     def handler(req):
         calls.append(req)
+        if req.url.path.endswith("thumbnails/set"):
+            assert req.url.params["videoId"] == "video123"
+            assert req.content == (kit / "thumbnail_vertical.jpg").read_bytes()
+            return httpx.Response(200, json={"items": [{}]})
         if req.method == "POST":
             body = json.loads(req.content)
             assert body["status"]["privacyStatus"] == "unlisted"
@@ -70,7 +82,21 @@ def test_youtube_chunks_recover_partial_ack(kit):
     result = adapter(YouTube, handler).upload(kit, dry_run=False, confirm=True,
                                             privacy="unlisted", chunk_size=256 * 1024)
     assert result["video_id"] == "video123"
-    assert len(calls) == 5
+    assert result["thumbnail_status"] == "uploaded"
+    assert len(calls) == 6
+
+
+def test_thumbnail_failure_preserves_uploaded_video(kit):
+    def handler(req):
+        if req.url.path.endswith("thumbnails/set"):
+            return httpx.Response(403)
+        if req.method == "POST":
+            return httpx.Response(200, headers={"Location": "https://www.googleapis.com/session"})
+        return httpx.Response(201, json={"id": "keep-me"})
+    result = adapter(YouTube, handler).upload(kit, dry_run=False, confirm=True)
+    assert result["video_id"] == "keep-me"
+    assert result["status"] == "uploaded"
+    assert "manual" in result["thumbnail_status"]
 
 
 @pytest.mark.parametrize("status", [401, 403, 429, 500])
@@ -86,7 +112,8 @@ def test_http_errors_redacted(kit, cls, status, caplog):
 
 
 @pytest.mark.parametrize("size", [123, 10_000_123])
-def test_tiktok_chunks(kit, size):
+def test_tiktok_chunks(kit, size, caplog):
+    caplog.set_level(logging.DEBUG)
     (kit / "video.mp4").write_bytes(b"x" * size)
     calls = []
     def handler(req):
@@ -105,6 +132,8 @@ def test_tiktok_chunks(kit, size):
         return httpx.Response(201 if end == size else 206)
     assert adapter(TikTok, handler).upload(kit, dry_run=False, confirm=True,
                                            chunk_size=5_000_000)["status"] == "draft_uploaded"
+    assert "secret-signed" not in caplog.text
+    assert "secret-access" not in caplog.text
 
 
 def test_tiktok_error_body_and_transfer_failure(kit):
@@ -112,6 +141,44 @@ def test_tiktok_error_body_and_transfer_failure(kit):
                  {"error": {"code": "ok"}, "data": {"publish_id": "x", "upload_url": "https://evil.test/"}}):
         with pytest.raises(PublishError):
             adapter(TikTok, lambda req: httpx.Response(200, json=body)).upload(kit, dry_run=False, confirm=True)
+
+
+def test_tiktok_transfer_failure_is_not_reinitialized(kit):
+    calls = []
+    def handler(req):
+        calls.append(req)
+        if req.method == "POST":
+            return httpx.Response(200, json={"error": {"code": "ok"}, "data": {
+                "publish_id": "draft", "upload_url": "https://open-upload.tiktokapis.com/video/"}})
+        return httpx.Response(403, text="expired secret-url")
+    with pytest.raises(PublishError, match="403"):
+        adapter(TikTok, handler).upload(kit, dry_run=False, confirm=True)
+    assert len(calls) == 2
+
+
+@pytest.mark.parametrize("range_header", ["nonsense", "bytes=0-999999999"])
+def test_youtube_invalid_acknowledgment(kit, range_header):
+    def handler(req):
+        if req.method == "POST":
+            return httpx.Response(200, headers={"Location": "https://www.googleapis.com/session"})
+        return httpx.Response(308, headers={"Range": range_header})
+    with pytest.raises(PublishError, match="range"):
+        adapter(YouTube, handler).upload(kit, dry_run=False, confirm=True)
+
+
+def test_missing_encryption_key(monkeypatch):
+    monkeypatch.delenv("PUBLISH_TOKEN_KEY", raising=False)
+    with pytest.raises(PublishError, match="PUBLISH_TOKEN_KEY"):
+        TokenStore()
+
+
+@pytest.mark.parametrize("url", ["https://www.googleapis.com:secret/", "http://www.googleapis.com/",
+                                  "https://www.googleapis.com.evil.test/", "https://secret@www.googleapis.com/"])
+def test_untrusted_upload_urls_are_redacted(url):
+    from publish.common import upload_url
+    with pytest.raises(PublishError) as error:
+        upload_url(url, "googleapis.com")
+    assert "secret" not in str(error.value)
 
 
 def test_youtube_no_progress_is_bounded(kit):
@@ -127,7 +194,9 @@ def test_youtube_no_progress_is_bounded(kit):
 
 def test_kit_path_escape(kit, tmp_path):
     metadata = json.loads((kit / "metadata.json").read_text())
-    metadata["video"] = str(tmp_path / "synthetic.mp4")
+    outside = tmp_path / "synthetic.mp4"
+    outside.write_bytes(b"outside")
+    metadata["video"] = str(outside)
     (kit / "metadata.json").write_text(json.dumps(metadata))
     with pytest.raises(ValueError, match="inside"):
         YouTube().upload(kit)
@@ -184,3 +253,14 @@ def test_oauth_exchange_refresh_and_state(store, provider):
     assert oauth.access_token() == "new-access"
     assert calls[1]["grant_type"] == ["refresh_token"]
     assert store.load(provider)["refresh_token"] == "refresh"
+
+
+def test_oauth_error_does_not_store_response(store):
+    oauth = OAuth("tiktok", "client", "secret", "https://example.test/callback", store,
+                  httpx.Client(transport=httpx.MockTransport(lambda req:
+                      httpx.Response(200, json={"error": "invalid_grant", "error_description": "secret"}))))
+    state = parse_qs(urlsplit(oauth.authorization_url()).query)["state"][0]
+    with pytest.raises(PublishError, match="token request failed") as error:
+        oauth.exchange("code", state)
+    assert "secret" not in str(error.value)
+    assert not store.directory.exists()
