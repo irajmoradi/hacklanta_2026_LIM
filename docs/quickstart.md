@@ -38,6 +38,8 @@ npm run dev
 
 Open Vite's printed URL (normally http://localhost:5173). `/api` proxies to the backend on 8000. `npm run build` type-checks and builds `dist/`; local Flask does not automatically serve it. Docker copies the build into Flask's frontend directory.
 
+React query flags: `/?mock=1` enables fixture analysis/simulated export without provider calls (no downloadable montage); `/?legacy=1` uses the old blocking API and supports landscape/Gemini only. Default `/` uses jobs/SSE. These flags are browser URL parameters, not environment variables. See [frontend](frontend.md) for review metadata and playback limits.
+
 Upload → analyze/plan → review clips → render → download. Hosted analysis is billable. Game context goes through `prompt`; the HTTP schema has no separate `game` field. Use one backend process per workspace.
 
 ## Key-free render check
@@ -128,6 +130,7 @@ Tables cover repository application/test/tool environment variables, HTTP flags 
 | `OBS_WEBSOCKET_PASSWORD` | Default variable name in capture's `obs.password_env`; OBS password |
 | `INSTALL_WHISPER`, `INSTALL_OCR`, `INSTALL_SAM2` | `false`; Compose variables/Docker build args, not runtime feature toggles |
 | `PYTHONDONTWRITEBYTECODE`, `PYTHONUNBUFFERED`, `PIP_NO_CACHE_DIR` | Docker sets each to `1` |
+| `SAM2_BUILD_CUDA` | Docker sets `0` during optional SAM2 installation to disable CUDA extension build |
 | `RUNNER_IP` | Fallback `tools/runner_ip`; Linux runner address |
 | `RUNNER_KEY` | `$HOME/.ssh/village_vultr`; runner identity |
 | `MODEL`, `EFFORT` | Integrator-only `tools/dispatch.sh`: `gpt-6-astra`, `medium`; task dispatch settings, not app settings |
@@ -179,7 +182,7 @@ Boolean values must be JSON booleans. `game`, `ocr`, `privacy`, `narration`, `mu
 | PlannerOptions | `mode=nice`, `style="hype montage"` (spaces), `target_length=30`, `aspect=16:9`, `min_clip_length=1`, `max_clip_length=6`; explicit optional refiner |
 | Share plan.social | video_path/source_path/intro_duration/captions_path/thumbnail_text/subject_cutout/gemini_metadata/gemini_image; network needs supplied client plus enabled flag; [details](social.md) |
 | Narration | `allow_network=false`, `character_cap=1000`, optional cache_dir; hype_caster/deadpan_roast/nature_documentary personas |
-| Capture JSON | watch/api/options/state/stable_seconds/poll_seconds/retry_seconds/include_existing/hotkey/obs; OBS has url/password_env/timeout; [details](capture.md) |
+| Capture JSON | Required watch for watching; `api=http://localhost:8000`, `options={}`, derived state path, `stable_seconds=5`, `poll_seconds=1`, `retry_seconds=30`, `include_existing=false`, optional hotkey; OBS defaults url `ws://localhost:4455`, password_env `OBS_WEBSOCKET_PASSWORD`, timeout 10; [details](capture.md) |
 | PrivacyOptions | `game=valorant`, `backend=auto` (auto/tesseract/rapidocr/none), `own_name=None`, `keep_own_name=false`, `blur_webcam=false`, `sample_fps=2`, `hold_seconds=0.75`, `padding_pixels=5`, `regions=None`, `manual_boxes=[]`; explicitly invoke [library/CLI](privacy.md) |
 
 Typed contracts/ranges are in `full_app/render/plan.py`, `services/video_understanding.py`, `signals/models.py`, `planner/models.py`, and `privacy/models.py`. Library effect parameters are described in [FX](fx.md), [SAM](sam.md), [reactions](reactions.md), [music](music.md), and [multi-POV](multipov.md). Installing them does not create HTTP flags.
@@ -234,3 +237,5 @@ bash tools/remote_run.sh "cd full_app/production_frontend && npm ci && npm test 
 The runner installs core requirements and pytest, not nested extras. Missing extras can skip tests or cause setup failures. Live calls are unnecessary for documentation checks. Authorized live tests must stay within three Gemini calls per task, without copying credentials into the checkout or runner. See [live tests](video_models.md).
 
 Troubleshooting: inspect `/api/info`, job warnings/errors and SSE; check FFmpeg filters; give local VLM a different port; disable thumbnails for offline use; provision cached weights for captions. Workspace ownership errors indicate another process uses that directory. Check [integration boundaries](architecture.md) before assuming an installed module is enabled in the UI.
+
+DOC-01 verification: the published render-check shell snippets ran against a real local HTTP server with provider access disabled and produced H.264/AAC 1280×720 output. Documentation checks and React tests/build passed. The full backend suite has existing integration failures; see the [exact commands, counts and limitations](README_ASSETS/verification.md). Docker startup and optional pretrained model execution were not run for DOC-01.
