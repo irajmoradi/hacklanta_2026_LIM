@@ -2,12 +2,16 @@
 import type { ReviewClip, Job } from "../api";
 export function Timeline({
   job,
-  onSeek,
+  onSeek, affectedClip,
 }: {
   job: Job;
+  affectedClip?: string;
   onSeek: (time: number) => void;
 }) {
   const duration = Math.max(1, job.duration);
+  const kept = job.clips.filter(c => c.keep);
+  const montageDuration = Math.max(0.1, kept.reduce((sum, c) => sum + c.end - c.start, 0));
+  let montageOffset = 0;
   const points = job.interest
     .map(
       (p) =>
@@ -56,7 +60,7 @@ export function Timeline({
         {job.clips.map((c) => (
           <button
             key={c.id}
-            className={c.keep ? "" : "dropped"}
+            className={`${c.keep ? "" : "dropped"} ${affectedClip === c.id ? "agent-affected" : ""}`}
             style={{
               left: `${(c.start / duration) * 100}%`,
               width: `${Math.max(0.5, ((c.end - c.start) / duration) * 100)}%`,
@@ -66,6 +70,16 @@ export function Timeline({
             title={c.caption}
           />
         ))}
+      </div>
+      <small>Edit order - {montageDuration.toFixed(1)}s</small>
+      <div className="clip-track montage-track" aria-label="Montage order">
+        {kept.map((c, index) => {
+          const left = montageOffset / montageDuration * 100;
+          montageOffset += c.end - c.start;
+          return <button key={c.id} className={affectedClip === c.id ? 'agent-affected' : ''}
+            style={{left: `${left}%`, width: `${(c.end - c.start) / montageDuration * 100}%`}}
+            aria-label={`Edit ${index + 1}: ${c.caption}`} onClick={() => onSeek(c.start)}>{index + 1}</button>;
+        })}
       </div>
       <label className="seek">
         Seek source
