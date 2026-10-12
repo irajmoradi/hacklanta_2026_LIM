@@ -14,7 +14,8 @@ real faces, voices or generated media. `pack.json` is UTF-8:
 {"version": 1, "clips": [
   {"id": "alex-kill-01", "speaker": "Alex", "label": "sick_kill",
    "text": "Sick kill!", "file": "alex-kill-01.mp4", "duration": 1.2,
-   "background": "light"}
+   "background": "light", "alpha_file": "alex-kill-01.alpha.webm",
+   "mask_file": "alex-kill-01.mask.mp4"}
 ]}
 ```
 
@@ -22,8 +23,10 @@ IDs must be unique; files must resolve within the pack (including symlinks).
 Duration is positive seconds. Labels: `sick_kill`, `clutch`, `bruh`, `fail`,
 `funny`, `wholesome`, `hype`, `roast`. Background is `light` (white/light key),
 `transparent` (preserve source alpha), or `opaque` (circle crop only). Square,
-centered portraits work best; other aspect ratios are center-cropped. The light
-key also removes near-white foreground details; use alpha video for those avatars.
+centered portraits work best; other aspect ratios fit within the overlay square.
+The legacy light key also removes near-white foreground details; use the offline
+matte workflow below for these avatars. Optional matte paths have the same containment
+and symlink validation as originals. Other manifest metadata is preserved.
 
 From Village, export each authorized avatar/voice reaction as a short, synchronized
 video with audible voice, preferably a clean light background or alpha. Trim idle
@@ -75,8 +78,10 @@ Unique output filenames prevent collisions. Existing outputs are never overwritt
 Errors propagate so the backend can report them; disabled/empty hooks return the base.
 
 Landscape uses bottom-right; vertical uses top-left to leave lower caption space.
-The renderer preserves base dimensions, uses a circle of 30% of the smaller dimension,
-4% margin, soft offset shadow and short fade/slide pop transitions. It does not convert
+The renderer preserves base dimensions, uses 30% of the smaller dimension,
+4% margin, soft offset shadow, short fade/bounce transitions and a subtle idle bob.
+Matted portraits retain their full silhouette; legacy portraits retain the circular crop.
+Enable `show_speaker=True` for a name tag that follows the motion. It does not convert
 landscape to portrait: supply a segment already rendered at the desired aspect ratio.
 Game audio is ducked during the voice clip; voice is mixed at original gain with a
 limiter. Silent bases get an audio track; silent reactions do not duck game audio.
@@ -87,3 +92,62 @@ during and after the reaction and at mask corners, and measure game/voice freque
 amplitudes to check ducking and recovery. Local packs are trusted media; untrusted
 uploads still need the backend's normal resource limits. Rendering re-encodes video
 and audio and requires enough disk space for a new segment.
+
+## Offline pack matting (REACT-2)
+
+From the repository root on a machine with the app's NumPy/OpenCV dependencies and
+FFmpeg built with libvpx-vp9/libx264:
+
+```sh
+python tools/matte_pack.py /srv/packs/team --qa-dir /srv/demo_out/react2/checks --report /srv/demo_out/react2/timings.json
+# Watch a batch being appended, every five minutes for at most 45 minutes:
+python tools/matte_pack.py /srv/packs/team --wait-for 80 --wait-minutes 45 --poll-seconds 300 --report /srv/demo_out/react2/watch.json
+```
+
+Every `background: light` clip gets `<id>.alpha.webm` (VP9 alpha, decontaminated RGB)
+and `<id>.mask.mp4` (lossless grayscale H.264). Original media and audio are unchanged.
+The manifest gains relative `alpha_file` and `mask_file` paths only after encoding
+succeeds. Outputs are staged in the pack, and each manifest update re-reads the latest
+clips so a batch appended during a long encode is retained. Use a single matte writer;
+an external manifest writer should also merge the latest data and publish atomically.
+Clips with existing matte assets are skipped. `--force` regenerates the first pass;
+`--only iraj-bruh lance-bruh` limits work to selected IDs. Exit 2 means the watch
+deadline expired before the target was fully matted. Each completed clip logs its ID,
+frame count and wall-clock seconds, including encoding and optional QA generation.
+
+The key estimates the light background gradient from the side borders, finds connected
+background regions, preserves enclosed light details, and estimates fractional edge
+coverage from nearby opaque foreground colors. It removes background color from RGB
+edges and smooths only small inter-frame changes, avoiding moving-head trails. Tune
+`--low` (default 10), `--high` (65), and `--smoothing` (0.25) for other packs.
+Clean light side borders and constant-rate input are required. Variable frame rates
+are rejected instead of silently changing timing. Mask and alpha outputs have exactly
+one frame per source video frame at its original rate. Audio always comes from the
+original clip, so alpha-only video never loses the voice or disables ducking.
+
+Optional `--sam-local` uses the existing local SAM2 adapter to refine the foreground
+seed. Install the existing `full_app/sam/requirements-local.txt` extras and set
+`SAM2_CHECKPOINT` for that path. Missing dependencies/checkpoints gracefully fall back
+to the deterministic key. There are no remote model calls or automatic model downloads.
+The color key is the default and needs no ML extras.
+
+Renderer priority is alpha, then mask, then legacy behavior. VP9 alpha is explicitly
+decoded with libvpx-vp9 because native VP9 decoders may discard the alpha plane.
+Prefer alpha assets: mask-only assets retain the original edge RGB. The matting step
+removes the background around the source silhouette; it does not invent missing hair
+or remove clothing already present in the source portrait. Soft Gaussian-splat source
+edges can need per-pack tuning; inspect the QA stills before distributing a new pack.
+
+QA sheets show original / dark synthetic gameplay pattern / bright synthetic gameplay
+pattern, at the first, middle and near-final frame. They include no downloaded gameplay.
+Keep faces, voices, masks and all QA media outside git. Local review artifacts belong in
+`demo_video/react2/`, with a local `*` ignore file; nothing in that directory is committed.
+
+```sh
+tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_reactions.py tests/test_reaction_matte.py"
+tools/remote_run.sh "cd full_app && python -m pytest -q -m not\\ live"
+```
+
+Synthetic tests cover enclosed glasses, fine hair and beard detail, moving-head trail
+avoidance, idempotency, path validation, matte frame count, before/during/after output,
+both matte formats across 16:9 / 9:16 / 1:1, name tags, original voice sync and ducking.

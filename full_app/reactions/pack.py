@@ -18,6 +18,8 @@ class Reaction:
     file: Path
     duration: float
     background: str
+    alpha_file: Path | None = None
+    mask_file: Path | None = None
 
 
 def load_pack(folder: str | Path) -> list[Reaction]:
@@ -40,7 +42,19 @@ def load_pack(folder: str | Path) -> list[Reaction]:
             raise ValueError('Background must be light, transparent or opaque')
         if not isinstance(entry.get('text'), str):
             raise ValueError('Reaction text must be a string')
-        clips.append(Reaction(**{**entry, 'file': path, 'duration': duration}))
+        mattes = {}
+        for key in ('alpha_file', 'mask_file'):
+            value = entry.get(key)
+            if value is None:
+                continue
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError('Matte file must be a nonempty path')
+            matte = (root / value).resolve()
+            if not matte.is_relative_to(root) or not matte.is_file():
+                raise ValueError('Matte file must exist inside the pack')
+            mattes[key] = matte
+        clips.append(Reaction(**{k: entry[k] for k in ('id', 'speaker', 'label', 'text', 'background')},
+                              file=path, duration=duration, **mattes))
         ids.add(entry['id'])
     return clips
 
