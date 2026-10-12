@@ -26,6 +26,8 @@ def test_stacks_caps_adjacency_and_seed(mode, chaos):
             names = [s.name for s in group if s.clip_id == clip.id]
             assert minimum <= len(names) <= maximum
             assert len(names) == len(set(names))
+            if group is plan.effects:
+                assert sum(n.startswith('text_') for n in names) <= 1
             assert not previous.intersection(names)
             counts.update(names)
             previous = set(names)

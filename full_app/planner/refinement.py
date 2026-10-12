@@ -101,6 +101,8 @@ def refine_captions(plan: RenderPlan, refiner: Refiner, events=None) -> RenderPl
                     names = [s.name for s in group if s.clip_id == clip.id and s.name != 'slow_motion']
                     if len(names) != len(set(names)) or previous.intersection(names):
                         raise ValueError('Adjacent or duplicate effects')
+                    if group is result.effects and sum(n.startswith('text_') for n in names) > 1:
+                        raise ValueError('Overlapping word overlays')
                     counts.update(names)
                     previous = set(names)
                 if counts and max(counts.values()) > repeat_cap(len(result.clips)):

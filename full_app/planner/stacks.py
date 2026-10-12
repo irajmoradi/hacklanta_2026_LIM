@@ -57,6 +57,8 @@ def decorate_stacks(plan, sources):
                 candidates = [e for e in entries if e['kind'] == group and e['timing'] == 'event'
                               and (group, e['name']) not in previous | current
                               and counts[group, e['name']] < cap
+                              and not (e['name'].startswith('text_') and
+                                       any(k == 'vfx' and n.startswith('text_') for k,n in current))
                               and (plan.mode == 'mean' or e['mood'] != 'roast')]
                 relevant = [e for e in candidates if kinds.intersection(e['events'])]
                 wildcard = surprises > 0 and layer > 0 and rng.random() < plan.chaos*.2
@@ -69,6 +71,9 @@ def decorate_stacks(plan, sources):
                     if plan.mode == 'mean' and sources[c.source_id].label == 'lowlight':
                         core = {'text_bruh', 'text_fail', 'text_rip', 'text_lol', 'text_oof'}
                     focused = [e for e in candidates if e['name'] in core]
+                    candidates = focused or candidates
+                elif group == 'vfx' and layer == 1 and sources[c.source_id].label == 'lowlight':
+                    focused = [e for e in candidates if e['name'] in ('freeze', 'deep_fry')]
                     candidates = focused or candidates
                 if not candidates:
                     break
