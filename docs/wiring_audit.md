@@ -85,4 +85,90 @@ separate entrypoints, not silent movie-stage drops. Stock UI controls for
 unimplemented URL/music/chat upload remain disabled rather than being falsely
 advertised. Search/stats have HTTP endpoints but no new frontend page.
 
-Tests and replay results are recorded below after runner verification.
+## DEMO-02 replay result
+
+Command: `tools/remote_run.sh "cd full_app && python -u -m pipeline.wire1_demo"`
+(exit **0**). Output: `/srv/demo_out/wire1/output.mp4`, copied to
+`demo_video/wire1/out/output.mp4`. The requested local artifact directory contains
+its own generated `demo_video/wire1/.gitignore` (`*`); `git check-ignore` confirms
+the movie is excluded. This task-required artifact destination is outside source
+allowed_paths; no artifact or ignore file there is committed.
+
+* 21.269 seconds, 1080 x 1920, 30 fps, H.264 / AAC.
+* Same four saved mean-vertical cuts; no new inference or clip hallucination.
+* `BRUH MOMENTS` intro and `GG - NEXT ROUND` outro. Intro frame at 0.3 seconds
+  and the 12-cell contact sheet were visually inspected.
+* Four reaction overlays: Stefanny roast, Iraj clutch, Stefanny fail, Iraj roast.
+  The configured team pack has exactly these two speakers, so both appear.
+* 47 animated editorial words, with explicit no-transcriber/fallback warnings.
+  These are **not** a transcript. Contact-sheet frames show words and both speakers.
+* Original generated music, ducking and beat sync are present in the executed
+  graph. The first and third gameplay durations trim from 2/5 to 1.9667/4.9667 s;
+  the intro and crossfade offsets are included in the beat calculation.
+* Two offline espeak-ng narration clips are mixed at 5.9203-8.7167 and
+  11.9913-16.8 seconds. Other speech is omitted with a safe-gap warning.
+  espeak-ng was installed only on the runner; it is an optional system dependency.
+* Four fallback crop tracks contain 120, 90, 300 and 300 points. No SAM model was
+  installed; spotlight is skipped with an explicit warning, not faked.
+* `privacy=false`, no privacy stage/cache/blur graph in this replay. Vertical
+  framing still crops the source normally. No claim that an arbitrary crop is a
+  privacy guarantee.
+* Five joins cycle zoom, whip, flash, pixelize, zoom. Existing timed bruh/flash/
+  fade and three SFX placements remain owned by the saved plan / FX-2.
+* `job.json`, `contact_sheet.jpg`, `intro.jpg`, `manifest.json` and
+  `live_calls.json` are beside the local movie; the full share kit remains on
+  runner 1. Paid calls: **0 Gemini, 0 other providers**. No key was read.
+
+Movie SHA-256 (remote manifest and local `Get-FileHash` agree):
+`38c66afb533c2bc3232ebee0fe4756023898016f91589f27d5008703158192ce`.
+
+## Verification
+
+All test commands below ran through `tools/remote_run.sh` from this worktree.
+The helper prints the command's remote exit code; no paid/live tests were enabled.
+
+| Command inside runner | Result / exit |
+|---|---|
+| `cd full_app && python -m pytest -q tests/test_wire1.py tests/test_pipeline.py::test_explicit_caption_options_survive_toggle tests/test_int02.py::test_new_planner_render_music_privacy_social_and_narration` | 5 passed, exit 0 |
+| `cd full_app && python -m pytest -q tests/test_wire1.py tests/test_planner_adapter.py tests/test_sam.py` | 32 passed, exit 0; existing unknown `slow` marker warnings |
+| `cd full_app/production_frontend && npm test && npm run build` | 35 tests passed; TypeScript/Vite build passed; exit 0 |
+| `cd full_app && python -m pytest -q tests/test_wire1.py tests/test_pipeline.py::test_full_optional_matrix tests/test_fix4.py::test_selected_privacy_cache_and_source_clocks` | 26 passed, exit 0 |
+| `cd full_app && python -u -m pipeline.wire1_demo` | Replay and FFmpeg contact sheet succeeded, exit 0 |
+
+Development failures were real and corrected: initial test media used FFmpeg's
+unsupported `.35` duration syntax; a fake SAM adapter supplied config twice;
+cards initially exceeded planning budgets; narration initially omitted the outro
+from its duration check; a privacy-cache test still assumed privacy-on defaults.
+Explicit caption options and custom reaction placements are preserved. The first
+replay failed the narration duration check (exit 1); the final replay above passed.
+Final full-suite command: `tools/remote_run.sh 'cd full_app && python -m pytest -q > /tmp/wire1-final-suite.log 2>&1; rc=$?; tail -90 /tmp/wire1-final-suite.log; exit $rc'`.
+Result: **1050 passed, 20 skipped in 622.10 seconds; remote exit 0**.
+The preceding full run had one failure in the old privacy-default fixture; the
+final run includes the explicit opt-in correction. The final targeted run passed
+26 tests (exit 0), and the final UI run passed 35 tests plus build (exit 0).
+The frontend also covers applying Full experience after analysis: changed cards
+or transitions request a fresh plan instead of reusing the old automatic draft;
+authoritative Director plans remain untouched.
+
+## Changed source files
+
+All committed changes are within WIRE-1's allowed paths. Work branch:
+`ext/WIRE-1`. Implementation milestones: `13b3556`, `4c474b1`; no push or merge.
+
+| Directory | Files |
+|---|---|
+| `full_app/pipeline/` | `experience.py`, `extensions.py`, `orchestrator.py`, `rendering.py`, `wire1_demo.py`, `wire1_inspect.py` |
+| `full_app/server/` | `api.py`, `capabilities.py`, `library.py`, `queue.py`, `validation.py` |
+| `full_app/render/` | `engine.py`, `graph.py`, `plan.py` |
+| `full_app/sam/` | `effects.py`, `tracking.py` |
+| `full_app/narration/` | `__init__.py`, `providers.py` |
+| `full_app/reactions/` | `pack.py` |
+| `full_app/production_frontend/src/` | `api.ts`, `api.test.ts`, `features.ts`, `features.test.tsx`, `components/EditSettings.tsx` |
+| `full_app/tests/` | `test_wire1.py`, `test_pipeline.py`, `test_int02.py`, `test_fix4.py`, `live_fix4_smoke.py` |
+| `docs/` | `pipeline.md`, `wiring_audit.md` |
+
+Try it by selecting **Full experience** in production UI Edit settings, or send
+`{"full_experience":true,"privacy":false}` to a job's analyze endpoint and then
+render. Review `warnings`, `render_plan`, `render_evidence` and `narration_track`
+in the job response. Install/cache optional models and configure `REACTION_PACK`
+to replace the documented fallbacks; those resources are not bundled in git.

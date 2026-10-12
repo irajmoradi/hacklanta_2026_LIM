@@ -372,11 +372,16 @@ export class EditorApi {
       };
       return;
     }
+    // Changed automatic cards/joins need a fresh planner budget. Director plans
+    // remain authoritative; ordinary reviewed clips were saved by the review flow.
+    const refreshExperience =
+      (options.cards !== undefined && (Boolean(plan?.intro) !== options.cards || Boolean(plan?.outro) !== options.cards)) ||
+      (options.transitions !== undefined && (options.transitions ? plan?.transition !== "varied" : plan?.transition === "varied"));
     await request(`/api/jobs/${encodeURIComponent(id)}/render`, "POST", {
       preset, mode: options.mode, style: options.style,
       captions: options.captions, reactions: options.reactions, sam: options.sam,
       ...this.extended(options),
-      ...(reviewed && (authoritative || (!this.planningModes.has(id) || this.planningModes.get(id) === options.mode) && (!this.planningStyles.has(id) || this.planningStyles.get(id) === options.style))
+      ...(reviewed && (authoritative || !refreshExperience && (!this.planningModes.has(id) || this.planningModes.get(id) === options.mode) && (!this.planningStyles.has(id) || this.planningStyles.get(id) === options.style))
         ? {
             edit_plan: {
               ...plan,
