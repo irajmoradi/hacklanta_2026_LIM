@@ -40,7 +40,7 @@ class JobQueue:
             if key:
                 self.keys[job_id] = key
             changed = {k for k, v in options.items() if job['options'].get(k) != v}
-            analysis_keys = {'mode', 'provider', 'use_signals', 'splits'}
+            analysis_keys = {'mode', 'provider', 'use_signals', 'window_scoring', 'splits'}
             # Prompt belongs to the stage requested by the caller.
             if analysis_request or target == 'analyze' or (target == 'plan' and not job['clips']):
                 analysis_keys |= {'prompt'}
@@ -106,7 +106,19 @@ class JobQueue:
                     job.update(status={'analyze': 'analyzing', 'plan': 'planning', 'render': 'rendering'}[stage],
                                stage=stage, progress=self.STAGES.index(stage) / 3)
                     self.store.save(job)
-                getattr(self.pipeline, stage)(job, self.keys.get(job_id))
+                def report(snapshot):
+                    # Persist progress without checkpointing partially completed work.
+                    with self.lock:
+                        current = self.store.get(job_id)
+                        if current['status'] != 'cancelled':
+                            for field in ('pipeline_stage', 'timings', 'warnings'):
+                                if field in snapshot:
+                                    current[field] = snapshot[field]
+                            self.store.save(current)
+                if hasattr(self.pipeline, 'run_stage'):
+                    self.pipeline.run_stage(stage, job, self.keys.get(job_id), report)
+                else:
+                    getattr(self.pipeline, stage)(job, self.keys.get(job_id))
                 with self.lock:
                     if self.store.get(job_id)['status'] == 'cancelled':
                         if stage == 'render' and job.get('output'):

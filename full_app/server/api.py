@@ -139,6 +139,8 @@ def create_app(config=None, pipeline=None):
             raise ValueError('Invalid API key')
         if legacy and target == 'render':
             options.setdefault('generate_thumbnails', True)
+        if target == 'render':
+            options['legacy_dimensions'] = legacy and 'preset' not in options
         future = queue.submit(job_id, target, options, key, custom, analysis_request=analysis_request)
         if legacy:
             future.result()

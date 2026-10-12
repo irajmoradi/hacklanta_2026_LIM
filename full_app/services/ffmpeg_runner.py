@@ -264,8 +264,7 @@ class FFmpegRunner:
         to avoid NVENC session limits, but each segment encodes fast on GPU.
         """
         # Explicit opt-in keeps old planner payloads and defaults unchanged.
-        from render.plan import RenderPlan
-        if isinstance(edit_plan, RenderPlan) or edit_plan.get("render_version") == 2:
+        if not isinstance(edit_plan, dict) or edit_plan.get("render_version") == 2:
             from render.engine import Renderer
             return Renderer(self).render(edit_plan)
 

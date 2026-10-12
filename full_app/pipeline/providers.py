@@ -1,0 +1,23 @@
+"""Adapt the local video provider to the retained edit planner contract."""
+import os
+from services.local_vlm import OpenAICompatibleVLMProvider
+from services.gemini_client import GeminiVideoClient
+
+
+class LocalClient(OpenAICompatibleVLMProvider):
+    def __init__(self, api_key=None):
+        super().__init__(os.getenv('LOCAL_VLM_MODEL', 'local'),
+                         os.getenv('LOCAL_VLM_URL', 'http://localhost:8000/v1'),
+                         api_key=os.getenv('LOCAL_VLM_API_KEY'))
+        self.planner_key = api_key
+
+    def upload_video(self, path):
+        return path
+
+    def find_clips(self, path, prompt):
+        return [c.model_dump() for c in self.analyze_video(path, prompt).clips]
+
+    def plan_edit(self, prompt):
+        # EXT-12 can replace this independent planner without changing analysis.
+        with GeminiVideoClient(api_key=self.planner_key or os.getenv('GEMINI_API_KEY')) as planner:
+            return planner.plan_edit(prompt)
