@@ -145,3 +145,14 @@ def test_capture_state_does_not_follow_predictable_temp_symlink(tmp_path):
     watcher.persist()
     assert state.read_text() == '{}'
     assert victim.read_text() == 'untouched'
+
+
+def test_discord_requests_only_submission_intents():
+    discord = pytest.importorskip('discord')
+    from discord_bot.bot import MontageClient
+    async def check():
+        client = MontageClient(Config('test-token', frozenset({1})), Mock())
+        expected = discord.Intents.none()
+        expected.guilds = expected.guild_messages = expected.message_content = True
+        assert client.intents.value == expected.value
+    asyncio.run(check())
