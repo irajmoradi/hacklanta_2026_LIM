@@ -465,7 +465,11 @@ def reaction_frame(image, t, reactions, captures):
         return image
     local = t - reaction["start"]
     cap = captures[reaction["speaker"]]
-    cap.set(cv2.CAP_PROP_POS_MSEC, local * 1000)
+    # Container/audio duration may extend past the last video frame. Hold that
+    # frame through the audio tail instead of seeking beyond the stream.
+    index = min(int(local * cap.get(cv2.CAP_PROP_FPS)),
+                int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) - 1)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, max(0,index))
     ok, bgr = cap.read()
     if not ok:
         raise ValueError(f"Cannot decode reaction: {reaction['speaker']}")

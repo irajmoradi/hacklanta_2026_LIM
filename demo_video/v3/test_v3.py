@@ -185,6 +185,7 @@ def test_synthetic_media_timeline_frames_and_mix(tmp_path):
         for x in reactions:
             image = r.Image.new("RGB", (1920,1080))
             assert r.reaction_frame(image, x["start"]+.3, reactions, caps).getbbox()
+            assert r.reaction_frame(image, x["end"]-.001, reactions, caps).getbbox()
     finally:
         for cap in caps.values():
             cap.release()
