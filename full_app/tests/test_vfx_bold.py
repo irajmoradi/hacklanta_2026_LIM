@@ -57,6 +57,21 @@ def test_bold_catalog_metadata():
         assert e['phase'] in ('build', 'hit', 'after')
 
 
+def test_freeze_precedes_hit_compositing():
+    inputs = [dict(id=str(i), start=i*10, end=i*10+8, score=i, label='highlight',
+                   signals=dict(action_time=i*10+4, kind='kill')) for i in range(16)]
+    saw_freeze = False
+    for seed in range(10):
+        plan = plan_edit(inputs, seed=seed, target_length=80, fill_target=True)
+        for clip in plan.clips:
+            effects = [e for e in plan.effects if e.clip_id == clip.id and e.name != 'slow_motion']
+            if any(e.name == 'freeze' for e in effects):
+                saw_freeze = True
+                assert effects[0].name == 'freeze'
+                assert any(e.name.startswith('hitmarker_') for e in effects[1:])
+    assert saw_freeze
+
+
 @pytest.mark.parametrize('name', sorted(BOLD))
 def test_effect_changes_visible_pixels_and_is_gated(name):
     # Static original footage isolates visual change, including freeze annotations.

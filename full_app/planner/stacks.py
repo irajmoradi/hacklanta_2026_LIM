@@ -102,7 +102,15 @@ def decorate_stacks(plan, sources):
                     start = min(c.start+c.duration-duration, max(c.start, anchor+offset))
                 common = dict(clip_id=c.id, name=chosen['name'], start=start, duration=duration)
                 if group == 'vfx':
-                    plan.effects.append(Effect(**common))
+                    effect = Effect(**common)
+                    if chosen['name'] == 'freeze':
+                        # Freeze the footage, not a pre-hit composite: downstream
+                        # hitmarkers/flashes must still animate over the held frame.
+                        index = next((i for i,e in enumerate(plan.effects)
+                                      if e.clip_id == c.id and e.name != 'slow_motion'), len(plan.effects))
+                        plan.effects.insert(index, effect)
+                    else:
+                        plan.effects.append(effect)
                 else:
                     gain = (.68 if plan.mode == 'mean' else .48) + rng.uniform(-.1,.1)*plan.chaos
                     plan.sfx.append(Sound(**common, gain=gain))
