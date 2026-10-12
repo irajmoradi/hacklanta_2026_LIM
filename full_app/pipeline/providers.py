@@ -18,6 +18,6 @@ class LocalClient(OpenAICompatibleVLMProvider):
         return [c.model_dump() for c in self.analyze_video(path, prompt).clips]
 
     def plan_edit(self, prompt):
-        # EXT-12 can replace this independent planner without changing analysis.
-        with GeminiVideoClient(api_key=self.planner_key or os.getenv('GEMINI_API_KEY')) as planner:
+        # Local analysis uses Gemini planning unless the local planner option is enabled.
+        with GeminiVideoClient(api_key=self.planner_key) as planner:
             return planner.plan_edit(prompt)

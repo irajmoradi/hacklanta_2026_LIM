@@ -30,7 +30,7 @@ def safe_text(text):
     return text.replace("\\", "＼").replace("{", "(").replace("}", ")").replace("\n", " ").replace("\r", " ")
 
 
-def write_ass(path, words, size, preset, options, duration, title=None, title_duration=3):
+def write_ass(path, words, size, preset, options, duration, title=None, title_duration=3, texts=()):
     width, height = size
     margin = round(height * (0.20 if preset == "vertical" else 0.10))
     font = round(min(width, height) * 0.065)
@@ -56,6 +56,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             text = re.sub(r"\w+", lambda m: "*" * len(m[0]) if m[0].casefold() in blocked else m[0], text)
         pop = r"{\fscx85\fscy85\t(0,80,\fscx100\fscy100)}"
         lines.append(f"Dialogue: 0,{ass_time(word.start)},{ass_time(min(word.end, duration))},Word,,0,0,0,,{pop}{safe_text(text)}\n")
+    for event in texts:
+        alignment = r'{\an5}' if event.position == 'center' else ''
+        lines.append(f"Dialogue: 1,{ass_time(event.start)},{ass_time(min(duration, event.start+event.duration))},Word,,0,0,0,,{alignment}{safe_text(event.content)}\n")
     if title:
         lines.append(f"Dialogue: 1,0:00:00.00,{ass_time(min(title_duration, duration))},Title,,0,0,0,,{safe_text(title)}\n")
     path.write_text("".join(lines), encoding="utf-8")

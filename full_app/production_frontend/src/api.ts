@@ -38,46 +38,64 @@ export interface Job {
   warnings?: string[];
   plan?: legacy.EditPlan;
   share_kit?: ShareKit;
+  planningStyle?: string;
 }
 export type ApiMode = "jobs" | "mock" | "legacy";
-type Wire = Record<string, any>;
+type Wire = Record<string, unknown>;
+const object = (value: unknown): Wire => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Wire : {};
+const text = (value: unknown): string | undefined => typeof value === "string" ? value : undefined;
+const list = (value: unknown): unknown[] => Array.isArray(value) ? value : [];
+const number = (value: unknown): number => Number.isFinite(Number(value)) ? Number(value) : 0;
+function editPlan(value: unknown): legacy.EditPlan | undefined {
+  const plan = object(value);
+  if (!Array.isArray(plan.segments)) return undefined;
+  return {...plan, segments: plan.segments.map(value => {
+    const segment = object(value);
+    if (typeof segment.source_start !== "number" || typeof segment.source_end !== "number")
+      throw new Error("Invalid plan segment timestamps");
+    return {...segment, source_start: segment.source_start, source_end: segment.source_end};
+  })};
+}
 const seconds = (v: unknown): number =>
   typeof v === "string" && v.includes(":")
     ? v.split(":").reduce((n, p) => n * 60 + Number(p), 0)
     : Number(v ?? 0);
-export function normalizeClip(c: Wire, i: number): ReviewClip {
+export function normalizeClip(value: unknown, i: number): ReviewClip {
+  const c = object(value);
   return {
     ...c,
     id: String(c.id ?? c.clip_id ?? i),
     start: seconds(c.start_seconds ?? c.start),
     end: seconds(c.end_seconds ?? c.end),
-    caption: c.caption ?? c.description ?? "Untitled moment",
-    score: Number(c.score ?? 0),
-    reaction: c.reaction_label ?? c.reaction ?? "None",
+    caption: text(c.caption) ?? text(c.description) ?? "Untitled moment",
+    score: number(c.score) * (c.score_scale === "percent" ? 1 : 100),
+    reaction: text(c.suggested_reaction_label) ?? text(c.reaction_label) ?? text(c.reaction) ?? text(c.label) ?? "None",
     keep: c.keep !== false,
-    thumbnail: c.thumbnail_url ?? c.thumbnail,
+    thumbnail: text(c.thumbnail_url) ?? text(c.thumbnail),
     why: signalChips(c),
   };
 }
-export function normalizeJob(raw: Wire): Job {
-  const j = raw.job ?? raw;
+export function normalizeJob(value: unknown): Job {
+  const raw = object(value);
+  const j = raw.job ? object(raw.job) : raw;
   return {
     id: String(j.id ?? j.job_id),
-    status: j.status ?? "uploaded",
-    duration: Number(j.duration ?? j.meta?.duration ?? 0),
+    status: text(j.status) ?? "uploaded",
+    duration: number(j.duration ?? object(j.meta).duration),
     progress:
       typeof j.progress === "number"
         ? Math.max(0, Math.min(100, j.progress * 100))
         : undefined,
-    clips: (j.clips ?? []).map(normalizeClip),
-    candidates: (j.candidates ?? []).map(normalizeClip),
-    interest: j.interest_curve ?? j.interest ?? [],
-    source_url: j.source_url,
-    download_url: j.download_url,
-    error: typeof j.error === "string" ? j.error : j.error?.message,
-    warnings: j.warnings ?? [],
-    plan: j.plan ?? j.edit_plan ?? undefined,
+    clips: list(j.clips).map(normalizeClip),
+    candidates: list(j.candidates).map(normalizeClip),
+    interest: list(j.interest_curve ?? j.interest).map(value => ({time: number(object(value).time), score: number(object(value).score)})),
+    source_url: text(j.source_url),
+    download_url: text(j.download_url),
+    error: typeof j.error === "string" ? j.error : text(object(j.error).message),
+    warnings: list(j.warnings).filter((v): v is string => typeof v === "string"),
+    plan: editPlan(j.plan ?? j.edit_plan),
     share_kit: normalizeKit(j.share_kit),
+    planningStyle: text(object(j.planning_settings).style) ?? text(object(j.options).style),
   };
 }
 async function request(
@@ -96,12 +114,12 @@ async function request(
             body: JSON.stringify(body),
           }),
   });
-  const data = await res.json().catch(() => ({}));
+  const data = object(await res.json().catch(() => ({})));
   if (!res.ok)
     throw new Error(
-      data.error?.message ??
-        data.error ??
-        data.message ??
+      text(object(data.error).message) ??
+        text(data.error) ??
+        text(data.message) ??
         `Request failed (${res.status})`,
     );
   return data;
@@ -139,13 +157,14 @@ export const demoClips: ReviewClip[] = [
 ];
 export class EditorApi {
   private cached?: Job;
+  private planningStyles = new Map<string, string>();
   capabilities: Capabilities = baseCapabilities;
   constructor(public mode: ApiMode) {}
   async discover(): Promise<Capabilities> {
     if (this.mode === "mock") return (this.capabilities = demoCapabilities);
     if (this.mode === "legacy") return (this.capabilities = { ...baseCapabilities, options: [] });
     const info = await request("/api/info");
-    const c = info.frontend_capabilities ?? {};
+    const c = object(info.frontend_capabilities);
     return (this.capabilities = {
       options: [...baseCapabilities.options, ...(Array.isArray(c.options) ? c.options.filter((s: unknown) => typeof s === "string") : [])],
       team_upload: c.team_upload === true, url_import: c.url_import === true,
@@ -207,7 +226,9 @@ export class EditorApi {
     if (this.mode === "mock") return structuredClone(this.cached!);
     if (this.mode === "legacy")
       return { ...this.cached!, ...(await legacy.fetchStatus(id)), id };
-    return normalizeJob(await request(`/api/jobs/${encodeURIComponent(id)}`));
+    const job = normalizeJob(await request(`/api/jobs/${encodeURIComponent(id)}`));
+    if (job.planningStyle) this.planningStyles.set(id, job.planningStyle);
+    return job;
   }
   async analyze(id: string, options: Options): Promise<void> {
     if (this.mode === "mock") {
@@ -238,6 +259,7 @@ export class EditorApi {
       };
       return;
     }
+    this.planningStyles.set(id, options.style);
     const { game, profile, mode, style, provider, use_signals, captions, reactions, sam } = options;
     await request(`/api/jobs/${encodeURIComponent(id)}/analyze`, "POST", {
       mode, style, provider, use_signals, captions, reactions, sam,
@@ -307,10 +329,10 @@ export class EditorApi {
       return;
     }
     await request(`/api/jobs/${encodeURIComponent(id)}/render`, "POST", {
-      preset,
+      preset, style: options.style,
       captions: options.captions, reactions: options.reactions, sam: options.sam,
       ...this.extended(options),
-      ...(reviewed
+      ...(reviewed && this.planningStyles.get(id) === options.style
         ? {
             edit_plan: {
               ...plan,
@@ -324,7 +346,7 @@ export class EditorApi {
                     ...original,
                     source_start: c.start,
                     source_end: c.end,
-                    caption: c.caption,
+                    title: c.caption,
                   };
                 }),
             },

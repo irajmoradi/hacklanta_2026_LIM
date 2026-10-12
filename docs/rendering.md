@@ -1,10 +1,10 @@
 # Render engine v2 (EXT-04)
 
-V2 is opt-in. Existing edit plans still use the original renderer. Submit a plan
-with `render_version: 2` through the existing render endpoint's `edit_plan`, or
-call `FFmpegRunner.render(RenderPlan(...))` directly. No Gemini call is needed.
-The planner can consume `RenderPlan.model_json_schema()`; its prompt and frontend
-are outside this task's allowed paths, so automatic planner selection is not changed.
+The job pipeline uses v2 composition by default and adapts legacy plans as needed.
+Submit `render_version: 2` through the render endpoint's `edit_plan`, or call
+`FFmpegRunner.render(RenderPlan(...))` directly. No Gemini call is needed for an
+explicit plan. The optional local planner uses `planner.adapter.to_render_plan`;
+do not pass a planner `model_dump()` straight to the renderer.
 
 From `full_app/`, a minimal local render is:
 
@@ -112,9 +112,9 @@ precedence. No torch/Whisper dependency is added to the core requirements.
 Transcription hears the clip audio mix, not an isolated voice stem.
 
 `video_effects` uses the existing meme overlay/color/effect registry.
-V2 deliberately rejects speed effects, chromatic_aberration's legacy complex
-graph, and the unimplemented fade_out effect, rather than silently corrupting
-timing. They remain available via the legacy renderer as before. SFX retain
+Use segment `speed` for playback rate. `timed_effects` supports localized
+chromatic aberration and fade-out; these remain excluded from the older
+whole-segment `video_effects` list. The legacy renderer also supports them. SFX retain
 the existing `sfx_key` and `offset_in_segment` format and missing-file fallback.
 Titles coexist with meme overlays. Intro/outro cards are black with styled text
 and silent audio.
@@ -169,3 +169,28 @@ agreement. Additional tests verify dense external tracks, mocked local Whisper,
 NVENC retry behavior, and measurable music attenuation under a synthetic voice
 signal. CPU encoding is forced for reproducible CI; hardware NVENC and real
 Whisper inference require an equipped host and are separate smoke checks.
+
+## Planner adapter and placement clocks
+
+Adapter version 1 consumes planner `version: 2` and emits `render_version: 2`.
+Empty/unknown planner versions are rejected. Source cuts remain source seconds;
+`speed` changes their output duration. `texts`, `timed_effects`, `reactions`, SFX
+and words are clip-local **output** seconds. The adapter subtracts the owning
+clip start from absolute placements and preserves duration, SFX gain, reaction
+position/ducking and text position. `slow_motion` annotations accompanying
+speed=.5 are applied once. Intro/outro cards and music on explicit renderer
+plans survive the pipeline adapter. Planner music intent does not identify an
+asset and is not silently converted to a filesystem path.
+
+Reactions are applied by the pipeline after the segment render. Landscape uses
+bottom-right, vertical top-left, and square top-right; all default layouts leave
+caption space. Unknown presets raise ValueError at the overlay boundary. Native
+planner placements override corner/timing and empty reaction slots stay empty.
+Direct Renderer callers must supply a segment processor to apply reaction slots.
+
+Review text maps to `title`; supplied transcript words remain separate. Explicit
+`captions:false` at the job boundary disables review titles and transcript/text
+placements. Missing local transcription remains a warning, never a download.
+Legacy preparation retimes words/tracks/FX using measured output duration and
+preserves titles. Legacy fade-out now uses actual speed-adjusted duration;
+chromatic aberration retains audio effects and normalized output geometry.

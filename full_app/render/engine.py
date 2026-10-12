@@ -84,6 +84,8 @@ class Renderer:
         with tempfile.TemporaryDirectory(prefix="render_v2_", dir=self.workspace) as temporary:
             directory = Path(temporary)
             paths, timeline = [], []
+            segment_captions = {}
+            self.caption_events = []
             if plan.intro:
                 path, duration = self.card(plan.intro, "intro", plan, directory)
                 paths.append(path)
@@ -94,12 +96,21 @@ class Renderer:
                 if segment.sam and segment.sam.subject_track:
                     points = smooth_track(segment.sam.subject_track)
                 elif plan.reframe == "motion":
-                    points = motion_track(self.source, segment.source_start, duration)
+                    points = motion_track(self.source, segment.source_start, duration * segment.speed)
+                    for point in points:
+                        point.time /= segment.speed
                 path = directory / f"clip_{index}.mp4"
                 args = ["-ss", str(segment.source_start), "-i", str(self.source)]
                 if not has_audio:
                     args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
                 graph = reframe_graph(plan.size, plan.reframe, points)
+                if segment.speed != 1:
+                    graph = graph.replace('[0:v]', '[retimed]')
+                    graph = f'[0:v]trim=duration={duration*segment.speed},setpts=(PTS-STARTPTS)/{segment.speed}[retimed];' + graph
+                if segment.timed_effects:
+                    from .placements import effects_graph
+                    graph = graph.replace('[v]', '[placement_input]')
+                    graph += effects_graph(segment.timed_effects, plan.size, plan.fps)
                 vf, _ = build_vf_chain(segment.video_effects, *plan.size, plan.fps)
                 if segment.fx:
                     from fx import Request, Timing, compose
@@ -108,13 +119,15 @@ class Renderer:
                     vf = ','.join(p for p in (vf, extra) if p)
                 graph += f";[v]{vf + ',' if vf else ''}fps={plan.fps},setpts=PTS-STARTPTS[outv]"
                 audio_input = "0:a:0" if has_audio else "1:a:0"
-                graph += f";[{audio_input}]asetpts=PTS-STARTPTS,aresample=48000,apad[outa]"
+                from .placements import tempo
+                graph += f";[{audio_input}]atrim=duration={duration*segment.speed},asetpts=PTS-STARTPTS,{tempo(segment.speed)}aresample=48000,apad[outa]"
                 words = segment.words if plan.captions.enabled else []
-                baked_captions = self.runner.perf and (words or segment.title) and not (
-                    plan.captions.enabled and plan.captions.transcribe and not words and has_audio)
+                texts = segment.texts if plan.captions.enabled else []
+                baked_captions = self.runner.perf and (words or segment.title or texts) and not (
+                    plan.captions.enabled and plan.captions.transcribe and not words and not texts and has_audio)
                 if baked_captions:
                     ass = directory / f'caption_{index}.ass'
-                    write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title)
+                    write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title, texts=texts)
                     graph = graph.replace('[outv]', '[uncaptioned]')
                     graph += f';[uncaptioned]ass={ass.name}[outv]'
                 if self.runner.perf and segment.sound_effects:
@@ -126,8 +139,9 @@ class Renderer:
                         if not file or not Path(file).is_file():
                             continue
                         args += ['-i', str(self.runner.cache.audio(file))]
-                        graph += (f';[{next_input}:a]adelay={int(s.offset_in_segment*1000)}:all=1,'
-                                  f'volume=0.7[sfx{next_input}]')
+                        trim = f'atrim=duration={s.duration},' if s.duration else ''
+                        graph += (f';[{next_input}:a]{trim}adelay={int(s.offset_in_segment*1000)}:all=1,'
+                                  f'volume={s.gain}[sfx{next_input}]')
                         labels.append(f'[sfx{next_input}]')
                         next_input += 1
                     if len(labels) > 1:
@@ -137,15 +151,21 @@ class Renderer:
                          "-t", str(duration)]
                 self.encode(args, path, directory)
                 words = segment.words if plan.captions.enabled else []
-                if plan.captions.enabled and plan.captions.transcribe and not words and has_audio:
+                if plan.captions.enabled and plan.captions.transcribe and not words and not texts and has_audio:
                     words = transcribe(path, plan.captions.model)
-                if (words or segment.title) and not baked_captions:
+                if (words or segment.title or texts) and not baked_captions:
                     ass = directory / f"caption_{index}.ass"
-                    write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title)
+                    write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title, texts=texts)
                     captioned = directory / f"captioned_{index}.mp4"
                     self.encode(["-i", str(path), "-vf", f"ass={ass.name}", "-t", str(duration)],
                                 captioned, directory)
                     path = captioned
+                segment_captions[index] = [dict(start=w.start, end=min(w.end, duration), text=w.text)
+                                           for w in words if w.start < duration]
+                segment_captions[index] += [dict(start=t.start, end=min(t.start+t.duration, duration), text=t.content)
+                                            for t in texts if t.start < duration]
+                if segment.title:
+                    segment_captions[index].append(dict(start=0, end=min(3, duration), text=segment.title))
                 # Reuse the existing meme SFX registry and mixer in this isolated workspace.
                 if segment.sound_effects and not self.runner.perf:
                     from services.ffmpeg_runner import FFmpegRunner
@@ -161,7 +181,12 @@ class Renderer:
                 results = render_all([lambda item=item: render_segment(item) for item in work], best(threads=2))
             else:
                 results = [render_segment(item) for item in work]
-            for path, duration in results:
+            cursor = sum(timeline) - overlap * len(timeline)
+            for index, (path, duration) in enumerate(results):
+                for event in segment_captions[index]:
+                    self.caption_events.append(dict(start=cursor+event['start'],
+                                                    end=cursor+min(event['end'], duration), text=event['text']))
+                cursor += duration - overlap
                 paths.append(path)
                 timeline.append(duration)
             if plan.outro:

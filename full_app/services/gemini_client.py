@@ -33,9 +33,8 @@ class GeminiProvider(VideoUnderstandingProvider):
                  cache_ttl_seconds=3600, cache_size=32, inline_limit_bytes=20 * 1024 * 1024):
         super().__init__(config)
         self.model = model or os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
-        self.vertexai = (os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() == "true"
-                         if vertexai is None else vertexai)
-        key = api_key or os.getenv("GOOGLE_API_KEY" if self.vertexai else "GEMINI_API_KEY")
+        from services.provider_config import gemini_credentials
+        key, self.vertexai = gemini_credentials(api_key, vertexai)
         if client is None and not key:
             raise ValueError("Set GOOGLE_API_KEY for Vertex express or GEMINI_API_KEY for AI Studio")
         if media_resolution not in {"low", "medium", "high"}:

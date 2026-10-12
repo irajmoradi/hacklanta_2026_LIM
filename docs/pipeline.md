@@ -1,9 +1,8 @@
-# Integrated Extension pipeline (INT-02)
+# Integrated Extension pipeline
 
 The durable Flask queue calls `pipeline.Pipeline`. All options below are accepted
 by the analyze, plan and render JSON endpoints described in `docs/api.md`.
 This document supersedes that document's old optional-module import table.
-`docs/api.md` and `demo/run_demo.sh` are outside INT-02's allowed paths.
 
 ```mermaid
 flowchart TD
@@ -33,10 +32,10 @@ Flags must be JSON booleans. Unknown fields are rejected.
 | `ingest` | false | Job-owned normalized video, low-resolution analysis proxy and overlapping 900-second chunks; timestamps offset back to source |
 | `chat` | absent | With ingest: numerical replay bins, described below |
 | `vjepa` | false | Contributes only when `VJEPA_HEAD` names an existing trained head; missing extras/head contribute no scores |
-| `planner` | false | EXT-12 deterministic narrative planning; unavailable, incompatible or empty plans fall back to the existing Gemini planner |
-| `fx` | false | EXT-18 catalog selects timed zoom punches in deterministic plans; renderer composes validated timed registry requests |
+| `planner` | false | Deterministic narrative planning; unavailable, incompatible or empty plans fall back to the existing Gemini planner |
+| `fx` | false | The effect catalog selects timed zoom punches in deterministic plans; renderer composes validated timed registry requests |
 | `privacy` | **true** | Detect and blur player-name regions on source media before edits, reframing or team composition |
-| `privacy_options` | defaults | EXT-20 payload: game, OCR backend, own-name preservation, webcam, regions and manual timed boxes |
+| `privacy_options` | defaults | Privacy payload: game, OCR backend, own-name preservation, webcam, regions and manual timed boxes |
 | `multipov` | false | Align repeated multipart video uploads by audio, rank viewpoints using local evidence, compose selected primary-timeline intervals |
 | `team_mode` | best | best, split or pip; ambiguous synchronization warns and retains primary POV |
 | `music` | false | Generate an offline energetic/chill bed when the plan has no user-supplied music; duck under gameplay audio |
@@ -70,21 +69,45 @@ scored. A non-alive or unknown viewpoint veto suppresses overlapping candidates
 from both local and whole-video analysis. Alive neutral windows are omitted.
 Ranking uses 0.35 * local score + 0.65 * hype / 10 for verified windows, followed by
 nonmaximum suppression at half the shorter interval. Unscored local scores are
-clamped to [0, 1]. Whole-video results retain their score or default to 0.5.
+normalized monotonically as `0.5 + atan(raw_score) / pi` to (0, 1); provenance is recorded as `atan_signal`. The UI converts unit scores to percent. Whole-video results retain their score or default to 0.5.
 
 Profiles contribute both the whole-video prompt and the provider's window prompt.
 Ingest changes analysis media only; rendering retains original-quality media.
 Chunk results are offset before fusion, and cached chunks are never deleted as
 legacy split scratch files. `splits` is superseded when ingest supplies chunks.
 
-EXT-12's narrative plan and the renderer's segment plan are distinct schemas.
-The adapter preserves cuts, speed, effect choices, sound offsets, titles and the
-native plan as `planner_plan` metadata. Its hook/climax repetition is intentional.
-The adapter applies EXT-12 slow-motion annotations only once (the native plan
-also supplies speed=0.5). Legacy speed changes are prepared before v2 reframing and their actual encoded
-durations reset the segment clock. Timed FX currently accept duration-preserving
-registry effects; time-changing registry requests fail validation rather than
-silently desynchronizing audio. SAM freezes can extend the planned duration.
+The planner v2 output and renderer v2 input meet at
+`planner.adapter.to_render_plan` (adapter version 1). Shared style/aspect names
+live in `render.contracts`. The adapter validates the native version, rejects
+empty plans, and subtracts each clip's output start from all placements. Speed
+is applied once by the renderer; captions, reactions, effects, transitions and
+SFX already use output seconds and are not divided by speed again. Native plans
+remain available in `planner_plan`. Music mood/energy are intent, not an asset;
+licensed/generated music must still be supplied separately.
+
+Legacy preparation retains titles and retimes words, subject tracks and timed FX
+by the measured encoded/source duration ratio, including unchanged segments in
+a mixed plan. Native v2 plans retain top-level music, cards, fps and transitions.
+SAM spotlight freezes can extend the planned duration.
+
+React sends current caption/reaction/SAM flags and style at export. Editable
+clip text is a title (`title`), not a transcript. Planning settings are persisted
+separately; a changed/unknown style submits no stale explicit plan, allowing the
+queue to replan from saved reviewed clips. Provider credentials must be configured
+on the backend for the React UI; it has no key-entry control.
+
+`services.provider_config` owns provider IDs and secret-free configuration
+reporting. `gemini` uses GEMINI_API_KEY by default; set
+GOOGLE_GENAI_USE_VERTEXAI=true and GOOGLE_API_KEY for Vertex express. An explicit
+request key overrides the environment key in the selected mode. `local` and
+`local_vlm` are hybrid: local analysis with Gemini planning unless `planner=true`.
+Unknown provider IDs raise without constructing a paid client.
+
+Scope limitation: `server/api.py` still needs to use `configuration()` for
+`/api/info`, and `server/validation.py` needs `validate_provider()` for synchronous
+HTTP rejection. Those files belong to the server worker. Pipeline rejection is
+already enforced; the old info endpoint can still report a GOOGLE-only setup as
+unconfigured. The HTTP plan-admission/security work is likewise separate.
 
 `perf:false` or `LIM_PERF=0` selects the comparison renderer. Source-time trimming
 is now the perf default, matching the corrected legacy renderer. Explicit

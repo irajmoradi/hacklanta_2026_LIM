@@ -58,7 +58,7 @@ describe("jobs API", () => {
     });
     await api.render("abc", "vertical", options);
     expect(JSON.parse(fetcher.mock.calls[3][1].body)).toEqual({
-      preset: "vertical",
+      preset: "vertical", style: "clean_edit",
       captions: false, reactions: false, sam: false,
     });
     await api.render(
@@ -71,11 +71,11 @@ describe("jobs API", () => {
     expect(
       JSON.parse(fetcher.mock.calls[4][1].body).edit_plan.segments,
     ).toEqual([
-      { source_start: 42, source_end: 55, caption: demoClips[2].caption },
+      { source_start: 42, source_end: 55, title: demoClips[2].caption },
       {
         source_start: 24,
         source_end: 31,
-        caption: demoClips[1].caption,
+        title: demoClips[1].caption,
         speed: 0.5,
       },
     ]);
@@ -192,4 +192,30 @@ it("legacy adapter plans and renders only the reviewed ranges in reviewed order"
     { source_start: 25, source_end: 31 },
   ]);
   expect((await api.get("old")).download_url).toBe("/api/download/old");
+});
+
+it("replans changed styles and sends current render flags", async () => {
+  const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({})});
+  vi.stubGlobal("fetch", fetcher);
+  const api = new EditorApi("jobs");
+  await api.analyze("abc", options);
+  await api.render("abc", "square", {...options, style: "meme_edit", captions: true, reactions: true, sam: true}, demoClips,
+    {segments: [{source_start: 8, source_end: 17, video_effects: ["vignette"]}]});
+  const body = JSON.parse(fetcher.mock.calls[1][1].body);
+  expect(body).toMatchObject({style: "meme_edit", captions: true, reactions: true, sam: true});
+  expect(body.edit_plan).toBeUndefined();
+});
+it("preserves explicit v2 settings and maps editable text to titles", async () => {
+  const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({})});
+  vi.stubGlobal("fetch", fetcher);
+  const api = new EditorApi("jobs");
+  await api.analyze("abc", options);
+  await api.render("abc", "square", {...options, captions: true}, [demoClips[0]],
+    {render_version: 2, fps: 24, transition: "flash", music: {path: "licensed.wav"}, segments: []});
+  expect(JSON.parse(fetcher.mock.calls[1][1].body).edit_plan).toMatchObject({render_version: 2, fps: 24,
+    transition: "flash", music: {path: "licensed.wav"}, segments: [{title: demoClips[0].caption}]});
+});
+it("normalizes unit scores and actual fusion reaction fields", () => {
+  expect(normalizeJob({id: "a", clips: [{score: .8, suggested_reaction_label: "clutch"}]}).clips[0])
+    .toMatchObject({score: 80, reaction: "clutch"});
 });

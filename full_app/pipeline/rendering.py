@@ -23,7 +23,20 @@ def prepare_legacy(pipeline, job, plan, scratch):
             _, path = runner._render_one_segment(index, segment)
             duration = probe_video(path)['duration']
             paths.append(path)
-            segments.append(dict(source_start=cursor, source_end=cursor + duration))
+            preserved = {k: copy.deepcopy(v) for k, v in segment.items()
+                         if k in {'title', 'words', 'sam', 'fx'}}
+            if 'caption' in segment:
+                preserved['title'] = segment['caption']
+            ratio = duration / (segment['source_end'] - segment['source_start'])
+            for word in preserved.get('words', []):
+                word['start'] *= ratio
+                word['end'] *= ratio
+            for point in (preserved.get('sam') or {}).get('subject_track', []):
+                point['time'] *= ratio
+            for effect in preserved.get('fx', []):
+                effect['start'] *= ratio
+                effect['end'] *= ratio
+            segments.append(dict(source_start=cursor, source_end=cursor + duration, **preserved))
             cursor += duration
         source = runner.concatenate(paths)
         # Container duration may differ slightly from the summed segment clocks.
@@ -71,6 +84,12 @@ def _render_job(pipeline, job, key):
         return
     from render.plan import RenderPlan
     plan = copy.deepcopy(job['edit_plan'])
+    if 'clips' in plan and plan.get('version') == 2:
+        from planner.adapter import to_render_plan
+        plan = to_render_plan(plan)
+    for segment in plan['segments']:
+        if 'caption' in segment:
+            segment['title'] = segment.pop('caption')
     original_segments = copy.deepcopy(plan['segments'])
     prepare = False
     if plan.get('render_version') != 2:
@@ -78,7 +97,7 @@ def _render_job(pipeline, job, key):
         if any(s.get('speed', 1) != 1 or unsupported.intersection(s.get('video_effects', [])) or
                s.get('transition_in', 'cut') != 'cut' for s in plan['segments']):
             prepare = True
-        plan = dict(render_version=2, resolution=plan.get('resolution', 1080), segments=[{k: v for k, v in s.items()
+        plan = dict(render_version=2, **{k: v for k, v in plan.items() if k in RenderPlan.model_fields and k not in ('render_version', 'segments')}, segments=[{k: v for k, v in s.items()
                     if k in {'source_start', 'source_end', 'video_effects', 'sound_effects', 'words', 'title', 'sam', 'fx'}}
                     for s in plan['segments']])
     plan['preset'] = options.get('preset', plan.get('preset', 'landscape'))
@@ -93,10 +112,9 @@ def _render_job(pipeline, job, key):
         if prepare:
             source, prepared = prepare_legacy(pipeline, job, job['edit_plan'], scratch)
             plan['segments'] = prepared['segments']
-            for segment, original in zip(plan['segments'], original_segments):
-                for name in ('title', 'fx'):
-                    if name in original:
-                        segment[name] = original[name]
+        if options.get('captions') is False:
+            for segment in plan['segments']:
+                segment.pop('title', None)
         if not options.get('fx') or not pipeline.hook('fx', 'compose', job):
             for segment in plan['segments']:
                 segment.pop('fx', None)
@@ -104,7 +122,7 @@ def _render_job(pipeline, job, key):
             generate = pipeline.hook('music', 'pick_or_generate', job)
             if generate:
                 with pipeline.stage(job, 'music'):
-                    length = sum(s['source_end']-s['source_start'] for s in plan['segments'])
+                    length = sum((s['source_end']-s['source_start']) / s.get('speed', 1) for s in plan['segments'])
                     bed = generate('chill' if options.get('style') in ('clean_edit', 'cinematic') else 'energetic',
                                    min(600, length), min(599, length*.8), output_dir=scratch)
                     plan['music'] = dict(path=str(bed.path), beats=bed.beats, duck=True)
@@ -114,7 +132,7 @@ def _render_job(pipeline, job, key):
                 for segment in plan['segments']:
                     start, end = segment['source_start'], segment['source_end']
                     points = track(source, start, end)
-                    segment['sam'] = {'subject_track': [dict(time=max(0, t-start), x=x, y=y)
+                    segment['sam'] = {'subject_track': [dict(time=max(0, t-start)/segment.get('speed', 1), x=x, y=y)
                                                        for t, x, y, *_ in points][::max(1, len(points)//499 + 1)]}
         validated = RenderPlan.model_validate(plan)
         pack = os.getenv('REACTION_PACK')
@@ -141,10 +159,20 @@ def _render_job(pipeline, job, key):
                      key=lambda i: clip_metadata[i].get('score', .5), reverse=True)[:3]
 
         def finish_segment(path, index, segment, duration, directory):
-            if selector and apply:
+            if selector and apply and 'reactions' not in original_segments[index]:
                 with pipeline.stage(job, f'reactions_{index}'):
                     path = apply(path, clip_metadata[index], selector, validated.preset,
                                  enabled=True, mode=options.get('mode', 'nice'))
+            if selector and segment.reactions:
+                from reactions.render import render_overlay
+                for event in segment.reactions:
+                    reaction = selector.select(event.label, clip_metadata[index].get('score', .5),
+                                               options.get('mode', 'nice'), event.label)
+                    if reaction:
+                        with pipeline.stage(job, f'reactions_{index}'):
+                            path = render_overlay(path, reaction, validated.preset, peak_time=event.start,
+                                                  max_duration=event.duration, position=event.position,
+                                                  duck_gain=.25 if event.duck_game_audio else 1)
             if spotlight and index in top:
                 with pipeline.stage(job, f'spotlight_{index}'):
                     output = directory / f'spotlight_{index}.mp4'
@@ -156,7 +184,9 @@ def _render_job(pipeline, job, key):
         runner = FFmpegRunner(scratch, source, *validated.size, validated.fps, perf=options.get('perf'))
         with pipeline.stage(job, 'render_v2'), warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter('always', RuntimeWarning)
-            output = renderer(runner, segment_processor=finish_segment if selector or spotlight else None).render(validated)
+            engine = renderer(runner, segment_processor=finish_segment if selector or spotlight else None)
+            output = engine.render(validated)
+            job['subtitle_events'] = getattr(engine, 'caption_events', [])
         if any('Automatic captions unavailable' in str(w.message) for w in caught):
             pipeline.warn(job, 'Automatic captions unavailable; install/cache faster-whisper or supply segment words')
         destination = Path(job['dir']) / 'output.mp4'

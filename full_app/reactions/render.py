@@ -8,10 +8,12 @@ from pathlib import Path
 from fx.media import probe
 from .pack import Reaction
 
-PRESETS = {'landscape': 'bottom-right', 'vertical': 'top-left'}
+PRESETS = {'landscape': 'bottom-right', 'vertical': 'top-left', 'square': 'top-right'}
 
 
 def layout(width: int, height: int, preset: str) -> tuple[int, int, int]:
+    if preset not in PRESETS:
+        raise ValueError(f'Unknown reaction preset: {preset}')
     corner = PRESETS[preset]
     size = max(16, int(min(width, height) * 0.30) // 2 * 2)
     margin = max(8, int(min(width, height) * 0.04))
@@ -20,11 +22,14 @@ def layout(width: int, height: int, preset: str) -> tuple[int, int, int]:
 
 
 def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'landscape', *, peak_time: float | None = None,
-                   output_path: str | Path | None = None, show_speaker: bool = False, duck_gain: float = 0.25) -> Path:
+                   output_path: str | Path | None = None, show_speaker: bool = False, duck_gain: float = 0.25,
+                   max_duration: float | None = None, position: str | None = None) -> Path:
     """Start a reaction at the peak, clamped to the available clip duration.
 
     Returns a new MP4 Path. Never modifies the source. Requires ffmpeg/ffprobe.
     """
+    if preset not in PRESETS:
+        raise ValueError(f'Unknown reaction preset: {preset}')
     base_clip = Path(base_clip).resolve()
     output = Path(output_path).resolve() if output_path else base_clip.with_name(
         f'{base_clip.stem}_reaction_{uuid.uuid4().hex[:10]}.mp4')
@@ -38,6 +43,10 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
     video = next(s for s in info['streams'] if s['codec_type'] == 'video')
     duration = float(info['format']['duration'])
     length = min(float(reaction.duration), float(head_info['format']['duration']), duration)
+    if max_duration is not None:
+        if not math.isfinite(max_duration) or max_duration <= 0:
+            raise ValueError('max_duration must be positive and finite')
+        length = min(length, max_duration)
     if not math.isfinite(length) or length <= 0:
         raise ValueError('Reaction duration must be positive and finite')
     peak = duration / 2 if peak_time is None else float(peak_time)
@@ -46,6 +55,12 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
     start = min(max(0, peak), max(0, duration - length))
     end, fade = start + length, min(0.16, length / 3)
     size, x, y = layout(video['width'], video['height'], preset)
+    if position is not None:
+        if position not in ('top_right', 'bottom_right'):
+            raise ValueError('Unknown reaction position')
+        margin = max(8, int(min(video['width'], video['height']) * .04))
+        x = video['width'] - size - margin
+        y = margin if position == 'top_right' else video['height'] - size - margin
     audio = any(s['codec_type'] == 'audio' for s in info['streams'])
     voice = any(s['codec_type'] == 'audio' for s in head_info['streams'])
     key = 'colorkey=0xFFFFFF:0.22:0.08,' if reaction.background == 'light' else ''

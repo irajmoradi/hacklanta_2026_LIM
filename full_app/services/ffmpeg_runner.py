@@ -6,7 +6,6 @@ Supports multiple VFX per clip via ordered filter chaining.
 
 import subprocess
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from models.effects import VIDEO_EFFECTS, SOUND_EFFECTS, build_vf_chain
@@ -71,6 +70,18 @@ class FFmpegRunner:
         else:
             vfx_list = [v for v in video_effects if v != "none"]
 
+        if 'chromatic_aberration' in vfx_list:
+            base = self.extract_segment(index, start, end,
+                                        [v for v in vfx_list if v != 'chromatic_aberration'], speed)
+            output2 = self.workspace / f'seg_{index:03d}_ca.mp4'
+            vf, _ = build_vf_chain(['chromatic_aberration'], self.width, self.height, int(self.fps))
+            graph = (f'[0:v]{vf},scale={self.width}:{self.height},setsar=1[outv]')
+            self._run(['ffmpeg', '-y', '-filter_complex_threads', '1', '-i', str(base),
+                       '-filter_complex', graph, '-map', '[outv]', '-map', '0:a?',
+                       *self._encoder_args(), '-c:a', 'copy', str(output2)], 'chromatic')
+            output2.replace(output)
+            return output
+
         # Build VFX chain
         vf_extra, af_extra = build_vf_chain(vfx_list, self.width, self.height, int(self.fps))
 
@@ -91,34 +102,16 @@ class FFmpegRunner:
 
         # Append VFX chain (already ordered by category)
         if vf_extra:
-            # chromatic_aberration uses complex filtergraph — handle separately
-            if ";" in vf_extra:
-                # Can't combine complex filter with simple -vf chain easily
-                # Apply as a separate pass
-                vf_parts.append(f"scale={self.width}:{self.height}:force_original_aspect_ratio=decrease")
-                vf_parts.append(f"pad={self.width}:{self.height}:(ow-iw)/2:(oh-ih)/2")
-                cmd += ["-vf", ",".join(vf_parts)]
-                cmd += ["-af", ",".join(af_parts)]
-                cmd += self._encoder_args()
-                cmd += ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"]
-                cmd += [str(output)]
-                self._run(cmd, f"extract seg {index} (pre-chromatic)")
-
-                # Second pass for complex filter
-                output2 = self.workspace / f"seg_{index:03d}_ca.mp4"
-                cmd2 = ["ffmpeg", "-y", "-i", str(output),
-                        "-filter_complex", vf_extra]
-                cmd2 += self._encoder_args()
-                cmd2 += ["-c:a", "aac", "-b:a", "192k", str(output2)]
-                self._run(cmd2, f"extract seg {index} (chromatic)")
-                output.unlink(missing_ok=True)
-                output2.rename(output)
-                return output
-            else:
-                vf_parts.append(vf_extra)
+            vf_parts.append(vf_extra)
 
         if af_extra:
             af_parts.append(af_extra)
+
+        if 'fade_out' in vfx_list:
+            factor = (2 if 'slow_motion' in vfx_list else 1) * (.5 if 'speed_2x' in vfx_list else 1)
+            duration = (end-start) / speed * factor
+            length = min(1, duration)
+            vf_parts.append(f'fps={self.fps},fade=t=out:st={duration-length}:d={length}')
 
         # Force consistent output resolution for concat
         vf_parts.append(f"scale={self.width}:{self.height}:force_original_aspect_ratio=decrease")
@@ -140,7 +133,8 @@ class FFmpegRunner:
             sfx_info = SOUND_EFFECTS.get(sfx.get("sfx_key", ""), {})
             fpath = sfx_info.get("file")
             if fpath and Path(fpath).exists():
-                valid.append({"file": fpath, "offset": sfx.get("offset_in_segment", 0.0)})
+                valid.append(dict(file=fpath, offset=sfx.get('offset_in_segment', 0),
+                                  duration=sfx.get('duration'), gain=sfx.get('gain', .7)))
 
         if not valid:
             return segment_path
@@ -152,8 +146,9 @@ class FFmpegRunner:
         for i, sfx in enumerate(valid, start=1):
             cmd += ["-i", sfx["file"]]
             delay_ms = int(sfx["offset"] * 1000)
+            trim = f"atrim=duration={sfx['duration']}," if sfx.get("duration") else ""
             filter_parts.append(
-                f"[{i}:a]adelay={delay_ms}|{delay_ms},volume=0.7[sfx{i}]"
+                f"[{i}:a]{trim}adelay={delay_ms}|{delay_ms},volume={sfx['gain']}[sfx{i}]"
             )
 
         sfx_labels = "".join(f"[sfx{i}]" for i in range(1, len(valid) + 1))
@@ -249,7 +244,7 @@ class FFmpegRunner:
     def _render_one_segment(self, i: int, seg: dict) -> tuple[int, Path]:
         """Render a single segment (extract + sfx + transition). Thread-safe."""
         vfx = seg.get("video_effects", seg.get("video_effect", "none"))
-        if self.perf:
+        if self.perf and not {'fade_out', 'chromatic_aberration'}.intersection([vfx] if isinstance(vfx, str) else vfx):
             from perf.graph import Clip, render
             from perf.encoders import best, Encoder
             effects = [vfx] if isinstance(vfx, str) else vfx

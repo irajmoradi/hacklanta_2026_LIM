@@ -1,5 +1,6 @@
-"""Normalize EXT-01/02 outputs and fuse independent candidate sources."""
+"""Normalize signal/provider outputs and fuse independent candidate sources."""
 from dataclasses import asdict, is_dataclass
+import math
 
 
 def candidate_dict(value):
@@ -21,11 +22,13 @@ def rank_merge(candidates, scored, whole):
     for candidate in candidates:
         c = {**candidate, **assessments.get((candidate['start'], candidate['end']), {})}
         clip = dict(start_seconds=c['start'], end_seconds=c['end'],
-                    score=min(1, max(0, c.get('score', 0))),
+                    score=.5 + math.atan(candidate.get('score', 0)) / math.pi,
+                    score_scale='unit', score_provenance='atan_signal',
                     description=c.get('caption', 'Signal candidate'), type='good',
+                    label=c.get('label', ''), suggested_reaction_label=c.get('suggested_reaction_label', c.get('label')),
                     source='signals', signals=c.get('signals', {}), events=c.get('events', []))
         if 'player_alive' in c:
-            # Unknown viewpoint is unsafe to promote, just as in EXT-02.
+            # Unknown viewpoint is unsafe to promote.
             if c['player_alive'] is not True:
                 vetoes.append(clip)
                 continue
