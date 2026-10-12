@@ -93,7 +93,12 @@ class Pipeline:
                 if detect:
                     kwargs = dict(profile=job['game'], ocr=True) if options.get('profiles') else {}
                     kwargs['max_candidates'] = max(30, min(500, int(os.getenv('GEMINI_TOP_N', '30')) * 3))
-                    job['candidates'] = [candidate_dict(c) for c in detect(source, curve_sink=lambda curve: job.update(interest_curve=curve), **kwargs)]
+                    import warnings
+                    with warnings.catch_warnings(record=True) as caught:
+                        warnings.simplefilter('always', RuntimeWarning)
+                        job['candidates'] = [candidate_dict(c) for c in detect(source, curve_sink=lambda curve: job.update(interest_curve=curve), **kwargs)]
+                    if caught:
+                        self.warn(job, 'Gameplay signal detector degraded; OCR or another optional signal may be unavailable')
         extra_signals(self, job)
         client = self.client(job, key)
         if options.get('profiles'):

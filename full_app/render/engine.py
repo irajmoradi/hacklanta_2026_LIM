@@ -129,7 +129,7 @@ class Renderer:
                 words = segment.words if plan.captions.enabled else []
                 texts = segment.texts if plan.captions.enabled else []
                 baked_captions = self.runner.perf and (words or segment.title or texts) and not (
-                    plan.captions.enabled and plan.captions.transcribe and not words and has_audio)
+                    plan.captions.enabled and plan.captions.transcribe and not words)
                 if baked_captions:
                     ass = directory / f'caption_{index}.ass'
                     write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title, texts=texts)
@@ -156,8 +156,8 @@ class Renderer:
                          "-t", str(duration)]
                 self.encode(args, path, directory)
                 words = segment.words if plan.captions.enabled else []
-                if plan.captions.enabled and plan.captions.transcribe and not words and has_audio:
-                    words = transcribe(path, plan.captions.model)
+                if plan.captions.enabled and plan.captions.transcribe and not words:
+                    words = transcribe(path, plan.captions.model) if has_audio else []
                     if not words:
                         import warnings
                         warnings.warn('Word captions: no speech words available; using timed editorial text', RuntimeWarning)

@@ -145,7 +145,7 @@ def options_valid(data, styles):
     allowed = {'mode' , 'style', 'provider', 'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam',
                'prompt', 'splits', 'max_duration', 'preset', 'generate_thumbnails', 'edit_plan',
                'attitude', 'edit_style', 'job_id', 'api_key', 'game', 'privacy_options',
-               'chat', 'team_mode', 'narration_persona'} | EXTENSION_FLAGS
+               'chat', 'team_mode', 'narration_persona', 'music_mood'} | EXTENSION_FLAGS
     if set(data) - allowed:
         raise ValueError('unknown options: ' + ', '.join(sorted(set(data) - allowed)))
     result = {k: v for k, v in data.items() if k not in ('api_key', 'job_id', 'attitude', 'edit_style', 'edit_plan')}
@@ -173,6 +173,8 @@ def options_valid(data, styles):
         raise ValueError('unknown game')
     if result.get('team_mode', 'best') not in {'best', 'split', 'pip'}:
         raise ValueError('unknown team_mode')
+    if result.get('music_mood', 'energetic') not in {'energetic', 'chill'}:
+        raise ValueError('unknown music_mood')
     if result.get('narration_persona', 'hype_caster') not in {'hype_caster', 'deadpan_roast', 'nature_documentary'}:
         raise ValueError('unknown narration_persona')
     if 'privacy_options' in result:

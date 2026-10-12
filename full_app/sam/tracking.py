@@ -110,4 +110,8 @@ def track_from_masks(clip: MaskClip) -> list[tuple[float, float, float, float, f
 
 def subject_track(video: str | Path, start: float, end: float, **kwargs) -> list[tuple[float, float, float, float, float]]:
     """Return (absolute seconds, cx, cy, width, height), all geometry normalized."""
-    return track_from_masks(clip_masks(video, start, end, **kwargs))
+    clip = clip_masks(video, start, end, **kwargs)
+    if clip.degraded:
+        import warnings
+        warnings.warn('SAM subject tracking degraded; using motion/contrast fallback', RuntimeWarning)
+    return track_from_masks(clip)

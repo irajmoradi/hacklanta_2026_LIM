@@ -83,6 +83,10 @@ def _render_job(pipeline, job, key):
             raise ValueError(f'Unsupported {version_key}')
     renderer = pipeline.hook('render.engine', 'Renderer', job)
     # Legacy source-size output and thumbnail generation retain their old contract.
+    if renderer is None or options.get('generate_thumbnails') or options.get('legacy_dimensions'):
+        skipped = [name for name in ('cards', 'transitions', 'captions', 'music', 'reactions', 'sam', 'sam_reframe') if options.get(name)]
+        if skipped:
+            pipeline.warn(job, 'Legacy rendering cannot apply requested v2 features: ' + ', '.join(skipped))
     if renderer is None:
         fallback = copy.deepcopy(job['edit_plan'])
         fallback.pop('render_version', None)
@@ -135,7 +139,7 @@ def _render_job(pipeline, job, key):
             if generate:
                 with pipeline.stage(job, 'music'):
                     length = sum((s['source_end']-s['source_start']) / s.get('speed', 1) for s in plan['segments'])
-                    bed = generate('chill' if options.get('style') in ('clean_edit', 'cinematic') else 'energetic',
+                    bed = generate(options.get('music_mood', 'chill' if options.get('style') in ('clean_edit', 'cinematic') else 'energetic'),
                                    min(600, length), min(599, length*.8), output_dir=scratch)
                     plan['music'] = dict(path=str(bed.path), beats=bed.beats, duck=True, beat_sync=options.get('beat_sync', True))
         applied_reactions, applied_sam = [], []
@@ -144,7 +148,11 @@ def _render_job(pipeline, job, key):
             if track:
                 for segment in plan['segments']:
                     start, end = segment['source_start'], segment['source_end']
-                    points = track(source, start, end)
+                    with warnings.catch_warnings(record=True) as track_warnings:
+                        warnings.simplefilter('always', RuntimeWarning)
+                        points = track(source, start, end)
+                    if track_warnings or not points:
+                        pipeline.warn(job, 'SAM subject tracking unavailable or degraded; using fallback crop')
                     segment['sam'] = {**(segment.get('sam') or {}), 'subject_track': [dict(time=max(0, t-start)/segment.get('speed', 1), x=x, y=y)
                                                        for t, x, y, *_ in points][::max(1, len(points)//499 + 1)]}
         validated = RenderPlan.model_validate(plan)

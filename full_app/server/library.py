@@ -54,7 +54,9 @@ def install(app, store, workspace, owned):
         if not poster.is_file():
             return jsonify(error='Render with share_kit enabled before creating a link'), 409
         data = request.get_json() or {}
+        dimensions = job.get('render_evidence', {}).get('output', job['meta'])
         share_id = shares.create(video_path=job['output'], poster_path=poster,
+            width=dimensions['width'], height=dimensions['height'],
             title=data.get('title', 'Gameplay highlights'), description=data.get('description', ''),
             expires_at=time.time()+86400)
         return jsonify(url=f'/s/{share_id}', expires_in=86400), 201

@@ -9,7 +9,7 @@ def frontend_capabilities():
     controls = {'profiles': ['game', 'profiles'], 'planner': ['planner_v2', 'planner'],
                 'privacy': ['privacy_blur', 'privacy'], 'social': ['share_kit', 'social'],
                 'sam': ['sam', 'sam_reframe'], 'multipov': ['multipov', 'team_mode']}
-    options = ['window_scoring', 'captions', 'full_experience', 'beat_sync', 'transitions', 'cards', 'narration_persona']
+    options = ['window_scoring', 'captions', 'full_experience', 'beat_sync', 'transitions', 'cards', 'narration_persona', 'music_mood']
     for module, available in modules.items():
         if available:
             options.extend(controls.get(module, [module]))

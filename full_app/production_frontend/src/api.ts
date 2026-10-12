@@ -211,7 +211,10 @@ export class EditorApi {
       if (ui in result) { result[api] = result[ui]; delete result[ui]; }
     }
     if ("game" in result) result.profiles = true;
-    if ("music" in result) result.music = result.music !== "off";
+    if ("music" in result) {
+      if (this.capabilities.options.includes("music_mood") && ["chill", "energetic"].includes(String(result.music))) result.music_mood = result.music;
+      result.music = result.music !== "off";
+    }
     return result;
   }
   async createTeam(players: { file: File; name: string }[]): Promise<Job> {

@@ -98,8 +98,26 @@ def test_full_experience_explicit_overrides():
     result = options_valid(dict(full_experience=True, captions=False, privacy=True, music=False), EDIT_STYLES)
     assert result['privacy'] is True and result['captions'] is False and result['music'] is False
     assert options_valid(dict(full_experience=True), EDIT_STYLES)['privacy'] is False
+    assert options_valid(dict(full_experience=True, privacy_blur=True), EDIT_STYLES)['privacy'] is True
     with pytest.raises(ValueError):
         options_valid(dict(full_experience='true'), EDIT_STYLES)
+
+
+def test_unavailable_features_are_reported_and_silent_video_has_word_fallback(video, tmp_path, monkeypatch):
+    from services.probe import probe_video
+    silent = tmp_path / 'silent.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(video), '-an', '-c:v', 'copy', str(silent)], check=True)
+    monkeypatch.delenv('REACTION_PACK', raising=False)
+    monkeypatch.setenv('SAM_BACKEND', 'fallback')
+    job = dict(source=str(silent), dir=str(tmp_path), meta=probe_video(silent), clips=[], warnings=[],
+        options=dict(captions=True, reactions=True, sam=True, narration=True, privacy=False),
+        edit_plan=dict(render_version=2, resolution=720, segments=[dict(source_start=0, source_end=.6, title='Editorial fallback')]))
+    Pipeline().render(job, None)
+    assert job['render_plan']['segments'][0]['words']
+    assert any('no speech words' in w for w in job['warnings'])
+    assert any('REACTION_PACK' in w for w in job['warnings'])
+    assert any('SAM model unavailable' in w for w in job['warnings'])
+    assert any('Narration requested but no audio' in w for w in job['warnings'])
 
 
 def test_library_is_owner_scoped(tmp_path):

@@ -12,7 +12,7 @@ flowchart TD
   D --> E[Alive veto, ranking and duplicate suppression]
   E --> F[Optional deterministic planner or legacy Gemini planner]
   F --> G[Optional aligned team viewpoints]
-  G --> H[Extract selected ranges and cache HUD privacy masks before crops]
+  G --> H[Opt-in only: extract selected ranges and cache privacy masks]
   H --> I[Render: effects, captions, reactions, SAM and music]
   I --> J[Optional offline narration and share kit]
   J --> K[MP4 download and share artifacts]
@@ -34,17 +34,17 @@ Flags must be JSON booleans. Unknown fields are rejected.
 | `vjepa` | false | Contributes only when `VJEPA_HEAD` names an existing trained head; missing extras/head contribute no scores |
 | `planner` | false | Deterministic narrative planning; unavailable, incompatible or empty plans fall back to the existing Gemini planner |
 | `fx` | false | The effect catalog selects timed zoom punches in deterministic plans; renderer composes validated timed registry requests |
-| `privacy` | **true** | Blur selected source ranges in profile kill-feed, chat and party/voice regions before effects or framing; cache each range |
+| `privacy` | **false** | Blur selected source ranges in profile kill-feed, chat and party/voice regions before effects or framing; cache each range |
 | `privacy_options` | defaults | Privacy payload: game, OCR backend, own-name preservation, webcam, regions and manual timed boxes |
 | `multipov` | false | Align repeated multipart video uploads by audio, rank viewpoints using local evidence, compose selected primary-timeline intervals |
 | `team_mode` | best | best, split or pip; ambiguous synchronization warns and retains primary POV |
 | `music` | false | Generate an offline energetic/chill bed when the plan has no user-supplied music; duck under gameplay audio |
-| `narration` | false | Offline script and cached voiceover only; no automatic paid script/TTS calls |
+| `narration` | false | Offline script, cached voiceover or optional espeak/espeak-ng computer voice; no automatic paid calls |
 | `social` | false | Offline share kit after rendering: video, metadata, chapters and thumbnails |
 | `perf` | true | Encoder probing, bounded parallel clips, combined effects/SFX graph, SFX cache and compatible cut-only stream-copy joins |
 | `captions` | false | Supplied word times or optional cached local transcription |
 | `reactions` | true when REACTION_PACK exists | One seeded reaction selector per montage |
-| `sam_reframe`, `sam` | false | Subject tracking and top-three spotlight freezes |
+| `sam_reframe`, `sam` | false | Subject tracking and duration-preserving key-moment spotlight; missing SAM warns and skips spotlight |
 | `preset` | landscape | landscape, vertical or square; API defaults to 1080 short-side resolution |
 | `generate_thumbnails` | false | Legacy route retains true; may make paid thumbnail requests |
 
@@ -439,3 +439,65 @@ legacy planning. Retries for scoring, whole-video analysis and planning are incl
 Oversized Vertex inline videos are encoded to bounded-bitrate analysis proxies
 inside the stock provider; original uploaded media is retained for rendering.
 Compression can reduce HUD detail. Review semantic accuracy before exporting.
+
+
+## WIRE-1 full experience and render evidence
+
+The production UI **Full experience** button enables the deterministic planner,
+game profiles, local gameplay/audio signals, captions, reactions, subject crop,
+SAM spotlight, music, beat sync, varied transitions, intro/outro, narration and
+share kit. The API equivalent is `{"full_experience": true}` in analyze/plan/render
+options. Explicit booleans override the preset. Privacy is **false** in new jobs,
+the UI, and the full preset; `privacy=true` / the unchecked Privacy blur control
+is the only way to opt in. The saved-analysis replay also explicitly sets false.
+Ordinary callers retain previous defaults except privacy. Window scoring retains
+its existing API default true / UI default false; the preset does not add a paid
+provider or turn on editor-agent inference. FX/SFX selection is unchanged (FX-2).
+
+`cards=true` reserves up to two seconds of the planning budget for one-second
+intro/outro cards (short budgets scale cards down to 0.25 seconds each).
+`transitions=true` uses the new `varied` transition mode: zoom, whip, white flash,
+pixelize, cycling per boundary. Existing single-transition plans still work.
+`music=true` now enables beat sync by default; `beat_sync=false` disables it.
+`music_mood` accepts `energetic` or `chill`; the UI sends this separately from the
+boolean. The renderer trims to nearby beats within tolerance, accounting for
+intro offset and crossfade overlap, and never extends source ranges.
+
+Automatic plans with reactions enabled get one short event per selected segment,
+with event labels where available and mode-specific varied fallback labels. Full
+experience rotates through eligible pack speakers before reuse; a montage with
+fewer clips than speakers cannot show everyone. Explicit custom plans retain
+their reaction placements. SAM spotlight preserves duration, highlights a bounded
+window around a known kill timestamp (otherwise midpoint), and skips unavailable
+or degraded model masks with a warning. Subject tracking can use the documented
+motion/contrast fallback, also reported in warnings.
+
+Captions no longer suppress transcription merely because editorial text exists.
+When speech words are unavailable, the renderer animates the editorial words and
+reports that these are a fallback, not a transcript. Supplying an explicit
+`captions.transcribe=false` still works. `narration_persona` accepts `hype_caster`,
+`deadpan_roast`, or `nature_documentary`; speech fits gaps outside reaction overlays.
+The pipeline uses cached speech or local espeak/espeak-ng, never an implicit paid
+TTS call. Missing voices / gaps emit job warnings. Cards, beat trims and crossfade
+positions feed narration's actual output timeline.
+
+`edit_plan` remains the reviewable source-time plan. `render_plan` records the
+resolved renderer plan including words, tracks and beat settings. Its music path
+is descriptive, not a reusable filesystem asset. `render_evidence` records filter
+graphs, actual segment positions/durations, selected reaction IDs/speakers, applied
+SAM events, privacy state, narration graph and output probe data. These fields are
+cleared on invalidation and returned in job snapshots. They distinguish requested
+features from features actually rendered.
+
+Library endpoints now operate on the authenticated owner's jobs:
+`GET /api/search?q=clutch`, `GET /api/stats/players`, and stats voting routes.
+Search builds a bounded request snapshot so deleted or other-owner rows cannot
+remain indexed. `POST /api/jobs/<id>/share-page` explicitly creates a 24-hour public
+link after a completed share-kit render. Rendering alone never publishes a link
+or uploads to an external account. Capture/desktop/Discord/publish tools remain
+separate opt-in entrypoints, not automatic render stages.
+
+Replay the supplied analysis on runner 1 without any model calls:
+`tools/remote_run.sh "cd full_app && python -m pipeline.wire1_demo"`.
+It writes `/srv/demo_out/wire1/`; see [wiring audit](wiring_audit.md) for evidence,
+feature limitations and test results.
