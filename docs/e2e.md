@@ -54,3 +54,7 @@ bash tools/remote_run.sh "bash full_app/demo/run_demo.sh --output /tmp/lim-fix3-
 
 FIX-3 targeted validation: **20 passed**, remote exit **0** (2026-10-12).
 Full-suite and benchmark evidence is recorded in [results.md](results.md).
+Final combined default-demo/full-suite run exited **0**: **917 passed, 19 skipped,
+1 deselected** in 422.40s. The default demo produced 7.221333-second montages at
+1280x720 and 720x1280. The final prompt-handoff revision also passed all 20 E2E
+tests independently (24.17s, exit **0**).
