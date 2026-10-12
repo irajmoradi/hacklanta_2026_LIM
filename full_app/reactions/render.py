@@ -22,7 +22,7 @@ def layout(width: int, height: int, preset: str) -> tuple[int, int, int]:
 
 
 def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'landscape', *, peak_time: float | None = None,
-                   output_path: str | Path | None = None, show_speaker: bool = False, duck_gain: float = 0.25,
+                   output_path: str | Path | None = None, show_speaker: bool | None = None, duck_gain: float = 0.25,
                    max_duration: float | None = None, position: str | None = None) -> Path:
     """Start a reaction at the peak, clamped to the available clip duration.
 
@@ -63,18 +63,36 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
         y = margin if position == 'top_right' else video['height'] - size - margin
     audio = any(s['codec_type'] == 'audio' for s in info['streams'])
     voice = any(s['codec_type'] == 'audio' for s in head_info['streams'])
+    alpha_file = reaction.alpha_file
+    mask_file = reaction.mask_file if not alpha_file else None
+    if show_speaker is None:
+        show_speaker = bool(alpha_file or mask_file)
     key = 'colorkey=0xFFFFFF:0.22:0.08,' if reaction.background == 'light' else ''
     mask = f"if(lte(pow(X-{size}/2,2)+pow(Y-{size}/2,2),pow({size}/2-1,2)),alpha(X,Y),0)"
-    graph = [
-        '[0:v]setpts=PTS-STARTPTS[base]',
-        f'[1:v]trim=duration={length},setpts=PTS-STARTPTS,scale={size}:{size}:force_original_aspect_ratio=increase,'
-        f"crop={size}:{size},format=rgba,{key}geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{mask}',"
+    graph = ['[0:v]setpts=PTS-STARTPTS[base]']
+    if alpha_file:
+        graph.append('[2:v]setpts=PTS-STARTPTS,format=rgba[portrait]')
+    elif mask_file:
+        graph += ['[1:v]setpts=PTS-STARTPTS,format=rgb24[color]',
+                  '[2:v]setpts=PTS-STARTPTS,format=gray[matte]',
+                  '[color][matte]alphamerge[portrait]']
+    else:
+        graph.append(f"[1:v]setpts=PTS-STARTPTS,format=rgba,{key}null[portrait]")
+    # Keep the complete silhouette for matted assets, including hair outside the old circle.
+    crop_mask = '' if alpha_file or mask_file else f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{mask}',"
+    geometry = (f'scale={size}:{size}:force_original_aspect_ratio=decrease,'
+                f'pad={size}:{size}:(ow-iw)/2:(oh-ih)/2:color=black@0' if alpha_file or mask_file else
+                f'scale={size}:{size}:force_original_aspect_ratio=increase,crop={size}:{size}')
+    graph += [
+        f'[portrait]trim=duration={length},{geometry},format=rgba,{crop_mask}'
         f'fade=t=in:st=0:d={fade}:alpha=1,fade=t=out:st={length-fade}:d={fade}:alpha=1,'
         f'setpts=PTS+{start}/TB,split[head][shade]',
         '[shade]colorchannelmixer=rr=0:gg=0:bb=0:aa=0.5,gblur=sigma=3[shadow]',
     ]
     # Slide up a few pixels while fading in/out, giving a small pop motion.
-    motion = f'{y}+{size*0.12}*(max(0,1-(t-{start})/{fade})+max(0,1-({end}-t)/{fade}))'
+    motion = (f'{y}+{size*0.12}*(max(0,1-(t-{start})/{fade})+max(0,1-({end}-t)/{fade}))'
+              f'-{size*.045}*sin(min(1,max(0,(t-{start})/{fade}))*PI)'
+              f'+{size*.018}*sin(2*PI*(t-{start})/2.4)')
     graph += [f"[base][shadow]overlay=x={x+4}:y='{motion}+4':enable='between(t,{start},{end})':eof_action=pass:repeatlast=0[bg]",
               f"[bg][head]overlay=x={x}:y='{motion}':enable='between(t,{start},{end})':eof_action=pass:repeatlast=0[pip]"]
     with tempfile.TemporaryDirectory(prefix='reaction-') as temporary:
@@ -82,7 +100,7 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
         if show_speaker:
             (cwd / 'speaker.txt').write_text(reaction.speaker, encoding='utf-8')
             graph.append(f"[pip]drawtext=textfile=speaker.txt:expansion=none:fontsize={max(12,size//9)}:"
-                         f"fontcolor=white:box=1:boxcolor=black@0.65:x={x}:y={y+size-18}:"
+                         f"fontcolor=white:box=1:boxcolor=black@0.65:x={x}:y='{motion}+{size-18}':"
                          f"enable='between(t,{start},{end})'[v]")
         else:
             graph.append('[pip]null[v]')
@@ -98,7 +116,13 @@ def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'lan
         else:
             graph.append('[game]anull[a]')
         command = ['ffmpeg', '-hide_banner', '-loglevel', 'error', '-n', '-i', str(base_clip),
-                   '-i', str(Path(reaction.file).resolve()), '-filter_complex_threads', '1',
+                   '-i', str(Path(reaction.file).resolve())]
+        if alpha_file:
+            # Native VP9 decoding can silently discard alpha; libvpx preserves it.
+            command += ['-c:v', 'libvpx-vp9', '-i', str(Path(alpha_file).resolve())]
+        elif mask_file:
+            command += ['-i', str(Path(mask_file).resolve())]
+        command += ['-filter_complex_threads', '1',
                    '-filter_complex', ';'.join(graph), '-map', '[v]', '-map', '[a]',
                    '-t', str(duration), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
                    '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-ar', '48000', '-movflags', '+faststart', str(output)]
