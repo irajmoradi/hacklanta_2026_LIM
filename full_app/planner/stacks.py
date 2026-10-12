@@ -40,11 +40,16 @@ def repeat_cap(count):
 
 def decorate_stacks(plan, sources):
     rng = random.Random(plan.seed)
+    from .stacks_style import restrained_stacks
+    if restrained_stacks(plan, rng):
+        return
     entries = list(catalog().values())
     counts, previous = Counter(), set()
     cap = repeat_cap(len(plan.clips))
     surprises = max(1, round(len(plan.clips)*plan.chaos*.4)) if plan.chaos else 0
     for c in plan.clips:
+        meme_fail = plan.style == 'meme edit' and c.label == 'lowlight'
+        roast = meme_fail or (plan.style != 'meme edit' and plan.mode == 'mean')
         events = events_for(c, sources[c.source_id])
         kinds = {k for k, _ in events}
         current = set()
@@ -53,7 +58,7 @@ def decorate_stacks(plan, sources):
         for group, minimum, maximum in [('vfx', 4, 4), ('sfx', 2, 5)]:
             if group == 'vfx':
                 minimum = maximum = len(phases)
-            count = min(maximum, minimum + (1 if plan.mode == 'mean' else 0) +
+            count = min(maximum, minimum + (1 if plan.mode == 'mean' or plan.style == 'meme edit' else 0) +
                         sum(rng.random() < plan.chaos for _ in range(maximum-minimum)))
             for layer in range(count):
                 candidates = [e for e in entries if e['kind'] == group and e['timing'] == 'event'
@@ -63,7 +68,10 @@ def decorate_stacks(plan, sources):
                                    e['phase'] == phases[layer]))
                               and not (group == 'vfx' and e['name'].startswith('hitmarker_')
                                        and (layer != 1 or not kill_times))
-                              and (plan.mode == 'mean' or e['mood'] != 'roast')]
+                              and (roast or e['mood'] != 'roast')]
+                if meme_fail:
+                    failures = [e for e in candidates if e['mood'] in ('roast', 'both')]
+                    candidates = failures or candidates
                 relevant = [e for e in candidates if kinds.intersection(e['events'])]
                 wildcard = surprises > 0 and layer > 0 and rng.random() < plan.chaos*.2
                 if wildcard:
@@ -78,7 +86,7 @@ def decorate_stacks(plan, sources):
                     candidates = [e for e in entries if e['kind'] == 'vfx' and e['bold']
                                   and e['phase'] == phases[layer]
                                   and ('vfx', e['name']) not in current
-                                  and (plan.mode == 'mean' or e['mood'] != 'roast')]
+                                  and (roast or e['mood'] != 'roast')]
                 if not candidates:
                     break
                 target = (.8 if plan.mode == 'mean' else .45) + rng.uniform(-.15,.15)*plan.chaos
@@ -113,6 +121,8 @@ def decorate_stacks(plan, sources):
                         plan.effects.append(effect)
                 else:
                     gain = (.68 if plan.mode == 'mean' else .48) + rng.uniform(-.1,.1)*plan.chaos
+                    if c.phase in ('climax', 'hook_climax'):
+                        gain = min(1., gain + .12)
                     plan.sfx.append(Sound(**common, gain=gain))
                 current.add((group, chosen['name']))
                 counts[group, chosen['name']] += 1
@@ -125,3 +135,7 @@ def decorate_stacks(plan, sources):
                 start = min(c.start+c.duration-duration, max(c.start, anchor-.04))
                 plan.effects.append(Effect(clip_id=c.id, name='hitmarker_burst', start=start, duration=duration))
         previous = current
+        if plan.style == 'meme edit' and meme_fail:
+            # A sustained fail grade makes the joke legible between hit stacks.
+            name = rng.choice(('desaturate', 'black_and_white')) if plan.chaos else 'desaturate'
+            plan.effects.insert(0, Effect(clip_id=c.id, name=name, start=c.start, duration=c.duration))
