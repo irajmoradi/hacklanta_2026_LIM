@@ -23,7 +23,7 @@ from .validation import clips_valid, options_valid, plan_valid
 
 def public(job):
     data = {k: v for k, v in job.items() if k not in ('dir', 'source', 'output', 'sources') and not k.startswith('_')}
-    data.update(job_id=job['id'], plan=job['edit_plan'],
+    data.update(job_id=job['id'], plan=job['edit_plan'], source_url=f"/api/stream/{job['id']}",
                 has_clips=job['clips'] is not None, has_plan=job['edit_plan'] is not None,
                 has_output=job['output'] is not None,
                 download_url=f"/api/jobs/{job['id']}/download" if job['output'] else None)
@@ -122,8 +122,10 @@ def create_app(config=None, pipeline=None):
 
     @app.get('/api/info')
     def info():
-        return jsonify(model=os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview'),
-                       has_api_key=bool(os.getenv('GEMINI_API_KEY')),
+        from .capabilities import frontend_capabilities
+        from services.provider_config import gemini_credentials
+        return jsonify(frontend_capabilities=frontend_capabilities(), model=os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview'),
+                       has_api_key=bool(gemini_credentials()[0]),
                        video_effects={k: v['description'] for k, v in VIDEO_EFFECTS.items()},
                        sound_effects={k: v['description'] for k, v in SOUND_EFFECTS.items() if v['file']},
                        edit_styles={k: v['label'] for k, v in EDIT_STYLES.items()})

@@ -129,7 +129,16 @@ def plan_valid(plan, duration, max_duration=3600):
 
 
 def options_valid(data, styles):
-    allowed = {'mode', 'style', 'provider', 'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam',
+    data = dict(data)
+    for alias, canonical in {'planner_v2': 'planner', 'privacy_blur': 'privacy', 'share_kit': 'social'}.items():
+        if alias in data:
+            value = data.pop(alias)
+            if canonical in data and data[canonical] != value:
+                raise ValueError(f'{alias} and {canonical} disagree')
+            data[canonical] = value
+    if 'game' in data:
+        data.setdefault('profiles', True)
+    allowed = {'mode' , 'style', 'provider', 'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam',
                'prompt', 'splits', 'max_duration', 'preset', 'generate_thumbnails', 'edit_plan',
                'attitude', 'edit_style', 'job_id', 'api_key', 'game', 'privacy_options',
                'chat', 'team_mode'} | EXTENSION_FLAGS

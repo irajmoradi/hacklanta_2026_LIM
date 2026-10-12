@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   EditorApi,
   type ApiMode,
@@ -181,7 +181,7 @@ export default function App() {
   };
   const option = <K extends keyof Options>(key: K, value: Options[K]) => {
     setOptions((o) => ({ ...o, [key]: value }));
-    if (clips.length && ["game", "profile", "mode", "style", "provider", "use_signals", "audio_ai", "planner_v2", "window_scoring", "chat", "chat_offset", "twitch_vod_id", "fx_intensity"].includes(key)) setNeedsAnalysis(true);
+    if (clips.length && ["game", "profile", "style", "provider", "use_signals", "audio_ai", "planner_v2", "window_scoring", "chat", "chat_offset", "twitch_vod_id", "fx_intensity"].includes(key)) setNeedsAnalysis(true);
   };
   const kept = clips.filter((c) => c.keep);
   const media = source || job?.source_url;

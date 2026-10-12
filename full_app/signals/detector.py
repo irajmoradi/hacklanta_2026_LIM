@@ -72,6 +72,7 @@ def _video(path: Path, duration: float, stream: dict, cfg: Config,
         proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors)
         previous = None
         index = 0
+        next_ocr = 0.
         try:
             while True:
                 chunk = proc.stdout.read(width * height * 3)
@@ -94,8 +95,9 @@ def _video(path: Path, duration: float, stream: dict, cfg: Config,
                         t = float(cut.seconds) if hasattr(cut, "seconds") else float(cut) / cfg.sample_fps
                         scene[min(count - 1, int(t))] += 1
                         events.append({"time": round(t, 3), "type": "scene_cut"})
-                if reader:
+                if reader and timestamp >= next_ocr:
                     events.extend(reader.read(frame, timestamp))
+                    next_ocr = timestamp + cfg.ocr_interval
                 index += 1
             proc.wait()
         finally:
@@ -178,7 +180,7 @@ def _audio(path: Path, duration: float, present: bool,
     return rms, onset, sustained, events
 
 
-def detect_candidates(video_path: str | Path, profile: str = "auto", **cfg) -> list[Candidate]:
+def detect_candidates(video_path: str | Path, profile: str = "auto", *, curve_sink=None, **cfg) -> list[Candidate]:
     """Return score-ranked Candidate objects; timestamps are seconds from start.
 
     See Config and docs/signals.md for tunables. Missing optional OCR/scene
@@ -199,4 +201,4 @@ def detect_candidates(video_path: str | Path, profile: str = "auto", **cfg) -> l
         if event["type"] in {"kill", "death"}:
             ocr[min(len(ocr) - 1, int(event["time"]))] += 1
     return fuse({"scene": scene, "rms": rms, "onset": onset,
-                 "sustained": sustained, "motion": motion, "ocr": ocr}, events, duration, config)
+                 "sustained": sustained, "motion": motion, "ocr": ocr}, events, duration, config, curve_sink=curve_sink)

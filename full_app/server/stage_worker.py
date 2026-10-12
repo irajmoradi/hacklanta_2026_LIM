@@ -36,4 +36,8 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as error:
+        from services.provider_errors import classify
+        json.dump({'_stage_error': classify(error).code}, sys.stdout)

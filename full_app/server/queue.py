@@ -60,7 +60,7 @@ class JobQueue:
             if key:
                 self.keys[job_id] = key
             changed = {k for k, v in options.items() if job['options'].get(k) != v}
-            analysis_keys = {'mode', 'provider', 'use_signals', 'window_scoring', 'splits',
+            analysis_keys = {'provider', 'use_signals', 'window_scoring', 'splits',
                              'profiles', 'game', 'audio_ai', 'vjepa', 'ingest', 'chat', 'multipov'}
             # Prompt belongs to the stage requested by the caller.
             if analysis_request or target == 'analyze' or (target == 'plan' and not job['clips']):
@@ -68,7 +68,7 @@ class JobQueue:
             invalidate = None
             if changed & analysis_keys:
                 invalidate = 'analyze'
-            elif changed & {'style', 'prompt', 'max_duration', 'planner', 'fx'}:
+            elif changed & {'mode', 'style', 'prompt', 'max_duration', 'planner', 'fx'}:
                 invalidate = 'plan'
             elif changed:
                 invalidate = 'render'
@@ -76,6 +76,8 @@ class JobQueue:
                 self.invalidate(job, invalidate)
             if target != 'render' and 'analyze' not in job['completed'] and 'plan' in job['completed']:
                 self.invalidate(job, 'analyze')
+            if 'mode' in changed and invalidate != 'analyze' and job.get('clips'):
+                job['_local_replan'] = True
             job['options'].update(options)
             if custom_plan is not None and custom_plan != job['edit_plan']:
                 self.invalidate(job, 'render')
@@ -97,7 +99,7 @@ class JobQueue:
         if index == 0:
             job['clips'], job['candidates'] = None, []
             for field in ('_analysis_source', '_chunks', 'audio_signals', 'vjepa_signals',
-                          'game', 'game_confidence', 'profile_prompt', 'window_scores'):
+                          'game', 'game_confidence', 'profile_prompt', 'window_scores', 'interest_curve', '_local_replan'):
                 job.pop(field, None)
         if index <= 1:
             job['edit_plan'] = None
@@ -168,7 +170,9 @@ class JobQueue:
             with self.lock:
                 job = self.store.get(job_id)
                 if job['status'] != 'cancelled':
-                    job.update(status='error', error=f'{job.get("stage", "job")} failed ({type(exc).__name__}); check configuration and retry')
+                    from services.provider_errors import ProviderFailure
+                    message = str(exc) if isinstance(exc, ProviderFailure) else f'{job.get("stage", "job")} failed ({type(exc).__name__}); check configuration and retry'
+                    job.update(status='error', error=message)
                     self.store.save(job)
         finally:
             with self.lock:

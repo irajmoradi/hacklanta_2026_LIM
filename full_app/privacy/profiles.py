@@ -15,6 +15,7 @@ COMMON = {
     "webcam": box(0, .65, .25, .35),
 }
 DEFAULTS = {
+    "generic": {"kill_feed": box(.64, .03, .36, .27), "chat": box(0, .55, .4, .4)},
     "valorant": {"kill_feed": box(.64, .03, .36, .27), "chat": box(0, .55, .4, .4)},
     "overwatch2": {"kill_feed": box(.64, .02, .36, .28), "chat": box(0, .55, .4, .4)},
     "deadlock": {"kill_feed": box(.62, .03, .38, .30), "chat": box(0, .55, .4, .4)},

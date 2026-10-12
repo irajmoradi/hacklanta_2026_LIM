@@ -18,7 +18,11 @@ PROFILES = {
 }
 
 
-def regions_for(profile: str, overrides: dict | None) -> dict:
+PROFILES["generic"] = dict(PROFILES["auto"])
+PROFILES["leagueoflegends"] = {"kill_feed": (.75, .15, 1., .60), "banner": (.25, .15, .75, .4)}
+
+
+def regions_for(profile: str, overrides: dict | None = None) -> dict:
     key = profile.lower().replace(" ", "").replace("_", "").replace("-", "")
     if key not in PROFILES:
         raise ValueError(f"unknown game profile: {profile}")

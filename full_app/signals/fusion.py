@@ -13,9 +13,14 @@ def zscore(values: np.ndarray) -> np.ndarray:
 
 
 def fuse(raw: dict[str, np.ndarray], events: list[dict], duration: float,
-         cfg: Config) -> list[Candidate]:
+         cfg: Config, curve_sink=None) -> list[Candidate]:
     normalized = {key: zscore(value) for key, value in raw.items()}
     curve = sum(cfg.weights[key] * values for key, values in normalized.items())
+    if curve_sink is not None:
+        positive = np.maximum(0, curve)
+        peak = float(positive.max()) if len(positive) else 0
+        curve_sink([dict(time=i, score=round(float(v / peak * 100), 4) if peak else 0.)
+                    for i, v in enumerate(positive)])
     dead = ((raw["motion"] < cfg.dead_motion) & (raw["rms"] < cfg.dead_audio)
             & (raw["ocr"] == 0) & (raw["scene"] == 0))
     # One representative peak per plateau; never nominate silent/static seconds.

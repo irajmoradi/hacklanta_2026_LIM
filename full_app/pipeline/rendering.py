@@ -50,14 +50,19 @@ def render_job(pipeline, job, key):
     scratch.mkdir(exist_ok=True)
     original = job['source']
     original_plan, original_meta = job['edit_plan'], job['meta']
+    original_clips = job.get('clips')
     try:
         team = team_source(pipeline, job, scratch)
         if team:
             source, job['edit_plan'] = team
             job['source'] = str(source)
             job['meta'] = probe_video(source)
-        else:
-            job['source'] = str(private_source(pipeline, job, Path(original), scratch))
+        elif job['options'].get('privacy', True):
+            from .privacy_ranges import selected_source
+            with pipeline.stage(job, 'privacy'):
+                source, job['edit_plan'], job['clips'] = selected_source(pipeline, job, scratch)
+                job['source'] = str(source)
+                job['meta'] = probe_video(source)
         _render_job(pipeline, job, key)
         output = finish_output(pipeline, job, Path(job['output']), job['edit_plan'], scratch)
         destination = Path(job['dir']) / 'output.mp4'
@@ -66,6 +71,7 @@ def render_job(pipeline, job, key):
         job['output'] = str(destination)
     finally:
         job['source'] = original
+        job['clips'] = original_clips
         job['edit_plan'], job['meta'] = original_plan, original_meta
         shutil.rmtree(scratch, ignore_errors=True)
 

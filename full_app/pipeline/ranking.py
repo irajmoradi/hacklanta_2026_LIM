@@ -56,3 +56,23 @@ def rank_merge(candidates, scored, whole):
     for index, clip in enumerate(ranked):
         clip['id'] = str(index)
     return ranked[:500]
+
+
+def bounded_clips(clips, duration):
+    """Provider admission is forgiving per item; HTTP edits remain strict."""
+    import logging
+    log = logging.getLogger(__name__)
+    valid = []
+    for index, clip in enumerate(clips):
+        try:
+            start, end = clip['start_seconds'], clip['end_seconds']
+            if type(start) not in (int, float) or type(end) not in (int, float) or not all(map(math.isfinite, (start, end))):
+                raise ValueError()
+            left, right = max(0, start), min(duration, end)
+            if left >= right: raise ValueError()
+            if (left, right) != (start, end):
+                log.warning('Clamped model range item=%d start=%s end=%s duration=%s', index, start, end, duration)
+            valid.append({**clip, 'start_seconds': left, 'end_seconds': right, 'start': left, 'end': right})
+        except (KeyError, TypeError, ValueError):
+            log.warning('Dropped invalid model range item=%d', index)
+    return valid

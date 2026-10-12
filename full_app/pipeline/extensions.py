@@ -5,7 +5,7 @@ from pathlib import Path
 from .ranking import candidate_dict
 
 
-def analysis_inputs(pipeline, job):
+def analysis_inputs(pipeline, job, key=None):
     options = job['options']
     job['game'] = 'generic'
     job['_analysis_source'] = job['source']
@@ -20,8 +20,15 @@ def analysis_inputs(pipeline, job):
             if get:
                 name = options.get('game', 'auto')
                 if name == 'auto':
-                    name, confidence = detect(job['source']) if detect else ('generic', 0)
+                    fallback = None
+                    if os.getenv('GAME_DETECTION_VLM', '0') == '1':
+                        def fallback(images):
+                            with pipeline.client(job, key) as client:
+                                return client.detect_game_frames(images)
+                    name, confidence = detect(job['source'], vlm_fallback=fallback) if detect else ('generic', 0)
                     job['game_confidence'] = confidence
+                else:
+                    job['game_confidence'] = 1.0
                 profile = get(name)
                 job['game'] = profile.name
                 job['profile_prompt'] = profile.prompt_fragment()
@@ -124,9 +131,7 @@ def team_source(pipeline, job, scratch):
         durations = [probe_video(v.path)['duration'] for v in videos]
         detect = pipeline.hook('signals', 'detect_candidates', job)
         evidence = [[candidate_dict(c) for c in detect(v.path)] if detect else [] for v in videos]
-        # Sanitize every viewpoint before cropping or placing it on the canvas.
-        videos = [Video(private_source(pipeline, job, v.path, scratch, f'_{i}'), v.player)
-                  for i, v in enumerate(videos)]
+        # Each selected local range is sanitized below before composition.
         per_video = [[] for _ in videos]
         paths, segments, cursor = [], [], 0.
         width, height = job['meta']['width'], job['meta']['height']
@@ -142,8 +147,18 @@ def team_source(pipeline, job, scratch):
                     per_video[i].append(dict(start=local_start, end=local_end, score=score, event_id=str(index)))
                     angles.append(Angle(i, start, end, score, videos[i].player))
             angles.sort(key=lambda a: (-a.score, a.video_index))
-            path = render(videos, [TeamCandidate(start, end, tuple(angles))],
-                          scratch / f'team_{index}.mp4', offsets=offsets,
+            render_videos, render_offsets = list(videos), list(offsets)
+            if job['options'].get('privacy', True):
+                from .privacy_ranges import private_range
+                from multipov import Alignment
+                for angle in angles[:1 if job['options'].get('team_mode', 'best') == 'best' else 2]:
+                    i = angle.video_index
+                    local_start, local_end = offsets[i].to_local(start), offsets[i].to_local(end)
+                    private = private_range(pipeline, job, videos[i].path, local_start, local_end, scratch)
+                    render_videos[i] = Video(private, videos[i].player)
+                    render_offsets[i] = Alignment(start, offsets[i].rate, offsets[i].confidence)
+            path = render(render_videos, [TeamCandidate(start, end, tuple(angles))],
+                          scratch / f'team_{index}.mp4', offsets=render_offsets,
                           mode=job['options'].get('team_mode', 'best'), width=width, height=height,
                           fps=job['meta']['fps'])
             length = probe_video(path)['duration']
@@ -209,10 +224,14 @@ def private_source(pipeline, job, source, scratch, suffix=''):
     with pipeline.stage(job, 'privacy' + suffix):
         payload = dict(job['options'].get('privacy_options', {}))
         payload.setdefault('game', job.get('game', 'generic'))
-        if payload['game'] == 'generic' and payload.get('regions') is None:
-            # Unknown games get conservative common HUD regions, not a guessed game.
-            from privacy.profiles import COMMON
-            payload['regions'] = {k: v.model_dump() for k, v in COMMON.items()}
+        payload.setdefault('backend', 'none')
+        if payload.get('regions') is None:
+            from privacy import PrivacyOptions
+            from privacy.profiles import regions_for
+            regions = regions_for(PrivacyOptions.model_validate(payload))
+            allowed = {'kill_feed', 'chat', 'party_voice'}
+            if payload.get('blur_webcam'): allowed.add('webcam')
+            payload['regions'] = {k: v.model_dump() for k, v in regions.items() if k in allowed}
         path, track = sanitize(source, scratch / f'private{suffix}.mp4', payload)
         job['privacy_track' + suffix] = track.model_dump(mode='json')
         for warning in track.warnings:
@@ -247,5 +266,12 @@ def finish_output(pipeline, job, output, plan, scratch):
                 if target.exists():
                     shutil.rmtree(target)
                 shutil.move(str(kit), target)
-                job['share_kit'] = 'share'
+                import json
+                metadata = json.loads((target / 'metadata.json').read_text())
+                posting = next(iter(metadata['platforms'].values()))
+                link = lambda name: f"/api/jobs/{job.get('id', Path(job['dir']).name)}/share/{name}"
+                covers = [dict(url=link(v['file']), label=k) for k, v in metadata['thumbnails'].items()]
+                job['share_kit'] = dict(metadata=metadata, titles=posting['titles'], description=posting['description'],
+                    chapters=(target / 'chapters.txt').read_text(), covers=covers, thumbnails=covers,
+                    downloads=[dict(url=link(p.name), label=p.name) for p in sorted(target.iterdir()) if p.is_file()])
     return Path(output)

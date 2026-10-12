@@ -22,7 +22,7 @@ it("sends only advertised extensions and preserves baseline compatibility", asyn
   fetcher.mockResolvedValue({ ok: true, json: async () => ({ frontend_capabilities: demoCapabilities }) });
   await api.discover();
   await api.analyze("one", { ...options, narration: true, narration_persona: "deadpan_roast", music: "chill", chat: true, twitch_vod_id: "123" });
-  expect(JSON.parse(fetcher.mock.calls[3][1].body)).toMatchObject({ game: "overwatch2", privacy_blur: true, narration_persona: "deadpan_roast", music: "chill", twitch_vod_id: "123" });
+  expect(JSON.parse(fetcher.mock.calls[3][1].body)).toMatchObject({ game: "overwatch2", privacy: true, narration_persona: "deadpan_roast", music: true, twitch_vod_id: "123" });
   await api.render("one", "vertical", { ...options, fx_intensity: 0.75, keep_my_name: "Alice" }, [], { segments: [], music: { path: "server-owned" } } as any);
   expect(JSON.parse(fetcher.mock.calls[4][1].body)).toMatchObject({ preset: "vertical", fx_intensity: 0.75, keep_my_name: "Alice", edit_plan: { music: { path: "server-owned" } } });
 });
@@ -32,9 +32,9 @@ it("uploads team files in player order, imports owned VODs, and attaches assets"
   vi.stubGlobal("fetch", fetcher);
   const api = new EditorApi("jobs"); api.capabilities = demoCapabilities;
   await api.createTeam([{ file: video("alice.mp4"), name: " Alice " }, { file: video("bob.mp4"), name: "Bob" }]);
-  expect(fetcher.mock.calls[0][0]).toBe("/api/jobs/team");
+  expect(fetcher.mock.calls[0][0]).toBe("/api/jobs");
   const form = fetcher.mock.calls[0][1].body as FormData;
-  expect(form.getAll("videos").map(v => (v as File).name)).toEqual(["alice.mp4", "bob.mp4"]);
+  expect(form.getAll("video").map(v => (v as File).name)).toEqual(["alice.mp4", "bob.mp4"]);
   expect(JSON.parse(form.get("players") as string)).toEqual(["Alice", "Bob"]);
   await expect(api.importVod("https://www.twitch.tv/videos/123", false)).rejects.toThrow("permission");
   expect(fetcher).toHaveBeenCalledTimes(1);

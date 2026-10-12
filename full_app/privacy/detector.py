@@ -66,7 +66,7 @@ def detect_video(source: str | Path, options: PrivacyOptions | dict | None = Non
             warnings.append(f"OCR unavailable ({type(exc).__name__}); using whole-region fallback")
             reader = None
         if reader is None:
-            if active:
+            if active and (options.backend != 'none' or options.keep_own_name):
                 warnings.append("Whole-region fallback cannot preserve the uploader name")
             boxes.extend(BlurBox(**b.model_dump(), end=duration, kind=k) for k, b in active.items())
         else:

@@ -132,7 +132,11 @@ class IsolatedPipeline:
                                      timeout=config['STAGE_TIMEOUT_SECONDS'],
                                      cancelled=lambda: self.resources.store.get(job['id'])['status'] == 'cancelled',
                                      check=check)
-            job.update(json.loads(output))
+            result = json.loads(output)
+            if '_stage_error' in result:
+                from services.provider_errors import ProviderFailure
+                raise ProviderFailure(result['_stage_error'])
+            job.update(result)
             report(job)
         finally:
             progress.unlink(missing_ok=True)

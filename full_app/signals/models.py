@@ -31,6 +31,7 @@ class Config:
     ocr_width: int = 960
     ocr_regions: dict | None = None
     ocr_cooldown: float = 3.0
+    ocr_interval: float = 2.0
     weights: dict[str, float] = field(default_factory=lambda: WEIGHTS.copy())
     peak_threshold: float = 0.65
     pre_roll: float = 3.0
@@ -49,7 +50,7 @@ class Config:
             value = getattr(self, key)
             if not math.isfinite(value) or value <= 0:
                 raise ValueError(f"{key} must be finite and positive")
-        for key in ("scene_threshold", "ocr_cooldown", "peak_threshold", "pre_roll",
+        for key in ("scene_threshold", "ocr_cooldown", "ocr_interval", "peak_threshold", "pre_roll",
                     "post_roll", "merge_gap", "dead_motion", "dead_audio"):
             value = getattr(self, key)
             if not math.isfinite(value) or value < 0:

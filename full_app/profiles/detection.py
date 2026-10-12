@@ -60,12 +60,15 @@ def detect_frames(frames: Sequence[tuple[int, int, Sequence[OCRToken]]]) -> tupl
                     elif contains_phrase(all_text, phrase):
                         best = max(best, .3)
                 evidence += best
-            # A numeric health HUD and top score text are weak layout evidence,
-            # never enough to identify a game without a regional keyword.
-            if evidence >= 2.7:
-                for region_name in ("health", "round_score"):
-                    if any(any(c.isdigit() for c in t.text) and _inside(t, profile.regions[region_name], width, height) for t in tokens):
-                        evidence += .2
+            # Two matching numeric HUD anchors can corroborate displaced text
+            # (UI scaling/spectator layouts). Layout alone never identifies a game.
+            anchors = sum(any(any(c.isdigit() for c in t.text) and
+                              _inside(t, profile.regions[region_name], width, height)
+                              for t in tokens) for region_name in ("health", "round_score"))
+            if 0 < evidence < 2.7 and anchors == 2:
+                evidence = 2.8
+            elif evidence >= 2.7:
+                evidence += .2 * anchors
             scores[name].append(evidence)
     ranked = sorted(((max(values, default=0) + min(.6, .2*max(0, sum(v >= 2.7 for v in values)-1)), name)
                      for name, values in scores.items()), reverse=True)
@@ -104,11 +107,11 @@ def tesseract_ocr(png: bytes, *, language: str = "eng") -> list[OCRToken]:
     return tokens
 
 
-def detect_game(video_path: str | Path, *, sample_count: int = 5,
+def detect_game(video_path: str | Path, *, sample_count: int = 16,
                 ocr: Callable[[bytes], Sequence[OCRToken]] | None = None,
                 vlm_fallback: Callable[[Sequence[bytes]], tuple[str, float]] | None = None,
                 language: str = "eng") -> tuple[str, float]:
-    """Sample up to eight PNG frames across a video and return (name, confidence).
+    """Sample up to 32 PNG frames across a video and return (name, confidence).
 
     Missing ffmpeg/Tesseract and undecodable video degrade to ('generic', 0.0).
     A missing input file or invalid configuration is a caller error. The optional
@@ -118,8 +121,8 @@ def detect_game(video_path: str | Path, *, sample_count: int = 5,
     path = Path(video_path)
     if not path.is_file():
         raise FileNotFoundError(path)
-    if isinstance(sample_count, bool) or not isinstance(sample_count, int) or not 1 <= sample_count <= 8:
-        raise ValueError("sample_count must be an integer in [1, 8]")
+    if isinstance(sample_count, bool) or not isinstance(sample_count, int) or not 1 <= sample_count <= 32:
+        raise ValueError("sample_count must be an integer in [1, 32]")
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         return "generic", 0.0
     try:
@@ -144,7 +147,7 @@ def detect_game(video_path: str | Path, *, sample_count: int = 5,
         frames.append((width, height, reader(result.stdout)))
     detected = detect_frames(frames)
     if detected[0] == "generic" and images and vlm_fallback is not None:
-        name, confidence = vlm_fallback(tuple(images))
+        name, confidence = vlm_fallback(tuple(images[::max(1, len(images)//3)][:3]))
         if name not in list_profiles() or not isinstance(confidence, (int, float)) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
             raise ValueError("Fallback must return a known profile and confidence in [0, 1]")
         return (name, float(confidence)) if name != "generic" else ("generic", 0.0)

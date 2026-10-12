@@ -155,7 +155,7 @@ def test_missing_tools_and_invalid_input(tmp_path,monkeypatch):
     path.write_bytes(b"not a video")
     assert detect_game(path) == ("generic",0)
     with pytest.raises(FileNotFoundError): detect_game(tmp_path/"missing")
-    for count in [0,9,1.5,True]:
+    for count in [0,33,1.5,True]:
         with pytest.raises(ValueError): detect_game(path,sample_count=count)
     monkeypatch.setattr(detection.shutil,"which",lambda name:None)
     assert detect_game(path) == ("generic",0)

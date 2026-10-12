@@ -134,11 +134,14 @@ class VideoUnderstandingProvider(ABC):
                 with video_slice(path, start, end, self.config.processing_timeout_seconds) as chunk:
                     result = self._infer(chunk, local_prompt, ClipList)
             for clip in result.clips:
-                if clip.end > end - start + 0.05:
-                    raise ValueError("provider returned a clip outside its input timeline")
+                if clip.start >= end - start:
+                    LOG.warning('Dropped model range outside chunk: start=%s end=%s duration=%s', clip.start, clip.end, end-start)
+                    continue
                 data = clip.model_dump()
+                if clip.end > end - start:
+                    LOG.warning('Clamped model range to chunk: start=%s end=%s duration=%s', clip.start, clip.end, end-start)
                 for key in ("start", "end", "start_seconds", "end_seconds"):
-                    data[key] = min(duration, data[key] + start)
+                    data[key] = min(end - start, max(0, data[key])) + start
                 clips.append(type(clip).model_validate(data))
         # Overlap creates repeated moments. Keep the first complete observation.
         unique = []
@@ -161,15 +164,20 @@ class VideoUnderstandingProvider(ABC):
             raise ValueError("candidate extends beyond video duration")
         prompt = WINDOW_PROMPT.read_text(encoding="utf-8")
         prompt += '\n' + getattr(self, 'profile_prompt', '')
-        results = []
-        for candidate in parsed:
+        def score_one(candidate):
             with video_slice(path, candidate.start, candidate.end, self.config.processing_timeout_seconds) as window:
                 assessment = self._infer(window, prompt + "\nCandidate hints: " + candidate.model_dump_json(), WindowAssessment)
             data = assessment.model_dump()
             if data["player_alive"] is not True:
                 data.update(kind="neutral", hype=0.0)
-            results.append(ScoredWindow(**candidate.model_dump(), **data))
-        return results
+            return ScoredWindow(**candidate.model_dump(), **data)
+        # Mock/local providers stay sequential; Gemini uses bounded parallelism.
+        if getattr(self, 'parallel_scoring', False):
+            import os
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=max(1, min(8, int(os.getenv('GEMINI_SCORING_WORKERS', '3'))))) as pool:
+                return list(pool.map(score_one, parsed))
+        return [score_one(c) for c in parsed]
 
 
 class MockProvider(VideoUnderstandingProvider):
