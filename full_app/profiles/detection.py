@@ -9,6 +9,8 @@ import struct
 import subprocess
 from typing import Callable, Sequence
 
+from vjepa.media import probe_media
+
 from .registry import Box, contains_phrase, get_profile, list_profiles
 
 
@@ -42,6 +44,7 @@ def detect_frames(frames: Sequence[tuple[int, int, Sequence[OCRToken]]]) -> tupl
         if width <= 0 or height <= 0:
             raise ValueError("Frame dimensions must be positive")
         tokens = [t for t in tokens if t.confidence >= .45]
+        all_text = " ".join(t.text for t in tokens)
         for name in scores:
             profile = get_profile(name)
             evidence = 0.0
@@ -49,7 +52,6 @@ def detect_frames(frames: Sequence[tuple[int, int, Sequence[OCRToken]]]) -> tupl
                 region = profile.regions[region_name]
                 # Join words only inside this region, preserving OCR reading order.
                 located = " ".join(t.text for t in tokens if _inside(t, region, width, height))
-                all_text = " ".join(t.text for t in tokens)
                 best = 0.0
                 for phrase in phrases:
                     weak = phrase in {"respawn in", "killed by", "eliminado por", "ace"}
@@ -121,8 +123,8 @@ def detect_game(video_path: str | Path, *, sample_count: int = 5,
     if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
         return "generic", 0.0
     try:
-        probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(path.resolve())], capture_output=True, timeout=20, check=True)
-        duration = float(probe.stdout)
+        duration = float(probe_media(path.resolve(), entries="format=duration", timeout=20)
+                         .get("format", {}).get("duration", "nan"))
         if not math.isfinite(duration) or duration <= 0:
             return "generic", 0.0
     except (ValueError, OSError, subprocess.SubprocessError):

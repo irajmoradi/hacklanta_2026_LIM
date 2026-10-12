@@ -8,6 +8,11 @@ def sigmoid(x):
     return 1 / (1 + np.exp(-np.clip(x, -40, 40)))
 
 
+def _softmax(logits: np.ndarray) -> np.ndarray:
+    probabilities = np.exp(logits - logits.max(axis=1, keepdims=True))
+    return probabilities / probabilities.sum(axis=1, keepdims=True)
+
+
 class Heads:
     def fit(self, x, y, pairs=(), epochs=300, learning_rate=0.05):
         x, y = np.asarray(x, dtype=float), np.asarray(y, dtype=int)
@@ -29,13 +34,12 @@ class Heads:
         counts = np.bincount(y[labeled], minlength=3).clip(1)
         weights = 1 / counts[y[labeled]]
         weights /= weights.sum()
+        labeled_features = z[labeled]
+        differences = z[pairs[:, 0]] - z[pairs[:, 1]]
         for _ in range(epochs):
-            logits = z[labeled] @ self.classifier
-            probabilities = np.exp(logits - logits.max(axis=1, keepdims=True))
-            probabilities /= probabilities.sum(axis=1, keepdims=True)
-            self.classifier -= learning_rate * (z[labeled].T @ ((probabilities - target) * weights[:, None]))
+            probabilities = _softmax(labeled_features @ self.classifier)
+            self.classifier -= learning_rate * (labeled_features.T @ ((probabilities - target) * weights[:, None]))
             if len(pairs):
-                differences = z[pairs[:, 0]] - z[pairs[:, 1]]
                 self.ranker += learning_rate * differences.T @ sigmoid(-differences @ self.ranker) / len(pairs)
         return self
 
@@ -44,9 +48,7 @@ class Heads:
         if x.ndim != 2 or x.shape[1] != len(self.mean) or not np.isfinite(x).all():
             raise ValueError("incompatible feature shape or nonfinite input")
         z = np.column_stack([(x - self.mean) / self.scale, np.ones(len(x))])
-        logits = z @ self.classifier
-        probabilities = np.exp(logits - logits.max(axis=1, keepdims=True))
-        probabilities /= probabilities.sum(axis=1, keepdims=True)
+        probabilities = _softmax(z @ self.classifier)
         return probabilities, sigmoid(z @ self.ranker) if self.ranking_trained else np.zeros(len(x))
 
     def save(self, path, metadata):

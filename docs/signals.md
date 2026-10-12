@@ -23,8 +23,14 @@ window; `score` is the maximum weighted interest in that window (not a probabili
 The CLI writes only JSON to stdout, optional-dependency warnings to stderr, and
 returns 2 on invalid input/decoder errors. Silent static input returns `[]`.
 Nothing calls Gemini, accesses a network, downloads weights, or modifies the input.
-This is an additive proposal API: the existing upload/analyze/plan/render flow is
-unchanged; integration into that flow is outside EXT-01's allowed paths.
+The pipeline calls this proposal API when `use_signals` is enabled.
+
+Analysis modules share raw ffprobe access through `vjepa.media.probe_media`.
+The helper lives in that dependency-free package so standalone V-JEPA installs
+include it; importing it does not load NumPy or ML libraries. The existing
+`services.probe.probe_video` returns reduced video metadata and cannot serve
+audio-only inputs or callers that need stream indices and cover-art flags.
+Duration validation and optional-tool fallbacks remain with each caller.
 
 ## Features and fusion
 
@@ -133,3 +139,70 @@ Linux runner, 2026-10-12, using `bash tools/remote_run.sh` from the worktree roo
 The optional packages were installed only in the runner's task venv. No application
 API calls were made and no secret was read. The performance numbers describe the
 synthetic H.264 benchmark, not a guarantee for every gameplay codec or OCR workload.
+
+### QA-2 maintenance review (2026-10-12)
+
+Branch: `ext/QA-2`; starting revision: `2899742`; implementation: `82c7738`.
+Public entry points and default outputs are retained. Raw probing is shared,
+repeated scoring calculations are moved out of loops, audio backend validation
+is separated from orchestration, and social fallback logs omit exception text.
+The optional backend catches remain because failed extras must retain local results.
+No live API calls, key reads, model downloads, or cloud deployments were needed.
+
+Changed implementation files and line counts (added / removed):
+
+| Module | Files | Added | Removed |
+| --- | --- | ---: | ---: |
+| `signals` | `detector.py`, `fusion.py`, `models.py`, `ocr.py` | 18 | 17 |
+| `audio_ai` | `analyzer.py`, `backends.py` | 44 | 33 |
+| `vjepa` | `features.py`, `heads.py`, new `media.py` | 32 | 15 |
+| `profiles` | `detection.py`, `registry.py` | 6 | 4 |
+| `planner` | `planner.py`, `refinement.py` | 12 | 14 |
+| `social` | `__init__.py`, `metadata.py`, `thumbnails.py` | 31 | 22 |
+
+Tests changed: `test_signals_probe.py` (new), `test_social.py`, `test_vjepa.py`
+(74 lines added, 10 removed). The duplicate social network fixture was removed;
+the suite-wide fixture still blocks network access. Regression tests cover stream
+versus container duration, cover art, optional probe failures, social overlap ties,
+and sanitized fallback logs. Existing audio tests cover partial backend failures.
+The ten-minute benchmark remains marked with its explicit opt-in skip condition.
+
+Documentation changed: `signals.md`, `audio_ai.md`, `vjepa.md`,
+`game_profiles.md`, `planner.md`, `social.md`. Removed stale task ownership and
+absent-module claims; documented the remaining planner/renderer API distinction.
+
+Commands run from this worktree root on the Linux runner:
+
+```sh
+bash tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live'"
+bash tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_signals.py tests/test_signals_probe.py tests/test_signals_benchmark.py tests/test_audio_ai.py tests/test_vjepa.py tests/test_game_profiles.py tests/test_planner.py tests/test_social.py --durations=10"
+bash tools/remote_run.sh "set -o pipefail && cd full_app && python -m pytest -q -m 'not live' --tb=short 2>&1 | tee /tmp/lim-qa2-after.log"
+```
+
+The first command is the before/after full-suite check. Before: 597 passed,
+8 failed, 2 errors, 14 skipped, 1 deselected (252.48 s; exit 1).
+The targeted command: 175 passed, 5 skipped (48.31 s; exit 0).
+The first after-run lost its SSH connection at 80% (exit 1), with no final test
+summary. The third command retries the full suite and retains remote output.
+Completed retry: 604 passed, 8 failed, 2 errors, 14 skipped, 1 deselected
+(247.47 s; exit 1). The failed/error test IDs and causes match the baseline:
+no new failures, with seven additional passing regression cases.
+The slowest targeted test took 3.55 s. `git diff --check` passed (exit 0).
+
+Baseline failures outside QA-2's allowed paths:
+
+- `tests/e2e/test_e2e_pipeline.py`: two setup errors and the optional-stage test
+  reference removed `app.WORKSPACE`.
+- `tests/test_capture.py::test_synthetic_video_flows_through_real_api`: expects
+  the older pipeline `analyze` call.
+- `tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render`:
+  three presets patch removed `server.pipeline.importlib`.
+- `tests/test_perf.py::test_single_pass_streams_duration`: slow motion, 2x, and
+  0.25x cases disagree with the legacy renderer's output duration.
+
+These integration failures require work outside this task's scope. Optional
+PySceneDetect, model inference, and performance skips are not evidence of a pass.
+
+Try the unchanged module commands at the top of this document or run the targeted
+suite above; its videos and audio are synthetic. Real pretrained inference and
+the opt-in performance benchmark were not run during this maintenance pass.

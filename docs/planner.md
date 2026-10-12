@@ -1,10 +1,9 @@
-# Edit planner v2 (EXT-12)
+# Edit planner v2
 
 `full_app/planner` produces a deterministic, validated Pydantic `RenderPlan`.
 It needs no network, media files, model weights, or new dependencies. The optional
-Gemini pass rewrites caption wording only. The legacy app remains operational;
-wiring the v2 API into `app.py` and the EXT-04 renderer belongs to the integrator
-because those paths are outside EXT-12's allowed paths.
+Gemini pass rewrites caption wording only. The pipeline still uses its separate
+Gemini planning path; this package is an opt-in library.
 
 ## Try it
 
@@ -74,12 +73,11 @@ Short budgets combine hook and climax into one clip; insufficient footage or
 variety yields a shorter plan with notes. No qualifying footage yields a valid
 empty plan. Callers should skip rendering that plan.
 
-## Local RenderPlan contract for EXT-04 / EXT-06
+## RenderPlan contract
 
-EXT-04's task specifies the declarative concept but does not provide a shared
-schema in this worktree. `planner.models.RenderPlan` is the local v2 contract;
-the integrator must reconcile field names with the eventual renderer. Export its
-JSON Schema with `RenderPlan.model_json_schema()` and JSON with `model_dump_json()`.
+`planner.models.RenderPlan` differs from `render.plan.RenderPlan`; callers need
+an adapter between them. Export its JSON Schema with
+`RenderPlan.model_json_schema()` and JSON with `model_dump_json()`.
 
 Every placement uses **absolute output-timeline** `start` and `duration` plus the
 owning timeline `clip_id`. Source timestamps appear only on `clips`. There are no
@@ -112,7 +110,7 @@ Effect choices:
   not an additional speed multiplier. Do not blindly apply both existing filters.
 - Cinematic: `vignette` and fade-in. Clean: no video effects or SFX; source captions,
   reaction intent and a minimal outro remain. Meme text is specific to mean mode.
-- EXT-06 reaction slots occur at clutch/multikill/climax peaks, excluding separate
+- Reaction slots occur at clutch/multikill/climax peaks, excluding separate
   teasers. Preferred labels are respected except roast/bruh/fail become wholesome
   in nice mode. Corners are top-right for vertical and bottom-right otherwise.
   The reaction selector resolves actual assets, speaker rotation, and repeats;
@@ -123,7 +121,7 @@ Effect choices:
 
 The renderer must implement timed effect windows and escape literal caption text.
 The existing registry's static FFmpeg filter strings are not a complete timed
-renderer; mapping these declarative placements is an EXT-04 integration concern.
+renderer; callers must translate these declarative placements.
 No legacy `EditPlan` conversion is supplied because it would discard text,
 reaction, music and placement timing information.
 
@@ -152,8 +150,7 @@ refiner = GeminiRefiner(client, model=os.environ["GEMINI_MODEL"])
 ```
 
 Keys stay in runtime environment variables. The planner does not read `.env` or
-choose a provider/model implicitly. Unit tests inject a mocked client; no live
-smoke test was needed for EXT-12. Refinement is opt-in creative text generation,
+choose a provider/model implicitly. Unit tests inject a mocked client. Refinement is opt-in creative text generation,
 not a content moderation guarantee.
 
 ## Verification
@@ -169,4 +166,4 @@ Tests cover nice/mean arcs, budget and speed accounting, source/action bounds,
 variety including fallback cases, four styles, reaction timing, registry names,
 strict input and timeline validation, mocked Gemini success/failure and 200 seeded
 randomized inputs. These are planner-only tests: no synthetic video is needed,
-and end-to-end FFmpeg execution awaits the renderer integration.
+and they do not exercise a planner-to-renderer adapter.

@@ -1,4 +1,4 @@
-# Montage share kits (EXT-14)
+# Montage share kits
 
 `social.build_share_kit(job_dir, clips, plan, game) -> pathlib.Path` creates a
 posting kit at `job_dir.parent/share/job_dir.name/`. It is an opt-in library;
@@ -119,6 +119,7 @@ enable the corresponding flag. The client follows the existing
 Each enabled pass makes at most one call, without retries (two total). API keys
 alone never enable network access. Metadata errors or malformed JSON use the
 deterministic title/description templates. Image errors keep the local frame.
+Fallbacks log generic messages without provider exception text.
 Generated imagery is composed locally afterward so output sizes and text bounds
 remain fixed. Provider exceptions are not serialized because they may contain
 credentials. The task tests mock both calls; no live calls were needed.
@@ -151,7 +152,5 @@ connections, and mock Gemini/SAM. They cover full kit contents, safe text bounds
 aspect ratios, scoring, ordering/speed/intro timing, limits/tags, fallback behavior,
 caption export, path containment, and cleanup after an unsuccessful export.
 
-Future integration can call this library after rendering and expose the returned
-directory through a download endpoint. Route/UI wiring is outside EXT-14's allowed
-paths. Main app requirements were intentionally not edited; integrations must
-include `social/requirements.txt` in their install step.
+Call this library after rendering. Install `social/requirements.txt` when
+enabling share-kit exports.

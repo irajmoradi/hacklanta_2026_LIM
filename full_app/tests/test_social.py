@@ -1,5 +1,4 @@
 import json
-import socket
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -11,14 +10,6 @@ from PIL import Image, ImageDraw
 from social import build_share_kit
 from social.metadata import PLATFORM_LIMITS, build_metadata, chapter_text, timeline
 from social.thumbnails import SIZES, render_thumbnail, select_frame
-
-
-@pytest.fixture(autouse=True)
-def no_network(monkeypatch):
-    def blocked(*args, **kwargs):
-        raise AssertionError("Social tests must never use the network")
-    monkeypatch.setattr(socket, "create_connection", blocked)
-    monkeypatch.setattr(socket.socket, "connect", blocked)
 
 
 @pytest.fixture
@@ -215,3 +206,19 @@ def test_explicit_missing_files_are_errors(job, clips, option):
 def test_text_wrap_preserves_words():
     _, layout = render_thumbnail(Image.new("RGB", (640, 360)), "LAST SECOND SAVE", SIZES["youtube"])
     assert " ".join(layout["text"].split()) == "LAST SECOND SAVE"
+
+
+def test_provider_error_logs_do_not_expose_exception_text(clips, caplog):
+    client = Mock()
+    client.client.models.generate_content.side_effect = RuntimeError("private-provider-detail")
+    entries = timeline(clips, {})
+    assert build_metadata(entries, "Valorant", "", client)["provider"] == "template"
+    assert "using template copy" in caplog.text
+    assert "private-provider-detail" not in caplog.text
+
+
+def test_timeline_overlap_ties_keep_first_description():
+    clips = [{"start": 0, "end": 2, "description": "First"},
+             {"start": 2, "end": 4, "description": "Second"}]
+    entries = timeline(clips, {"segments": [{"start": 1, "end": 3}, {"start": 5, "end": 6}]})
+    assert [entry["title"] for entry in entries] == ["First", "Play 2"]

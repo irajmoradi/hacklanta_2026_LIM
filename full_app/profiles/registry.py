@@ -27,7 +27,7 @@ class Box:
         if self.anchor not in {"stretch", "left", "center", "right"}:
             raise ValueError("Unknown horizontal HUD anchor")
 
-    def pixels(self, width: int, height: int, *, letterboxed: bool = False):
+    def pixels(self, width: int, height: int, *, letterboxed: bool = False) -> tuple[int, int, int, int]:
         """Return a clamped, exclusive-right/bottom crop; baseline is 16:9.
 
         Native HUDs retain height-relative size and their horizontal anchor.

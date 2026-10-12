@@ -1,7 +1,6 @@
-# Shared game profiles (EXT-09)
+# Shared game profiles
 
-The package is an additive integration surface for EXT-01 candidate detection and
-EXT-02 VLM scoring. It does not change Flask routes or the current Gemini prompts.
+The package supplies game-specific regions, vocabulary, and detection. It does not change Flask routes or the current Gemini prompts.
 Profiles are JSON data loaded into standard-library dataclasses; no Python ML,
 OCR, image or model dependency is required to import the package.
 
@@ -109,7 +108,7 @@ local detection is generic and decoding yielded frames. It returns a canonical
 `(name, confidence)` with confidence in `[0,1]`. Unknown names and nonfinite scores
 raise `ValueError`; hook exceptions propagate. There is no built-in network client
 or automatic paid call. Callers must enforce live-smoke authorization and budgets
-before installing any network-backed hook. EXT-09 uses no API keys or live calls.
+before installing any network-backed hook. The built-in detector uses no API keys or live calls.
 
 ## Adding a game
 

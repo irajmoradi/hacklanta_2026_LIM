@@ -37,7 +37,7 @@ def test_windowing_and_padding(video):
         windows(float("nan"), cfg)
 
 
-def test_cache_batching_and_invalidation(video, tmp_path, monkeypatch):
+def test_cache_batching_and_invalidation(video, tmp_path):
     class Counting(TinyEncoder):
         calls = []
         def encode(self, videos):

@@ -1,9 +1,8 @@
-# V-JEPA 2 gameplay signal scaffold (EXT-13)
+# V-JEPA 2 gameplay signals
 
 This optional package freezes the video encoder, caches window embeddings, and trains
 a three-class linear softmax probe (`none`, `kill`, `death`) plus a Bradley-Terry
-pairwise linear ranker. Train a separate head for each game. No GPU job was deployed,
-no weights downloaded, and no Gemini calls were made for this task. The tiny seeded
+pairwise linear ranker. Train a separate head for each game. The tiny seeded
 random projection is a wiring-test encoder, not a useful gameplay model.
 
 ## Install and verify
@@ -192,7 +191,7 @@ Doubling overlap roughly doubles cost. Full encoder fine-tuning is outside this
 estimate. Probe training is CPU-only and reuses embeddings. At 1024 float32 values
 per window, 144,000 raw embeddings take about 0.55 GiB before NPZ/filesystem overhead.
 
-## Opt-in inference / EXT-01 integration boundary
+## Opt-in inference and fusion
 
 ```bash
 export VJEPA_ENABLED=1
@@ -211,11 +210,8 @@ curves = fusion_signals("match.mp4", game="valorant", device="cuda")
 
 Scores are overlap-weighted window averages for each `[second,second+1)` bucket,
 including a final fractional second. No-event scoring does not imply a kill.
-EXT-01's `signals/` implementation is absent from this branch and is outside
-EXT-13's allowed paths. The integrator should add `fusion_signals(...)` to its
-per-second curves before normalization, with zero default weights; then aggregate
-those names into `Candidate.signals` just like audio/motion. Verify the concrete
-EXT-01 curve contract after merging. No app route or base behavior is modified.
+`fusion_signals(...)` returns optional curves; `signals.detect_candidates` does
+not consume them automatically. No app route enables V-JEPA inference.
 Actual gameplay quality, GPU memory/throughput, pretrained-HF execution and deployed
 Modal behavior remain unverified; tests cover the offline scaffold and mocked HF
 boundary only.

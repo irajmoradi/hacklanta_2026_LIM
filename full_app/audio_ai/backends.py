@@ -17,7 +17,7 @@ CLASS_GROUPS = {
 }
 
 
-def transcribe(samples, model="tiny", allow_downloads=False):
+def transcribe(samples: np.ndarray, model: str = "tiny", allow_downloads: bool = False) -> list[Word]:
     from faster_whisper import WhisperModel
 
     engine = WhisperModel(model, device="cpu", compute_type="int8",
@@ -28,7 +28,7 @@ def transcribe(samples, model="tiny", allow_downloads=False):
             for segment in segments for w in (segment.words or [])]
 
 
-def speech_activity(samples):
+def speech_activity(samples: np.ndarray) -> np.ndarray:
     """WebRTC decisions on 20 ms, mono PCM16 frames (including final padding)."""
     import webrtcvad
 
@@ -41,7 +41,7 @@ def speech_activity(samples):
     ])
 
 
-def classify(samples, model_path):
+def classify(samples: np.ndarray, model_path: str | Path) -> list[tuple[float, float, dict[str, float]]]:
     """YAMNet local SavedModel; 0.96 s receptive fields with 0.48 s hop."""
     import tensorflow_hub as hub
 
@@ -71,7 +71,7 @@ def classify(samples, model_path):
     return result
 
 
-def phrase_events(words):
+def phrase_events(words: list[Word]) -> list[AudioEvent]:
     """Lexical excitement/surprise/frustration cues, not an emotion diagnosis."""
     phrases = {
         ("lets", "go"): "excitement", ("let", "us", "go"): "excitement",

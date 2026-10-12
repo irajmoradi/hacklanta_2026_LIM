@@ -8,7 +8,7 @@ from .models import (
 )
 
 
-def _peak(clip):
+def _peak(clip: RankedClip) -> float:
     s = clip.signals
     for value in (s.action_time, s.fail_time if clip.label == "lowlight" else s.kill_time):
         if value is not None:
@@ -16,7 +16,7 @@ def _peak(clip):
     return (clip.start + clip.end) / 2
 
 
-def _kind(clip):
+def _kind(clip: RankedClip) -> str:
     s = clip.signals
     return s.kind.strip().casefold() or (
         "clutch" if s.clutch else "multikill" if s.multikill else
@@ -24,25 +24,25 @@ def _kind(clip):
     )
 
 
-def _speed(clip, options):
+def _speed(clip: RankedClip, options: PlannerOptions) -> float:
     return 0.5 if clip.signals.clutch and options.style in ("hype montage", "cinematic") else 1.0
 
 
-def _capacity(clip, options):
+def _capacity(clip: RankedClip, options: PlannerOptions) -> float:
     return min(options.max_clip_length, (clip.end - clip.start) / _speed(clip, options))
 
 
-def _trim(clip, duration, speed):
+def _trim(clip: RankedClip, duration: float, speed: float) -> tuple[float, float]:
     span = duration * speed
     # Keep lead-in and some aftermath; clamp without ever leaving source bounds.
     start = max(clip.start, min(_peak(clip) - span * 0.65, clip.end - span))
     return start, start + span
 
 
-def _decorate(plan, sources):
+def _decorate(plan: RenderPlan, sources: dict[str, RankedClip]) -> None:
     loud = plan.style in ("hype montage", "meme edit")
     cinematic = plan.style == "cinematic"
-    for i, c in enumerate(plan.clips):
+    for c in plan.clips:
         original = sources[c.source_id]
         end = c.start + c.duration
 
@@ -131,7 +131,7 @@ def plan_edit(
         plan.notes.append("Requested label unavailable; using the strongest available moment.")
         preferred = eligible
     # Stable tie break independent of the caller's list ordering.
-    best = sorted(preferred, key=lambda c: (-c.score, c.id))[0]
+    best = min(preferred, key=lambda c: (-c.score, c.id))
     minimum = options.min_clip_length
     hook_duration = min(2, options.max_clip_length, best.end - best.start)
     hook_duration = max(minimum, hook_duration)
@@ -167,10 +167,9 @@ def plan_edit(
                     selected.append(item)
                     remaining -= duration
                     break
-        candidates = [c for c in candidates if c.id not in {item[0].id for item in selected}]
+        selected_ids = {item[0].id for item in selected}
+        candidates = [c for c in candidates if c.id not in selected_ids]
         # Reconsider rejected candidates after a different kind creates space.
-        # This fills the budget with alternatives instead of discarding time
-        # already allocated to similar clips.
         while remaining >= minimum:
             for c in candidates:
                 duration = min(_capacity(c, options), remaining)

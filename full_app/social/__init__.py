@@ -1,35 +1,34 @@
 """Opt-in, offline-first montage share kits. See docs/social.md."""
 
 import json
+import logging
 from pathlib import Path
 import shutil
-import subprocess
 import tempfile
 
 from PIL import Image
+
+from vjepa.media import probe_media
 
 from .metadata import build_metadata, chapter_text, seconds, timeline
 from .thumbnails import SIZES, render_thumbnail, select_frame
 
 __all__ = ["build_share_kit"]
+logger = logging.getLogger(__name__)
 
 
-def _local_file(job, name):
+def _local_file(job: Path, name: str | Path) -> Path:
     path = (job / name).resolve()
     if not path.is_relative_to(job) or not path.is_file():
         raise ValueError(f"Expected a file inside the job directory: {name}")
     return path
 
 
-def _duration(path):
-    result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)],
-        capture_output=True, text=True, check=True, timeout=30,
-    )
-    return seconds(json.loads(result.stdout)["format"]["duration"])
+def _duration(path: Path) -> float:
+    return seconds(probe_media(path, entries="format=duration", timeout=30)["format"]["duration"])
 
 
-def _srt_time(value):
+def _srt_time(value: float) -> str:
     total = round(seconds(value) * 1000)
     hours, rem = divmod(total, 3600000)
     minutes, rem = divmod(rem, 60000)
@@ -56,7 +55,7 @@ def _captions(job, plan, destination, duration):
             shutil.copy2(_local_file(job, name), destination)
 
 
-def build_share_kit(job_dir, clips, plan, game, *, client=None):
+def build_share_kit(job_dir, clips, plan, game, *, client=None) -> Path:
     """Export to job_dir.parent/share/job_dir.name; return its Path.
 
     Network is disabled unless client is explicitly supplied AND an associated
@@ -120,7 +119,7 @@ def build_share_kit(job_dir, clips, plan, game, *, client=None):
                     frame = enhanced.convert("RGB")
                 image_provider = "gemini"
             except Exception:
-                pass
+                logger.warning("Image generation unavailable; using local frame")
         title = options.get("thumbnail_text") or top["title"]
         metadata["thumbnails"] = {}
         for variant, size in SIZES.items():
