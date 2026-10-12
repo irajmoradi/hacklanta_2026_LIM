@@ -89,6 +89,74 @@ FIX-1 makes no paid calls and does not read the supplied Gemini key.
   outside scope. P2-13 jobs tests already patch the correct lookup in this checkout.
 - P3: removed uncalled `_fmt_time`; corrected Docker's queue ownership comment.
 
+## FIX-1 validation (2026-10-12)
+
+Branch: `ext/FIX-1`. Implementation milestones: `9caddc6` and `692c9aa`;
+the final follow-up preserves the Flask 3.0 dependency floor and records results.
+No push or merge was performed. All test commands below used the Linux runner.
+The supplied key file was not read and no paid smoke test was performed.
+
+```sh
+tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live'"
+```
+
+Exit **0: 934 passed, 19 skipped, 1 deselected** (446.68 seconds). This run
+includes all new regressions. The final request-limit compatibility adjustment
+was additionally verified by the focused command below on both the normal runner
+environment and Flask 3.0.3. Skipped tests are not claimed as covered.
+
+```sh
+tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_jobs.py tests/test_server_limits.py tests/test_security_helpers.py tests/test_security_clients.py"
+```
+
+The final focused run exited **0: 110 passed, 3 skipped** (39.32 seconds). It covers authenticated
+ownership across every route alias, malformed plan rejection without mutation,
+caption/title compatibility, real isolated rendering, HTTP cancellation, hung
+process-group cleanup, inherited memory/file limits, upload quotas, retention,
+event bounds, JSON body bounds and eight concurrent real Gunicorn streams with
+timely health/status requests. Gunicorn was installed on the runner using:
+
+```sh
+tools/remote_run.sh "python -m pip install -q gunicorn==23.0.0 && cd full_app && python -m pytest -q tests/test_jobs.py tests/test_server_limits.py tests/test_security_helpers.py tests/test_security_clients.py --tb=short"
+```
+
+That earlier focused run exited **0: 103 passed, 3 skipped** before the final
+regressions were added. The Flask floor check used an isolated temporary package
+directory (not a change to project dependencies):
+
+```sh
+tools/remote_run.sh "cd full_app && python - <<'PY'
+import os, subprocess, sys, tempfile
+with tempfile.TemporaryDirectory(prefix='fix1-flask30-') as target:
+ subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', '--target', target, 'Flask==3.0.3'], check=True)
+ env = dict(os.environ, PYTHONPATH=target + os.pathsep + os.getcwd())
+ result = subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_jobs.py', 'tests/test_server_limits.py', 'tests/test_security_helpers.py', 'tests/test_security_clients.py'], env=env)
+ sys.exit(result.returncode)
+PY"
+```
+
+Exit **0: 110 passed, 3 skipped** (43.45 seconds). Local `git diff --check`
+also exited **0**. No Docker image build or Windows resource-limit test was run.
+
+Intermediate failure ledger: the initial focused commands exited 1 with 29 and
+then 6 failures while probe memory/thread defaults, isolated test mocks, idle SSE
+expectations and process-reaping assertions were corrected. The first full run
+(`-m 'not live' --tb=short`) exited 1 with **925 passed, 1 failed, 19 skipped,
+1 deselected**: the killed child disappeared during a `/proc` assertion. The
+corrected subsequent full run exited 0 with **930 passed, 19 skipped,
+1 deselected**, before the last four regression cases were added.
+
+Changed files: `Dockerfile`, `docker-compose.yml`, `full_app/app.py`,
+`full_app/server/{api,auth,legacy,media,queue,resources,security,stage_worker,store,validation}.py`,
+`full_app/tests/test_jobs.py`, `full_app/tests/test_server_limits.py`,
+`docs/api.md`, and `docs/security.md`.
+
+To try: run `python full_app/app.py` and open `http://127.0.0.1:8000`, or follow
+the upload/analyze/plan/render requests in [api.md](api.md). Shared/Compose API
+clients must supply an application bearer token. Synthetic explicit-plan render
+tests exercise rendering without model calls. Remaining work and deployment
+limits are listed above; no unsupported music path is silently accepted.
+
 ## Historical SEC-01 evidence
 
 The following is the earlier SEC-01 validation ledger, not the current FIX-1 suite

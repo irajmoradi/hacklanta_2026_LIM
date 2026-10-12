@@ -4,11 +4,22 @@ import ipaddress
 import json
 import os
 
-from flask import g, jsonify, request
+from flask import current_app, g, jsonify, request
 from .security import api_headers, RateLimiter
 
 
 def install_auth(app, store):
+    # Flask 3.0 (the dependency floor) has no per-request limit setter.
+    class BoundedRequest(app.request_class):
+        @property
+        def max_content_length(self):
+            maximum = super().max_content_length
+            if self.is_json:
+                json_limit = current_app.config.get('MAX_JSON_BYTES', 2 * 1024**2)
+                return min(maximum, json_limit) if maximum is not None else json_limit
+            return maximum
+
+    app.request_class = BoundedRequest
     tokens = app.config.get('API_TOKENS', json.loads(os.getenv('LIM_API_TOKENS') or '{}'))
     tokens = dict(tokens)
     single = app.config.get('API_TOKEN', os.getenv('LIM_API_TOKEN', ''))
@@ -34,8 +45,6 @@ def install_auth(app, store):
             return None
         if not limiter.allow(request.remote_addr or 'unknown'):
             return jsonify(error='Too many requests'), 429, {'Retry-After': '60'}
-        if request.is_json:
-            request.max_content_length = app.config.get('MAX_JSON_BYTES', 2 * 1024**2)
         g.owner = None
         supplied = request.headers.get('Authorization', '').encode('utf-8')
         for owner, token in tokens.items():
