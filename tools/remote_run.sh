@@ -7,7 +7,7 @@ set -euo pipefail
 RUNNER_IP="${RUNNER_IP:-$(cat "$(dirname "$0")/runner_ip" 2>/dev/null || true)}"
 [ -n "$RUNNER_IP" ] || { echo "RUNNER_IP not set (tools/runner_ip)"; exit 2; }
 KEY="${RUNNER_KEY:-$HOME/.ssh/village_vultr}"
-ROOT="$(git rev-parse --show-toplevel)"
+ROOT="$(git rev-parse --show-toplevel)"; command -v cygpath >/dev/null && ROOT="$(cygpath -u "$ROOT")"
 NAME="$(basename "$ROOT")"
 SSH=(ssh -i "$KEY" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=20 "root@$RUNNER_IP")
 rsync -az --delete -e "ssh -i $KEY -o StrictHostKeyChecking=accept-new" \
