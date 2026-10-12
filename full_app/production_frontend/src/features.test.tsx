@@ -141,6 +141,7 @@ it('edits chaos, reaction size and clean policy independently', async () => {
   const slider = await screen.findByRole('slider', {name: 'Chaos'});
   fireEvent.change(slider, {target: {value: '72'}});
   expect(slider).toHaveValue('72');
+  expect(screen.getByRole('checkbox', {name: /^Story planner v2/})).toBeChecked();
   fireEvent.change(screen.getByLabelText('Reaction size'), {target: {value: 'medium'}});
   expect(screen.getByLabelText('Reaction size')).toHaveValue('medium');
   await userEvent.click(screen.getByRole('checkbox', {name: /Clean reactions/}));
