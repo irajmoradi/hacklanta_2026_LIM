@@ -1,26 +1,25 @@
 """Decode once, measure 20 ms frames, and aggregate evidence on a second grid."""
 
-import json
 import math
 from pathlib import Path
 import subprocess
 import tempfile
+from collections.abc import Iterable
 
 import numpy as np
+
+from vjepa.media import probe_media
 
 from . import backends
 from .models import AudioEvent, AudioSecond, AudioSignals, Word
 
-RATE = 16000
+RATE = backends.SAMPLE_RATE
 FRAME = 320
 
 
-def _decode(path, track):
+def _decode(path: str | Path, track: int) -> tuple[np.ndarray, float, bool]:
     path = Path(path).resolve(strict=True)
-    probe = subprocess.run([
-        "ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)
-    ], capture_output=True, text=True, check=True, timeout=60)
-    info = json.loads(probe.stdout)
+    info = probe_media(path, timeout=60)
     streams = [s for s in info["streams"] if s["codec_type"] == "audio"]
     duration = float(info.get("format", {}).get("duration", 0))
     if not math.isfinite(duration) or duration < 0:
@@ -42,13 +41,14 @@ def _decode(path, track):
     return samples, max(duration, len(samples) / RATE), True
 
 
-def _features(samples, duration):
+def _features(samples: np.ndarray, duration: float) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Compute frame features in bounded FFT batches, including the short tail."""
     count = math.ceil(duration * 50)
     rms, voice, flux = (np.zeros(count) for _ in range(3))
     weights = np.minimum(.02, np.maximum(0, duration - np.arange(count) / 50))
     freqs = np.fft.rfftfreq(FRAME, 1 / RATE)
     band = (freqs >= 250) & (freqs <= 3400)
+    window = np.hanning(FRAME)
     previous = np.zeros(FRAME // 2 + 1)
     for base in range(0, count, 500):
         n = min(500, count - base)
@@ -56,7 +56,7 @@ def _features(samples, duration):
         frames = np.pad(chunk, (0, n * FRAME - len(chunk))).reshape(n, FRAME)
         lengths = np.clip(duration * RATE - np.arange(base, base + n) * FRAME, 1, FRAME)
         rms[base:base + n] = np.sqrt(np.sum(frames ** 2, axis=1) / lengths)
-        spectrum = np.abs(np.fft.rfft(frames * np.hanning(FRAME), axis=1))
+        spectrum = np.abs(np.fft.rfft(frames * window, axis=1))
         power = spectrum ** 2
         voice[base:base + n] = power[:, band].sum(axis=1) / (power.sum(axis=1) + 1e-12)
         normalized = spectrum / (spectrum.sum(axis=1, keepdims=True) + 1e-12)
@@ -66,7 +66,8 @@ def _features(samples, duration):
     return rms, voice, flux, weights
 
 
-def _interval_events(rows, key, kind, source, threshold=.5):
+def _interval_events(rows: list[AudioSecond], key: str, kind: str,
+                     source: str, threshold: float = .5) -> list[AudioEvent]:
     result = []
     for row in rows:
         score = row.signals[key]
@@ -81,6 +82,33 @@ def _interval_events(rows, key, kind, source, threshold=.5):
             result.append(AudioEvent(start=row.start, end=row.end, type=kind,
                                      score=score, signals={key: score}, source=source))
     return result
+
+
+def _transcript(words: Iterable[Word | dict], duration: float) -> list[Word]:
+    result = []
+    for value in words:
+        word = Word.model_validate(value)
+        if not all(math.isfinite(v) for v in (word.start, word.end, word.probability)):
+            continue
+        word.start, word.end = max(0, word.start), min(duration, word.end)
+        word.probability = float(np.clip(word.probability, 0, 1))
+        if word.start < word.end:
+            result.append(word)
+    return sorted(result, key=lambda word: (word.start, word.end))
+
+
+def _classifications(predictions: Iterable[tuple[float, float, dict[str, float]]],
+                     count: int) -> list[dict[str, float]]:
+    classified = [{kind: 0.0 for kind in backends.CLASS_GROUPS} for _ in range(count)]
+    for start, end, scores in predictions:
+        if not math.isfinite(start) or not math.isfinite(end) or end <= start:
+            raise ValueError("Invalid classifier interval")
+        for i in range(max(0, int(start)), min(count, math.ceil(end))):
+            for kind, score in scores.items():
+                if kind not in classified[i] or not math.isfinite(score) or not 0 <= score <= 1:
+                    raise ValueError("Invalid classifier score")
+                classified[i][kind] = max(classified[i][kind], score)
+    return classified
 
 
 def analyze(video_path, *, audio_track=0, speech="auto", whisper_model="tiny",
@@ -127,18 +155,9 @@ def analyze(video_path, *, audio_track=0, speech="auto", whisper_model="tiny",
     if has_audio and len(samples) and speech != "off":
         try:
             words = backends.transcribe(samples, whisper_model, allow_model_downloads)
-            for value in words:
-                word = Word.model_validate(value)
-                if not all(math.isfinite(v) for v in (word.start, word.end, word.probability)):
-                    continue
-                word.start, word.end = max(0, word.start), min(duration, word.end)
-                word.probability = float(np.clip(word.probability, 0, 1))
-                if word.start < word.end:
-                    result.words.append(word)
-            result.words.sort(key=lambda w: (w.start, w.end))
+            result.words = _transcript(words, duration)
             result.backends["speech"] = "faster-whisper"
         except Exception as exc:
-            result.words.clear()
             fallback("Whisper", exc)
     if has_audio and len(samples) and separator is not None:
         try:
@@ -194,15 +213,7 @@ def analyze(video_path, *, audio_track=0, speech="auto", whisper_model="tiny",
         try:
             predictions = backends.classify(samples, yamnet_model)
             # Replace only after the entire optional backend succeeds.
-            classified = [{kind: 0.0 for kind in backends.CLASS_GROUPS} for _ in result.seconds]
-            for start, end, scores in predictions:
-                if not math.isfinite(start) or not math.isfinite(end) or end <= start:
-                    raise ValueError("Invalid classifier interval")
-                for i in range(max(0, int(start)), min(len(classified), math.ceil(end))):
-                    for kind, score in scores.items():
-                        if kind not in classified[i] or not math.isfinite(score) or not 0 <= score <= 1:
-                            raise ValueError("Invalid classifier score")
-                        classified[i][kind] = max(classified[i][kind], score)
+            classified = _classifications(predictions, len(result.seconds))
             for row, scores in zip(result.seconds, classified):
                 for kind, score in scores.items():
                     key = "audio_gunfire_density" if kind == "gunfire" else f"audio_{kind}"

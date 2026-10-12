@@ -11,6 +11,8 @@ from zipfile import BadZipFile
 
 import numpy as np
 
+from .media import probe_media
+
 
 @dataclass(frozen=True)
 class WindowConfig:
@@ -28,7 +30,7 @@ class WindowConfig:
             raise ValueError("positive fps, stride <= window length, resolution multiple of 16 required")
 
 
-def windows(duration, config):
+def windows(duration: float, config: WindowConfig) -> list[tuple[float, float]]:
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError("video duration must be finite and positive")
     length = config.frames / config.fps
@@ -42,17 +44,14 @@ def windows(duration, config):
     return result
 
 
-def video_duration(path):
-    result = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
-                             "-show_entries", "stream=duration:format=duration", "-of", "json", str(path)],
-                            check=True, capture_output=True, text=True)
-    data = json.loads(result.stdout)
+def video_duration(path: str | Path) -> float:
+    data = probe_media(path, select_streams="v:0", entries="stream=duration:format=duration")
     if not data.get("streams"):
         raise ValueError("input has no video stream")
     return float(data["streams"][0].get("duration", data["format"]["duration"]))
 
 
-def decode(path, start, end, config):
+def decode(path: str | Path, start: float, end: float, config: WindowConfig) -> np.ndarray:
     filters = f"fps={config.fps},scale={config.resolution}:{config.resolution}"
     result = subprocess.run(["ffmpeg", "-v", "error", "-ss", str(start), "-i", str(path),
                              "-t", str(end - start), "-vf", filters, "-frames:v", str(config.frames),

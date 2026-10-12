@@ -2,14 +2,18 @@
 
 import importlib
 import io
+import logging
+from pathlib import Path
 import subprocess
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 
 SIZES = {"youtube": (1280, 720), "vertical": (1080, 1920)}
+logger = logging.getLogger(__name__)
 
 
-def select_frame(video, start, end, samples=8):
+def select_frame(video: str | Path, start: float, end: float,
+                 samples: int = 8) -> tuple[Image.Image, dict]:
     if end <= start or not 1 <= samples <= 24:
         raise ValueError("Invalid frame sampling interval or count")
     candidates = []
@@ -38,7 +42,7 @@ def select_frame(video, start, end, samples=8):
     return best[0], {"timestamp": best[1], "sharpness": best[2], "action": best[3]}
 
 
-def saliency_center(image):
+def saliency_center(image: Image.Image) -> tuple[float, float]:
     small = image.resize((64, 64)).convert("L").filter(ImageFilter.FIND_EDGES)
     # Ignore edge borders and downweight HUD edges with a center prior.
     cells = []
@@ -92,7 +96,8 @@ def fit_text(draw, text, area):
     raise ValueError("Thumbnail text cannot fit safe area")
 
 
-def render_thumbnail(frame, text, size, subject_cutout=False):
+def render_thumbnail(frame: Image.Image, text: str, size: tuple[int, int],
+                     subject_cutout: bool = False) -> tuple[Image.Image, dict]:
     center = saliency_center(frame)
     # Center the saliency point in the crop, clamped to image boundaries.
     w, h = frame.size
@@ -115,7 +120,7 @@ def render_thumbnail(frame, text, size, subject_cutout=False):
             canvas.alpha_composite(cutout, position)
             mode = "sam"
         except Exception:
-            pass
+            logger.warning("Subject cutout unavailable; using saliency composition")
     width, height = size
     area = (int(width * .08), int(height * .12), int(width * .88), int(height * .38))
     overlay = Image.new("RGBA", size)

@@ -1,7 +1,10 @@
 """Deterministic social copy and montage-relative chapter timing."""
 
 import json
+import logging
 import math
+
+logger = logging.getLogger(__name__)
 
 # Conservative export budgets, not a promise about every publishing API.
 PLATFORM_LIMITS = {
@@ -17,7 +20,7 @@ GAME_TAGS = {
 }
 
 
-def seconds(value):
+def seconds(value: str | float) -> float:
     if isinstance(value, str) and ":" in value:
         parts = value.split(":")
         value = sum(float(p) * 60 ** i for i, p in enumerate(reversed(parts)))
@@ -27,7 +30,7 @@ def seconds(value):
     return value
 
 
-def bounds(clip):
+def bounds(clip: dict) -> tuple[float, float]:
     start = seconds(clip.get("source_start", clip.get("start_seconds", clip.get("start", 0))))
     end = seconds(clip.get("source_end", clip.get("end_seconds", clip.get("end", 0))))
     if end <= start:
@@ -35,27 +38,29 @@ def bounds(clip):
     return start, end
 
 
-def clean(value, limit=160):
+def clean(value: object, limit: int = 160) -> str:
     return " ".join(str(value).split())[:limit].strip()
 
 
-def timestamp(value):
+def timestamp(value: float) -> str:
     total = int(value)
     hours, rem = divmod(total, 3600)
     minutes, secs = divmod(rem, 60)
     return f"{hours:02}:{minutes:02}:{secs:02}" if hours else f"{minutes:02}:{secs:02}"
 
 
-def timeline(clips, plan, intro_duration=0):
+def timeline(clips: list[dict], plan: dict, intro_duration: float = 0) -> list[dict]:
     """Match selected segments to clip descriptions; honor renderer speed effects."""
     segments = plan.get("segments", clips)
     if not segments:
         raise ValueError("At least one rendered segment is required")
     result = []
     cursor = seconds(intro_duration)
+    clip_bounds = [(bounds(clip), clip) for clip in clips]
     for index, segment in enumerate(segments):
         start, end = bounds(segment)
-        matches = [(max(0, min(end, bounds(c)[1]) - max(start, bounds(c)[0])), c) for c in clips]
+        matches = [(max(0, min(end, right) - max(start, left)), clip)
+                   for (left, right), clip in clip_bounds]
         overlap, match = max(matches, key=lambda item: item[0], default=(0, {}))
         clip = match if overlap else {}
         speed = float(segment.get("speed", 1))
@@ -127,7 +132,7 @@ def build_metadata(entries, game, chapters, client=None):
             provider = "gemini"
         except Exception:
             # Provider errors never stop a local export, and may contain credentials.
-            provider = "template"
+            logger.warning("Metadata generation unavailable; using template copy")
     platforms = {}
     for platform, limits in PLATFORM_LIMITS.items():
         # Keep complete chapter lines; the unabridged list is always exported separately.

@@ -1,7 +1,7 @@
 """Opt-in caption refinement. No SDK import, implicit client, retry, or paid call."""
 
 from pathlib import Path
-from typing import Protocol
+from collections.abc import Callable
 
 from pydantic import Field
 
@@ -17,8 +17,7 @@ class Refinement(Model):
     captions: list[CaptionPatch] = Field(default_factory=list)
 
 
-class Refiner(Protocol):
-    def __call__(self, prompt: str) -> str | dict: ...
+Refiner = Callable[[str], str | dict]
 
 
 class GeminiRefiner:

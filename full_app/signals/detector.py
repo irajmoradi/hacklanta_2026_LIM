@@ -2,7 +2,6 @@
 
 from concurrent.futures import ThreadPoolExecutor
 import inspect
-import json
 import math
 from pathlib import Path
 import re
@@ -13,17 +12,15 @@ import warnings
 import cv2
 import numpy as np
 
+from vjepa.media import probe_media
+
 from .fusion import fuse
 from .models import Candidate, Config
 from .ocr import HUDReader, regions_for
 
 
-def _probe(path):
-    result = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(path)],
-        capture_output=True, text=True, check=True,
-    )
-    data = json.loads(result.stdout)
+def _probe(path: str | Path) -> tuple[float, dict, bool]:
+    data = probe_media(path)
     video = next((s for s in data["streams"] if s["codec_type"] == "video"
                   and not s.get("disposition", {}).get("attached_pic")), None)
     if video is None:
@@ -48,7 +45,8 @@ def _scene_detector(cfg):
     return AdaptiveDetector(min_scene_len=1)
 
 
-def _video(path, duration, stream, cfg, regions):
+def _video(path: Path, duration: float, stream: dict, cfg: Config,
+           regions: dict) -> tuple[np.ndarray, np.ndarray, list[dict]]:
     count = math.ceil(duration)
     motion, scene = np.zeros(count), np.zeros(count)
     samples = np.zeros(count)
@@ -124,7 +122,8 @@ def _video(path, duration, stream, cfg, regions):
     return motion / np.maximum(samples, 1), scene, events
 
 
-def _audio(path, duration, present, cfg):
+def _audio(path: Path, duration: float, present: bool,
+           cfg: Config) -> tuple[np.ndarray, np.ndarray, np.ndarray, list[dict]]:
     count = math.ceil(duration)
     rms, onset, sustained = (np.zeros(count) for _ in range(3))
     if not present:

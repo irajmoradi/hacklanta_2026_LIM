@@ -16,7 +16,7 @@ class Candidate:
     signals: dict[str, float]
     events: list[dict] = field(default_factory=list)
 
-    def to_dict(self):
+    def to_dict(self) -> dict:
         return asdict(self)
 
 

@@ -6,6 +6,7 @@ import subprocess
 import warnings
 
 import cv2
+import numpy as np
 
 
 # Normalized (left, top, right, bottom). Override for resolution/UI scaling.
@@ -17,7 +18,7 @@ PROFILES = {
 }
 
 
-def regions_for(profile, overrides):
+def regions_for(profile: str, overrides: dict | None) -> dict:
     key = profile.lower().replace(" ", "").replace("_", "").replace("-", "")
     if key not in PROFILES:
         raise ValueError(f"unknown game profile: {profile}")
@@ -28,7 +29,7 @@ def regions_for(profile, overrides):
     return regions
 
 
-def classify(text):
+def classify(text: str) -> tuple[str | None, str]:
     text = " ".join(text.upper().split())
     if re.search(r"\b(KILLED BY|ELIMINATED BY|YOU DIED|DEFEATED BY)\b", text):
         return "death", text
@@ -38,7 +39,7 @@ def classify(text):
 
 
 class HUDReader:
-    def __init__(self, regions, cooldown):
+    def __init__(self, regions: dict, cooldown: float):
         self.regions = regions
         self.cooldown = cooldown
         self.last_seen = {}
@@ -47,7 +48,7 @@ class HUDReader:
         if not self.executable:
             warnings.warn("Tesseract is unavailable; continuing without OCR", RuntimeWarning)
 
-    def read(self, frame, timestamp):
+    def read(self, frame: np.ndarray, timestamp: float) -> list[dict]:
         if not self.executable:
             return []
         height, width = frame.shape[:2]

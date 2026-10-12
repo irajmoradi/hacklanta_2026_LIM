@@ -3,16 +3,17 @@
 import math
 import numpy as np
 
-from .models import Candidate
+from .models import Candidate, Config
 
 
-def zscore(values):
+def zscore(values: np.ndarray) -> np.ndarray:
     values = np.asarray(values, dtype=float)
     std = values.std() if len(values) else 0
     return (values - values.mean()) / std if std > 1e-8 else np.zeros_like(values)
 
 
-def fuse(raw, events, duration, cfg):
+def fuse(raw: dict[str, np.ndarray], events: list[dict], duration: float,
+         cfg: Config) -> list[Candidate]:
     normalized = {key: zscore(value) for key, value in raw.items()}
     curve = sum(cfg.weights[key] * values for key, values in normalized.items())
     dead = ((raw["motion"] < cfg.dead_motion) & (raw["rms"] < cfg.dead_audio)
