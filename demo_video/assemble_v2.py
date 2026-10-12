@@ -25,6 +25,7 @@ def main():
         calls=calls, timings={n:d['timings'] for n,d in {'analysis':analysis,**exports}.items()},
         plans={n:d.get('planner_plan') for n,d in exports.items()}, ranked_clips=analysis['clips'],
         adapters=['Serve unchanged production React build through Flask static_folder'],
+        editorial_review=json.loads((OUT/'review_applied.json').read_text()),
         old_fix4=dict(source_seconds=360, scored_windows=2, calls=3, montage_seconds=8.021333))
     (OUT/'evidence.json').write_text(json.dumps(evidence,indent=2))
     with (OUT/'clip_signals.csv').open('w',newline='') as f:
@@ -41,8 +42,14 @@ def main():
          'Variety is now a preference; ranked local evidence fills gaps.',
          'Event-centered trims preserve setup and aftermath.',
          'Mean mode keeps death evidence; spectator kills stay excluded.']),10))
+    parts.append(a.still('ui_note',a.card('ui_note','WORKFLOW RECORDING','From upload to first export.',
+        ['The UI capture shows the automatic first pass.',
+         'Source review then rejected two misclassified windows and improved trims.',
+         'The comparison and exports below show the reviewed final cuts.']),8))
     ui=[]
     scenes=json.loads((OUT/'ui_scenes.json').read_text())
+    review=next((s for s in scenes if s['label'].startswith('Review fused')),scenes[0])
+    a.run(['-ss',str(review['start']+1),'-i',str(OUT/'ui_raw.webm'),'-frames:v','1',str(OUT/'frontend.png')])
     for i,scene in enumerate(scenes):
         duration=min(5,scene['end']-scene['start'])
         dest=EDIT/f'ui_{i:02}.mp4'

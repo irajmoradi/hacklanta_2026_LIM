@@ -1,0 +1,32 @@
+{
+  "source": "valorant_phoenix_44k.mp4",
+  "exclude": [
+    {
+      "start": 58,
+      "end": 66,
+      "reason": "Source review shows combat report and switching spectated agents, despite the model's player-alive highlight label."
+    },
+    {
+      "start": 358,
+      "end": 372,
+      "reason": "Source review shows the player alive at 100 health through the alleged death window; caption-based recovery was a false positive."
+    }
+  ],
+  "revision": 2,
+  "edits": [
+    {
+      "start": 125,
+      "end": 143,
+      "caption": "Wide swing. Fast trip to spectator mode.",
+      "fail_time": 136.0,
+      "reason": "Source frames confirm the POV death near 136 seconds; retain pre-roll and death aftermath."
+    },
+    {
+      "start": 256,
+      "end": 273,
+      "caption": "Ultimate spent. Back where we started.",
+      "fail_time": 268.0,
+      "reason": "Source frames confirm the Phoenix ultimate is eliminated and returns to its starting point."
+    }
+  ]
+}

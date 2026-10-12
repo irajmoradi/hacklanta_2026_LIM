@@ -113,3 +113,25 @@ def test_stronger_late_audio_burst_beats_early_ability_and_scene_cut():
     climax=job["planner_plan"]["clips"][-1]
     assert climax["source_start"] <= 14 < climax["source_end"]
     assert climax["speed"] == .5
+
+
+def test_explicit_lowlight_precedes_caption_inferred_death():
+    clips=[dict(id="inferred",start_seconds=0,end_seconds=15,score=.99,type="bad",source="signals+vlm",nice_veto=True),
+           dict(id="explicit",start_seconds=20,end_seconds=35,score=.4,type="bad",source="signals+vlm")]
+    job=dict(clips=clips,options=dict(mode="mean",max_duration=20),warnings=[])
+    planner_plan(Pipeline(),job)
+    assert job["planner_plan"]["clips"][-1]["source_id"]=="explicit"
+    assert job["planner_plan"]["duration"]==20
+
+
+def test_human_review_can_confirm_death_without_promoting_it_in_nice():
+    clips=[dict(id="death",start_seconds=0,end_seconds=15,score=.9,type="bad",source="signals+vlm",nice_veto=True,
+                editorial_review=True,signals=dict(fail_time=10)),
+           dict(id="low",start_seconds=20,end_seconds=35,score=.4,type="bad",source="signals+vlm"),
+           dict(id="good",start_seconds=40,end_seconds=55,score=.3,type="good",source="signals+vlm")]
+    job=dict(clips=clips,options=dict(mode="mean",max_duration=20),warnings=[])
+    planner_plan(Pipeline(),job)
+    assert job["planner_plan"]["clips"][-1]["source_id"]=="death"
+    job['options']['mode']='nice'
+    planner_plan(Pipeline(),job)
+    assert all(c['source_id']!='death' for c in job['planner_plan']['clips'])

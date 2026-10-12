@@ -6,7 +6,7 @@ FILES=['extension_demo_v2.mp4','extension_demo_v2_discord.mp4','montage_landscap
        'montage_vertical.mp4','montage_mean_vertical.mp4','ui_walkthrough.mp4','comparison.mp4',
        'contact_sheet.jpg','frontend.png','evidence.json','clip_signals.csv','output_manifest.json',
        'analysis.json','landscape.json','vertical.json','mean_vertical.json','live_calls.json',
-       'review','attempt_audit.json','ui_scenes.json','verification.json','SHA256SUMS','share_landscape','share_vertical','share_mean_vertical']
+       'review','review_applied.json','attempt_audit.json','ui_scenes.json','verification.json','SHA256SUMS','share_landscape','share_vertical','share_mean_vertical']
 
 
 def main():

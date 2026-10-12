@@ -1,6 +1,7 @@
 """Decode each deliverable and verify measured DEMO-02 constraints."""
 import hashlib
 import json
+import re
 from pathlib import Path
 import subprocess
 from PIL import Image
@@ -30,6 +31,12 @@ def main():
         subprocess.run(['ffmpeg','-v','error','-xerror','-i',str(path),'-f','null','-'],check=True)
         results[name]=dict(duration=duration,bytes=path.stat().st_size,width=width,height=height,
                            sha256=hashlib.file_digest(path.open('rb'),'sha256').hexdigest(),decoded=True)
+        if name.startswith('montage_'):
+            volume=subprocess.run(['ffmpeg','-hide_banner','-i',str(path),'-vn','-af','volumedetect',
+                                   '-f','null','-'],capture_output=True,text=True,check=True)
+            match=re.search(r'mean_volume: (-?[0-9.]+) dB',volume.stderr)
+            assert match and float(match[1])>-55, f'{name}: silent audio'
+            results[name]['mean_volume_db']=float(match[1])
     assert results['extension_demo_v2_discord.mp4']['bytes']<20_000_000
     assert Image.open(OUT/'contact_sheet.jpg').size==(1920,810)
     evidence=json.loads((OUT/'evidence.json').read_text())

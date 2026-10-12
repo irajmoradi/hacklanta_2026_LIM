@@ -38,8 +38,7 @@ def test_budget_concurrent(tmp_path):
 def test_baseline_generic_profile_contract():
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'full_app'))
     from signals.ocr import regions_for
-    with pytest.raises(ValueError, match='unknown game profile: generic'):
-        regions_for('generic', None)
+    assert regions_for('generic', None) == regions_for('auto', None)
 
 
 def test_sdk_schema_adapter_and_strict_response_validation(tmp_path, monkeypatch):

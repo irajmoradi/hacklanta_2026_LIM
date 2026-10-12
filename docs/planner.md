@@ -67,7 +67,7 @@ clips. The greedy selection is deterministic, not a global optimization solver.
 Durations are output seconds: `(source_end - source_start) / speed`. Clutches run
 at 0.5x in hype/cinematic styles, including that extra playback time in the budget;
 the usual teaser stays at 1x. Trims retain approximately 65% lead-in around the
-peak, clamped inside source bounds. The default output limits are 1ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“6 seconds per
+peak, clamped inside source bounds. The default output limits are 1ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œ6 seconds per
 clip. Minimum length must fit the maximum, budget, and three-second hook limit.
 Short budgets combine hook and climax into one clip; insufficient footage or
 variety yields a shorter plan with notes. No qualifying footage yields a valid
@@ -205,3 +205,8 @@ inside the candidate, breaking ties by proximity to the candidate midpoint.
 Scene cuts alone do not define an action peak. This avoids treating an early
 ability sound or camera transition as the climax while cutting out later action.
 Without usable event/audio timing the library uses the candidate midpoint.
+
+Caption-inferred deaths are fallback evidence, below explicit model lowlights.
+A clip with `editorial_review=True` may be promoted after human/source review;
+its nice-mode veto still applies. Reviewed `signals.fail_time` or `kill_time`
+anchors the trim without making another provider call.

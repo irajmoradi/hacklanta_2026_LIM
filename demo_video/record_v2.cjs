@@ -34,7 +34,23 @@ async function main(){
   }
   const calls=()=>Number(execFileSync('../.venv/bin/python',['-c',"import sqlite3,sys; print(sqlite3.connect(sys.argv[1]).execute('SELECT used FROM budget WHERE id=1').fetchone()[0])",OUT+'/jobs/'+id+'/gemini-budget.sqlite3'],{encoding:'utf8'}).trim());
   const before=calls();
-  fs.writeFileSync(OUT+'/analysis.json',JSON.stringify({...d,analysis_calls:before},null,2));
+  if(!fs.existsSync(OUT+'/analysis.json'))fs.writeFileSync(OUT+'/analysis.json',JSON.stringify({...d,analysis_calls:before},null,2));
+  const decisions=JSON.parse(fs.readFileSync(__dirname+'/review_decisions_v2.json'));
+  const prior=fs.existsSync(OUT+'/review_applied.json')?JSON.parse(fs.readFileSync(OUT+'/review_applied.json')):null;
+  if(!prior || prior.revision!==decisions.revision){
+   if(Math.abs(d.meta.duration-1871.969524)>.1)throw Error('Review decisions require the original demo source');
+   const clips=d.clips.map(c=>{
+    const edit=(decisions.edits||[]).find(e=>c.start_seconds===e.start&&c.end_seconds===e.end);
+    return {...c,keep:c.keep!==false&&!decisions.exclude.some(e=>c.start_seconds===e.start&&c.end_seconds===e.end),
+      ...(edit?{caption:edit.caption,editorial_review:true,signals:{...c.signals,fail_time:edit.fail_time}}:{})};
+   });
+   const r=await context.request.patch(BASE+'/api/jobs/'+id+'/clips',{data:{clips}});if(!r.ok())throw Error(await r.text());
+   const affected=prior?['mean_vertical']:['landscape','vertical','mean_vertical'];
+   for(const name of affected)for(const file of ['montage_'+name+'.mp4',name+'.json']){
+    if(fs.existsSync(OUT+'/'+file))fs.renameSync(OUT+'/'+file,OUT+'/automatic_r'+(prior?.revision||1)+'_'+file);
+   }
+   fs.writeFileSync(OUT+'/review_applied.json',JSON.stringify({...decisions,anchor_policy:'strongest sustained burst after grounded events'},null,2));
+  }
   // A resumed run preserves the original UI capture; no second upload or analysis.
   if(await page.locator('.clip-card').count()){
    await scene('Review fused candidate evidence and the full-match interest curve',async()=>{await page.locator('.review').scrollIntoViewIfNeeded();});
@@ -42,7 +58,7 @@ async function main(){
   }
   for(const [name,mode,preset,target] of [['landscape','nice','landscape',60],['vertical','nice','vertical',30],['mean_vertical','mean','vertical',20]]){
    if(fs.existsSync(OUT+'/montage_'+name+'.mp4'))continue;
-   await scene('Render '+name+' / '+target+' seconds / same saved analysis',async()=>{await post('render',{mode,preset,max_duration:target});});
+   await scene('Render '+name+' / '+target+' seconds / same saved analysis',async()=>{await post('plan',{mode,preset,max_duration:target});await idle();await post('render',{mode,preset,max_duration:target});});
    d=await idle();
    if(calls()!==before)throw Error('Render unexpectedly consumed paid attempts');
    fs.writeFileSync(OUT+'/'+name+'.json',JSON.stringify(d,null,2));

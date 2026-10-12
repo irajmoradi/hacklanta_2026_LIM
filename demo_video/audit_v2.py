@@ -11,7 +11,7 @@ ROOT=Path('/srv/demo_out/demo02')
 def main():
     job=(ROOT/'job-id.txt').read_text().strip()
     ledger=ROOT/'jobs'/job/'gemini-budget.sqlite3'
-    rows=[]
+    rows=json.loads((ROOT/'attempt_audit.json').read_text()) if (ROOT/'attempt_audit.json').exists() else []
     while True:
         try:
             with urlopen('http://127.0.0.1:8012/api/jobs/'+job) as response:

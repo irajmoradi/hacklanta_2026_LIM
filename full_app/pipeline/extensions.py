@@ -213,7 +213,8 @@ def planner_plan(pipeline, job):
             if event_peak is not None:
                 signals['action_time'] = event_peak
         clips.append(dict(id=c['id'], start=c['start_seconds'], end=c['end_seconds'],
-                          validated=c.get('source') in ('signals+vlm', 'whole_video'),
+                          validated=(c.get('editorial_review') is True or
+                                     c.get('source') in ('signals+vlm', 'whole_video') and not c.get('nice_veto', False)),
                           score=c.get('score', .5), label='lowlight' if c.get('type') == 'bad' else 'highlight',
                           caption=c.get('caption', c.get('description', ''))[:240],
                           signals=signals, game_profile=job.get('game', 'generic')))
