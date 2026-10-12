@@ -2,27 +2,52 @@
 
 import math
 from pathlib import Path
-from urllib.parse import urlparse
+import time
+import tempfile
+
+from server.security import https_url, safe_path
 
 from .models import IngestError, Limits, Progress
 
 
 def download(url: str, directory: Path, *, limits: Limits, owns_content: bool,
              progress: Progress | None = None) -> Path:
+    """Publish only a complete video; clean partials even for direct callers."""
+    directory = Path(directory).resolve()
+    with tempfile.TemporaryDirectory(prefix='url-', dir=directory) as temporary:
+        result = _download(url, Path(temporary), limits=limits,
+                           owns_content=owns_content, progress=progress)
+        target = safe_path(directory, result.name)
+        if target.exists():
+            raise IngestError('Download destination already exists')
+        result.replace(target)
+        return target
+
+
+def _download(url: str, directory: Path, *, limits: Limits, owns_content: bool,
+              progress: Progress | None = None) -> Path:
     if not owns_content:
         raise IngestError("URL import requires owns_content=True (ownership or permission)")
-    parsed = urlparse(url)
     hosts = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be",
              "twitch.tv", "www.twitch.tv", "clips.twitch.tv"}
-    if (parsed.scheme != "https" or parsed.hostname not in hosts or parsed.username
-            or parsed.password or parsed.port not in (None, 443)):
-        raise IngestError("Only HTTPS Twitch/YouTube video URLs are supported")
+    try:
+        https_url(url, hosts)
+    except ValueError:
+        raise IngestError("Only HTTPS Twitch/YouTube video URLs are supported") from None
     try:
         import yt_dlp
     except ImportError as exc:
         raise IngestError("URL import needs optional yt-dlp: pip install yt-dlp") from exc
 
     def check_info(info, *, incomplete=False):
+        # Progressive HTTPS only: manifest downloaders can fall back to external
+        # ffmpeg networking, bypassing our socket policy. Fail closed instead.
+        for item in [info, *(info.get('requested_formats') or [])]:
+            if item.get('protocol') not in (None, 'https'):
+                raise IngestError('URL import requires a progressive HTTPS video')
+            if item.get('url'):
+                from .network import validate_target
+                validate_target(item['url'])
         if info.get("_type") in ("playlist", "multi_video") or "entries" in info:
             raise IngestError("Import a single VOD or clip, not a playlist")
         if info.get("is_live") or info.get("live_status") in ("is_live", "is_upcoming", "post_live"):
@@ -61,29 +86,47 @@ def download(url: str, directory: Path, *, limits: Limits, owns_content: bool,
 
     options = {
         "outtmpl": str(directory / "source.%(ext)s"),
-        "format": "bv*+ba/b", "merge_output_format": "mp4",
+        "format": "b[protocol=https]", "merge_output_format": "mp4",
         "noplaylist": True, "playlistend": 1, "quiet": True, "no_warnings": True,
         "max_filesize": limits.max_bytes, "match_filter": match_filter,
         "progress_hooks": [hook], "socket_timeout": 30, "retries": 2,
         "fragment_retries": 2, "concurrent_fragment_downloads": 1,
-        # The native downloader invokes byte-limit hooks, including HLS fragments.
-        "hls_prefer_native": True,
+        "proxy": "", "enable_file_urls": False,
+        "logger": _QuietLogger(),
     }
+    deadline = time.monotonic() + 1800
+
+    class SafeYoutubeDL(yt_dlp.YoutubeDL):
+        def urlopen(self, request):
+            from .network import open_request
+            return open_request(request, limit=limits.max_bytes, deadline=deadline)
+
     if progress:
         progress({"stage": "download", "status": "metadata"})
     try:
-        with yt_dlp.YoutubeDL(options) as client:
+        with SafeYoutubeDL(options) as client:
             info = client.extract_info(url, download=False)
             if not isinstance(info, dict):
                 raise IngestError("URL did not resolve to a video")
             check_info(info)
             client.process_ie_result(info, download=True)
-    except yt_dlp.utils.DownloadError as exc:
-        raise IngestError("URL download failed; check access, availability, and yt-dlp installation") from exc
+    except IngestError:
+        raise
+    except Exception:
+        raise IngestError("URL download failed; check access, availability, and yt-dlp installation") from None
     candidates = [p for p in directory.glob("source.*")
                   if p.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov", ".flv", ".ts")]
     if len(candidates) != 1:
         raise IngestError("Download did not produce one complete video")
     from .media import check_file
+    safe_path(directory, candidates[0].name)
     check_file(candidates[0], limits)
     return candidates[0]
+
+
+class _QuietLogger:
+    """yt-dlp diagnostics may contain signed URLs or credentials."""
+    def debug(self, message):
+        pass
+
+    warning = error = debug

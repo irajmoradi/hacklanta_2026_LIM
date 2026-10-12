@@ -37,7 +37,11 @@ class ChannelSink:
 
 class MontageClient(discord.Client):
     def __init__(self, config, api=None):
-        intents = discord.Intents.default()
+        # Only guild context and submissions are needed; no DMs, typing,
+        # reactions, moderation, presence or member-list subscriptions.
+        intents = discord.Intents.none()
+        intents.guilds = True
+        intents.guild_messages = True
         intents.message_content = True
         super().__init__(intents=intents, allowed_mentions=discord.AllowedMentions.none())
         self.config = config

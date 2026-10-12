@@ -3,9 +3,10 @@ import asyncio
 import os
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from tempfile import TemporaryDirectory
 from urllib.parse import quote, urlsplit
+from server.security import safe_component, safe_path
 
 
 class BotError(Exception):
@@ -24,6 +25,7 @@ class Config:
     cooldown: int = 300
     poll_seconds: float = 3
     timeout: int = 1800
+    max_active: int = 4
 
     @classmethod
     def from_env(cls):
@@ -40,10 +42,11 @@ class Config:
                 cooldown=int(os.getenv("DISCORD_USER_COOLDOWN_SECONDS", "300")),
                 poll_seconds=float(os.getenv("DISCORD_POLL_SECONDS", "3")),
                 timeout=int(os.getenv("DISCORD_JOB_TIMEOUT_SECONDS", "1800")),
+                max_active=int(os.getenv("DISCORD_MAX_ACTIVE_JOBS", "4")),
             )
             if not config.token or not config.channels or any(x <= 0 for x in config.channels):
                 raise ValueError()
-            if not all(0 < x < float("inf") for x in (config.max_input, config.max_upload, config.cooldown, config.poll_seconds, config.timeout)):
+            if not all(0 < x < float("inf") for x in (config.max_input, config.max_upload, config.cooldown, config.poll_seconds, config.timeout, config.max_active)):
                 raise ValueError()
             for url in (config.api_url, config.public_url):
                 parsed = urlsplit(url)
@@ -85,7 +88,12 @@ def select_source(config, attachment=None, url=None):
     if (attachment is None) == (not url):
         raise BotError("Provide exactly one video attachment or direct VOD URL.")
     if attachment is not None:
-        filename = Path(attachment.filename).name
+        # Never use a remote filename as a filesystem path (including Windows paths).
+        filename = PureWindowsPath(attachment.filename).name
+        try:
+            safe_component(filename)
+        except ValueError:
+            filename = 'source' + Path(filename).suffix.lower()
         if Path(filename).suffix.lower() not in {".mp4", ".mov", ".mkv", ".webm", ".avi"}:
             raise BotError("Attach an MP4, MOV, MKV, WebM, or AVI video.")
         if not 0 < attachment.size <= config.max_input:
@@ -131,6 +139,9 @@ class MontageService:
         if user_id in self.active or user_id in self.last:
             await sink.send_status("You already have a montage running or are on cooldown. Try again later.")
             return
+        if len(self.active) >= self.config.max_active or len(self.last) >= 4096:
+            await sink.send_status('The montage service is busy. Try again later.')
+            return
         self.active.add(user_id)
         self.last[user_id] = now
         job_id = None
@@ -139,11 +150,11 @@ class MontageService:
             nonlocal job_id, status
             status = await sink.send_status("Downloading video…")
             with TemporaryDirectory(prefix="lim-discord-") as temp:
-                source_path = Path(temp) / source.filename
+                source_path = safe_path(temp, source.filename)
                 await self.api.fetch_source(source.url, source_path, self.config.max_input)
                 await status.edit(content="Uploading video to the montage service…")
                 snapshot = await self.api.upload(source_path)
-                job_id = str(snapshot.get("id") or snapshot["job_id"])
+                job_id = safe_component(snapshot.get("id") or snapshot["job_id"])
                 await self.api.action(job_id, "analyze", options.analysis())
                 await self.wait_for(job_id, {"planned"}, status)
                 await self.api.action(job_id, "render", {"preset": options.preset, "generate_thumbnails": False})

@@ -2,6 +2,7 @@
 import json
 import logging
 import time
+import tempfile
 from pathlib import Path
 
 LOG = logging.getLogger(__name__)
@@ -42,9 +43,17 @@ class FolderWatcher:
 
     def persist(self):
         self.state.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.state.with_name(self.state.name + '.tmp')
-        temporary.write_text(json.dumps(self.records), encoding='utf-8')
-        temporary.replace(self.state)
+        # Exclusive random staging avoids following a pre-planted .tmp symlink.
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8',
+                                             dir=self.state.parent, delete=False) as stream:
+                temporary = Path(stream.name)
+                json.dump(self.records, stream)
+            temporary.replace(self.state)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def scan(self):
         now = self.clock()

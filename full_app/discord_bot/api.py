@@ -4,6 +4,7 @@ import socket
 from urllib.parse import quote
 
 import aiohttp
+from server.security import api_headers, https_url, public_address, safe_component
 
 from .core import BotError
 
@@ -11,7 +12,7 @@ from .core import BotError
 class PublicResolver(aiohttp.resolver.DefaultResolver):
     async def resolve(self, host, port=0, family=socket.AF_INET):
         records = await super().resolve(host, port, family)
-        if not records or any(not ipaddress.ip_address(r["host"]).is_global for r in records):
+        if not records or any(not public_address(r["host"]) for r in records):
             raise BotError("Video hosts must resolve only to public Internet addresses.")
         return records
 
@@ -23,10 +24,12 @@ class JobAPI:
         self.media = None
 
     async def open(self):
-        self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=120))
+        self.session = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=120),
+                                            headers=api_headers(self.config.api_url))
         self.media = aiohttp.ClientSession(
             connector=aiohttp.TCPConnector(resolver=PublicResolver()),
             timeout=aiohttp.ClientTimeout(total=300),
+            auto_decompress=False, headers={'Accept-Encoding': 'identity'},
         )
 
     async def close(self):
@@ -35,6 +38,10 @@ class JobAPI:
                 await session.close()
 
     def url(self, job_id="", action=""):
+        if job_id:
+            safe_component(job_id)
+        if action:
+            safe_component(action)
         return self.config.api_url + "/api/jobs" + ("/" + quote(job_id, safe="") if job_id else "") + ("/" + action if action else "")
 
     @staticmethod
@@ -65,23 +72,33 @@ class JobAPI:
         # Count decompressed bytes as well as checking Content-Length.
         async with session.get(url, allow_redirects=False) as response:
             self.check(response)
+            if getattr(response, 'headers', {}).get('Content-Encoding', 'identity').lower() != 'identity':
+                raise BotError('Compressed HTTP video transfers are not supported.')
             if response.content_length is not None and response.content_length > limit:
                 return False
             size = 0
-            with path.open("wb") as output:
-                async for chunk in response.content.iter_chunked(64 * 1024):
-                    size += len(chunk)
-                    if size > limit:
-                        return False
-                    output.write(chunk)
+            complete = False
+            try:
+                with path.open("wb") as output:
+                    async for chunk in response.content.iter_chunked(64 * 1024):
+                        size += len(chunk)
+                        if size > limit:
+                            return False
+                        output.write(chunk)
+                complete = size > 0
+            finally:
+                if not complete:
+                    path.unlink(missing_ok=True)
             if size == 0:
                 raise BotError("The video download was empty.")
             return True
 
     async def fetch_source(self, url, path, limit):
         # aiohttp bypasses resolvers for literal IP addresses, so reject those here.
-        from urllib.parse import urlsplit
-        host = urlsplit(url).hostname
+        try:
+            host = https_url(url, {'cdn.discordapp.com', 'media.discordapp.net', *self.config.vod_hosts}).hostname
+        except ValueError:
+            raise BotError('Use an HTTPS video URL on an allowed host.') from None
         try:
             ipaddress.ip_address(host)
         except ValueError:
