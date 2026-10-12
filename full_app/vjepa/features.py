@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+from zipfile import BadZipFile
 
 import numpy as np
 
@@ -145,7 +146,7 @@ def extract(video_path, encoder, cache_dir, config=None, batch_size=4):
                         raise ValueError("invalid cache")
                     features[i] = vector
                 continue
-            except (ValueError, OSError, KeyError, EOFError):
+            except (ValueError, OSError, KeyError, EOFError, BadZipFile):
                 pass  # Interrupted/corrupt cache entries are recomputed.
         pending.append((i, path))
         if len(pending) == batch_size:

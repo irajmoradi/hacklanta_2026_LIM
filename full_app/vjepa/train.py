@@ -1,5 +1,6 @@
 """Train one game's probes from a JSON match manifest, holding out entire matches."""
 import argparse
+from dataclasses import asdict
 import json
 from pathlib import Path
 import numpy as np
@@ -26,7 +27,6 @@ def train(manifest, output, encoder, cache_dir, config=None, epochs=300, seed=13
                 raise ValueError("precomputed training requires features for every match")
             extracted = extract(record["video"], encoder, cache_dir, config, batch_size)
         identity = identity or extracted["encoder"]
-        from dataclasses import asdict
         if extracted["encoder"] != identity or extracted["config"] != asdict(config):
             raise ValueError("all features must share encoder and window configuration")
         labels = weak_labels({"candidates": record["candidates"], "preferences": record.get("preferences", [])})

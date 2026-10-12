@@ -54,6 +54,11 @@ def test_cache_batching_and_invalidation(video, tmp_path, monkeypatch):
     next(cache.glob("*.npz")).write_bytes(b"broken")
     extract(video, encoder, cache, cfg, 2)
     assert encoder.calls[-1] == 1
+    truncated = next(cache.glob("*.npz"))
+    truncated.write_bytes(truncated.read_bytes()[:30])
+    calls_before = len(encoder.calls)
+    extract(video, encoder, cache, cfg, 2)
+    assert len(encoder.calls) == calls_before + 1
     before = len(list(cache.glob("*.npz")))
     extract(video, TinyEncoder(seed=2), cache, cfg, 2)
     assert len(list(cache.glob("*.npz"))) == before * 2
