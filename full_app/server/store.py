@@ -56,3 +56,11 @@ class JobStore:
         with self.connection() as db:
             return db.execute('SELECT seq,data FROM events WHERE job_id=? AND seq>? ORDER BY seq LIMIT 100',
                               (job_id, after)).fetchall()
+
+    def append_event(self, job_id, event, payload):
+        with self.lock, self.connection() as db:
+            db.execute('INSERT INTO events(job_id,data) VALUES (?,?)',
+                       (job_id, json.dumps(dict(event=event, **payload), allow_nan=False)))
+            db.execute('DELETE FROM events WHERE job_id=? AND seq NOT IN '
+                       '(SELECT seq FROM events WHERE job_id=? ORDER BY seq DESC LIMIT 1000)',
+                       (job_id, job_id))

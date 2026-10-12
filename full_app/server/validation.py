@@ -20,7 +20,7 @@ class LegacyPlan(RenderPlan):
 
 
 EXTENSION_FLAGS = {'profiles', 'audio_ai', 'planner', 'vjepa', 'social', 'ingest',
-                   'fx', 'narration', 'privacy', 'multipov', 'music', 'perf'}
+                   'fx', 'narration', 'privacy', 'multipov', 'music', 'perf', 'editor_agent'}
 
 
 def number(value, name, low=0, high=86400):
@@ -95,7 +95,7 @@ def plan_valid(plan, duration, max_duration=3600):
             effects = seg.video_effects
             if len(effects) > 16 or len(set(effects)) != len(effects) or any(e not in VIDEO_EFFECTS for e in effects):
                 raise ValueError('Invalid or excessive video effects')
-            length = end - start
+            length = (end - start) / seg.speed if version == 2 else end - start
             if version == 1:
                 length /= number(raw.get('speed', 1), 'speed', .1, 8)
                 length *= (2 if 'slow_motion' in effects else 1) * (.5 if 'speed_2x' in effects else 1)
