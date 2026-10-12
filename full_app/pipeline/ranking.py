@@ -23,7 +23,7 @@ def rank_merge(candidates, scored, whole):
         clip = dict(start_seconds=c['start'], end_seconds=c['end'],
                     score=min(1, max(0, c.get('score', 0))),
                     description=c.get('caption', 'Signal candidate'), type='good',
-                    source='signals')
+                    source='signals', signals=c.get('signals', {}), events=c.get('events', []))
         if 'player_alive' in c:
             # Unknown viewpoint is unsafe to promote, just as in EXT-02.
             if c['player_alive'] is not True:

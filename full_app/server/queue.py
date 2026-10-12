@@ -40,14 +40,15 @@ class JobQueue:
             if key:
                 self.keys[job_id] = key
             changed = {k for k, v in options.items() if job['options'].get(k) != v}
-            analysis_keys = {'mode', 'provider', 'use_signals', 'window_scoring', 'splits'}
+            analysis_keys = {'mode', 'provider', 'use_signals', 'window_scoring', 'splits',
+                             'profiles', 'game', 'audio_ai', 'vjepa', 'ingest', 'chat', 'multipov'}
             # Prompt belongs to the stage requested by the caller.
             if analysis_request or target == 'analyze' or (target == 'plan' and not job['clips']):
                 analysis_keys |= {'prompt'}
             invalidate = None
             if changed & analysis_keys:
                 invalidate = 'analyze'
-            elif changed & {'style', 'prompt', 'max_duration'}:
+            elif changed & {'style', 'prompt', 'max_duration', 'planner', 'fx'}:
                 invalidate = 'plan'
             elif changed:
                 invalidate = 'render'
@@ -75,9 +76,15 @@ class JobQueue:
         job['completed'] = [s for s in job['completed'] if s not in self.STAGES[index:]]
         if index == 0:
             job['clips'], job['candidates'] = None, []
+            for field in ('_analysis_source', '_chunks', 'audio_signals', 'vjepa_signals',
+                          'game', 'game_confidence', 'profile_prompt', 'window_scores'):
+                job.pop(field, None)
         if index <= 1:
             job['edit_plan'] = None
+            job.pop('planner_plan', None)
         job['output'] = None
+        for field in ('share_kit', 'team_candidates', 'team_alignments'):
+            job.pop(field, None)
 
     def cancel(self, job_id):
         with self.lock:

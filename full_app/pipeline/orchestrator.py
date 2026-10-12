@@ -83,20 +83,26 @@ class Pipeline:
         from .ranking import candidate_dict, rank_merge
         with self.stage(job, 'probe'):
             job['meta'] = probe_video(job['source'])
+        from .extensions import analysis_inputs, extra_signals
+        source = analysis_inputs(self, job)
         job['candidates'] = []
         with self.stage(job, 'signals'):
             if options.get('use_signals', True):
                 detect = self.hook('signals', 'detect_candidates', job)
                 if detect:
-                    job['candidates'] = [candidate_dict(c) for c in detect(job['source'])]
+                    kwargs = dict(profile=job['game'], ocr=True) if options.get('profiles') else {}
+                    job['candidates'] = [candidate_dict(c) for c in detect(source, **kwargs)]
+        extra_signals(self, job)
         client = self.client(job, key)
+        if options.get('profiles'):
+            client.profile_prompt = job.get('profile_prompt', '')
         scored = []
         try:
             with self.stage(job, 'window_scoring'):
                 if options.get('window_scoring', True) and job['candidates']:
                     score = getattr(client, 'score_windows', None)
                     if callable(score):
-                        scored = [candidate_dict(c) for c in score(job['source'], job['candidates'])]
+                        scored = [candidate_dict(c) for c in score(source, job['candidates'])]
                     else:
                         self.warn(job, 'Window scoring unavailable; using signal candidates')
             with self.stage(job, 'whole_video'):
@@ -115,19 +121,23 @@ class Pipeline:
         splits = options.get('splits', 1)
         template = (ROOT / 'prompts/clip_finder.txt').read_text(encoding='utf-8')
         prompt = options.get('prompt', '') + ATTITUDE_PROMPTS[options.get('mode', 'nice')]
+        prompt += '\n' + job.get('profile_prompt', '')
         if job['candidates']:
             prompt += '\nCandidate windows (verify against video): ' + json.dumps(job['candidates'])
-        segments = ([{'path': Path(job['source']), 'start': 0, 'end': duration, 'index': 0}]
-                    if splits == 1 else _split_video(Path(job['source']), splits, duration))
+        if job.get('_chunks'):
+            segments = [{**c, 'path': Path(c['path'])} for c in job['_chunks']]
+        else:
+            segments = ([{'path': Path(job.get('_analysis_source', job['source'])), 'start': 0, 'end': duration, 'index': 0}]
+                        if splits == 1 else _split_video(Path(job['source']), splits, duration))
         clips = []
         try:
             for seg in segments:
-                result = _analyze_segment(seg, template, f"part {seg['index'] + 1} of {splits}", prompt, client)
+                result = _analyze_segment(seg, template, f"part {seg['index'] + 1} of {len(segments)}", prompt, client)
                 if 'error' in result:
                     raise RuntimeError('Video analysis failed')
                 clips.extend(_offset_clip_timestamps(result['clips'], seg['start']))
         finally:
-            if splits > 1:
+            if splits > 1 and not job.get('_chunks'):
                 for seg in segments:
                     seg['path'].unlink(missing_ok=True)
         excluded = ('spectating', 'kill cam', 'killcam', 'respawn', 'death screen', 'combat report', 'incoming damage', 'camera follows')
@@ -144,6 +154,14 @@ class Pipeline:
         options = job['options']
         if not any(c.get('keep', True) for c in job['clips'] or []):
             raise ValueError('No selected clips to plan')
+        if options.get('planner'):
+            from .extensions import planner_plan
+            try:
+                planned = planner_plan(self, job)
+                if planned:
+                    return plan_valid(planned, job['meta']['duration'])
+            except (ImportError, ValueError):
+                self.warn(job, 'Optional planner unavailable or incompatible; using legacy planner')
         style = EDIT_STYLES[options.get('style', 'hype_montage')]
         prompt = (ROOT / 'prompts/editor.txt').read_text(encoding='utf-8').format(
             max_duration=options.get('max_duration', 180),
@@ -175,7 +193,8 @@ class Pipeline:
             width, height = {'landscape': (1920, 1080),
                              'vertical': (1080, 1920), 'square': (1080, 1080),
                              None: (job['meta']['width'], job['meta']['height'])}[preset]
-            runner = FFmpegRunner(scratch, Path(job['source']), width, height, job['meta']['fps'])
+            runner = FFmpegRunner(scratch, Path(job['source']), width, height, job['meta']['fps'],
+                                  perf=job['options'].get('perf'))
             output = runner.render(plan)
             if job['options'].get('generate_thumbnails', False):
                 client = self.client(job, key)

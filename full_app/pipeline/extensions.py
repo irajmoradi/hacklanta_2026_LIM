@@ -1,0 +1,262 @@
+"""Adapters for optional sprint modules; no additional paid provider calls."""
+import os
+from pathlib import Path
+
+from .ranking import candidate_dict
+
+
+def analysis_inputs(pipeline, job):
+    options = job['options']
+    job['game'] = 'generic'
+    job['_analysis_source'] = job['source']
+    job['_chunks'] = []
+    job['audio_signals'] = {}
+    job['vjepa_signals'] = []
+    job['profile_prompt'] = ''
+    if options.get('profiles'):
+        with pipeline.stage(job, 'profiles'):
+            detect = pipeline.hook('profiles', 'detect_game', job)
+            get = pipeline.hook('profiles', 'get_profile', job)
+            if get:
+                name = options.get('game', 'auto')
+                if name == 'auto':
+                    name, confidence = detect(job['source']) if detect else ('generic', 0)
+                    job['game_confidence'] = confidence
+                profile = get(name)
+                job['game'] = profile.name
+                job['profile_prompt'] = profile.prompt_fragment()
+    if options.get('ingest'):
+        with pipeline.stage(job, 'ingest'):
+            prepare = pipeline.hook('ingest', 'prepare', job)
+            if prepare:
+                prepared = prepare(job['source'], cache_dir=Path(job['dir']) / 'ingest')
+                job['_analysis_source'] = str(prepared.proxy)
+                job['_chunks'] = [dict(path=str(c.path), start=c.start, end=c.end, index=i)
+                                  for i, c in enumerate(prepared.chunks)]
+    return job['_analysis_source']
+
+
+def extra_signals(pipeline, job):
+    """Add independent evidence before the shared VLM veto and NMS stage."""
+    options, duration = job['options'], job['meta']['duration']
+    rows = []
+    if options.get('audio_ai'):
+        with pipeline.stage(job, 'audio_ai'):
+            analyze = pipeline.hook('audio_ai', 'analyze', job)
+            if analyze:
+                audio = candidate_dict(analyze(job['_analysis_source'], allow_model_downloads=False))
+                job['audio_signals'] = audio
+                for warning in audio.get('warnings', []):
+                    pipeline.warn(job, warning)
+                rows.extend(dict(start=e['start'], end=e['end'], score=e['score'],
+                                 signals=e.get('signals', {}), events=[e])
+                            for e in audio.get('events', []) if e['type'] != 'silence')
+    if options.get('vjepa'):
+        with pipeline.stage(job, 'vjepa'):
+            score = pipeline.hook('vjepa', 'score', job)
+            head = os.getenv('VJEPA_HEAD')
+            if score and head and Path(head).is_file():
+                try:
+                    values = score(job['_analysis_source'], enabled=True, head_path=head,
+                                   game=job['game'] if job['game'] != 'generic' else None,
+                                   cache_dir=Path(job['dir']) / 'vjepa')
+                except (ImportError, ValueError, OSError):
+                    values = []
+                job['vjepa_signals'] = values
+                if not values:
+                    pipeline.warn(job, 'V-JEPA produced no evidence; check optional dependencies and trained head')
+                rows.extend(dict(start=r['second'], end=min(duration, r['second'] + 1),
+                                 score=(r['kill_prob'] + r['sick_score']) / 2,
+                                 signals={'vjepa_kill': r['kill_prob'], 'vjepa_sick': r['sick_score']})
+                            for r in values if max(r['kill_prob'], r['sick_score']) >= .5)
+            else:
+                pipeline.warn(job, 'V-JEPA disabled: no trained VJEPA_HEAD available')
+    if options.get('ingest') and options.get('chat'):
+        chat_signal = pipeline.hook('ingest.chat', 'chat_signal', job)
+        messages = [dict(offset=r['time'], message=' '.join(
+            ['Kappa'] * min(100, int(r['emotes'])) + ['clip it'] * min(100, int(r['clip_it']))))
+            for r in options['chat']]
+        counts = {}
+        for row in options['chat']:
+            bucket = counts.setdefault(int(row['time']), dict(activity=0, emotes=0, clip_it=0))
+            for name in bucket:
+                bucket[name] += row[name]
+        for r in chat_signal(messages, duration) if chat_signal else []:
+            s = r['signals']
+            # Keep the caller's original activity/emote counts in evidence;
+            # the module computes normalized replay spikes from synthetic tokens.
+            bucket = counts.get(int(r['start']), {})
+            for name in ('activity', 'emotes', 'clip_it'):
+                s['chat_' + name] = bucket.get(name, 0)
+            if s['chat_clip_it'] or s['chat_emote_spike'] > 1:
+                rows.append(dict(**r, score=min(1, .5 + .1 * s['chat_emote_spike'])))
+    for r in rows:
+        start, end = max(0, r['start'] - 1), min(duration, r['end'] + 1)
+        if start < end:
+            job['candidates'].append({**r, 'start': start, 'end': end})
+    # Bound paid scoring work; retain the strongest local evidence.
+    job['candidates'] = sorted(job['candidates'], key=lambda c: -c.get('score', 0))[:30]
+
+
+def team_source(pipeline, job, scratch):
+    """Compose aligned angles on each selected primary-source interval."""
+    if not job['options'].get('multipov'):
+        return None
+    sources = job.get('sources', [job['source']])
+    if len(sources) < 2:
+        pipeline.warn(job, 'Team mode requires multiple video uploads; using primary POV')
+        return None
+    sync = pipeline.hook('multipov', 'sync', job)
+    render = pipeline.hook('multipov', 'render_montage', job)
+    if not sync or not render:
+        return None
+    from multipov import Video, TeamCandidate, Angle, SyncError, team_candidates
+    from services.probe import probe_video
+    from services.ffmpeg_runner import FFmpegRunner
+    from dataclasses import asdict
+    with pipeline.stage(job, 'multipov'):
+        videos = [Video(path, f'Player {i+1}') for i, path in enumerate(sources)]
+        try:
+            offsets = sync(videos)
+        except SyncError:
+            pipeline.warn(job, 'Team audio could not be aligned; using primary POV')
+            return None
+        durations = [probe_video(v.path)['duration'] for v in videos]
+        detect = pipeline.hook('signals', 'detect_candidates', job)
+        evidence = [[candidate_dict(c) for c in detect(v.path)] if detect else [] for v in videos]
+        # Sanitize every viewpoint before cropping or placing it on the canvas.
+        videos = [Video(private_source(pipeline, job, v.path, scratch, f'_{i}'), v.player)
+                  for i, v in enumerate(videos)]
+        per_video = [[] for _ in videos]
+        paths, segments, cursor = [], [], 0.
+        width, height = job['meta']['width'], job['meta']['height']
+        width, height = max(320, width//4*4), max(180, height//4*4)
+        for index, segment in enumerate(job['edit_plan']['segments']):
+            start, end = segment['source_start'], segment['source_end']
+            angles = []
+            for i, alignment in enumerate(offsets):
+                local_start, local_end = alignment.to_local(start), alignment.to_local(end)
+                if 0 <= local_start < local_end <= durations[i]:
+                    score = max((c.get('score', .5) for c in evidence[i]
+                                 if c['start'] < local_end and c['end'] > local_start), default=.5)
+                    per_video[i].append(dict(start=local_start, end=local_end, score=score, event_id=str(index)))
+                    angles.append(Angle(i, start, end, score, videos[i].player))
+            angles.sort(key=lambda a: (-a.score, a.video_index))
+            path = render(videos, [TeamCandidate(start, end, tuple(angles))],
+                          scratch / f'team_{index}.mp4', offsets=offsets,
+                          mode=job['options'].get('team_mode', 'best'), width=width, height=height,
+                          fps=job['meta']['fps'])
+            length = probe_video(path)['duration']
+            segments.append({**segment, 'source_start': cursor, 'source_end': cursor+length})
+            paths.append(path)
+            cursor += length
+        job['team_candidates'] = [asdict(c) for c in team_candidates(videos, per_video, offsets=offsets)]
+        job['team_alignments'] = [asdict(a) for a in offsets]
+        source = FFmpegRunner(scratch, videos[0].path, width, height, job['meta']['fps']).concatenate(paths)
+        segments[-1]['source_end'] = min(segments[-1]['source_end'], probe_video(source)['duration'])
+        return source, {**job['edit_plan'], 'segments': segments}
+
+
+def planner_plan(pipeline, job):
+    plan_edit = pipeline.hook('planner', 'plan_edit', job)
+    if not plan_edit:
+        return None
+    options = job['options']
+    clips = []
+    for c in job['clips']:
+        if not c.get('keep', True):
+            continue
+        evidence = c.get('signals', {})
+        reaction = c.get('suggested_reaction_label', c.get('reaction_label', c.get('label')))
+        signals = dict(clutch=evidence.get('clutch') is True or reaction == 'clutch',
+                       multikill=evidence.get('multikill') is True)
+        for name in ('action_time', 'kill_time', 'fail_time'):
+            value = evidence.get(name)
+            if isinstance(value, (float, int)) and c['start_seconds'] <= value < c['end_seconds']:
+                signals[name] = value
+        clips.append(dict(id=c['id'], start=c['start_seconds'], end=c['end_seconds'],
+                          score=c.get('score', .5), label='lowlight' if c.get('type') == 'bad' else 'highlight',
+                          caption=c.get('caption', c.get('description', ''))[:240],
+                          signals=signals, game_profile=job.get('game', 'generic')))
+    result = plan_edit(clips, mode=options.get('mode', 'nice'),
+                       style=options.get('style', 'hype_montage').replace('_', ' '),
+                       target_length=options.get('max_duration', 180),
+                       min_clip_length=min(1, min(c['end']-c['start'] for c in clips)),
+                       aspect={'landscape': '16:9', 'vertical': '9:16', 'square': '1:1'}[options.get('preset', 'landscape')])
+    native = candidate_dict(result)
+    job['planner_plan'] = native
+    if not native['clips']:
+        pipeline.warn(job, 'Planner produced no eligible clips; using legacy planner')
+        return None
+    segments = []
+    for c in native['clips']:
+        owned = lambda group: [p for p in native[group] if p['clip_id'] == c['id']]
+        segment = dict(source_start=c['source_start'], source_end=c['source_end'], speed=c['speed'],
+                       # EXT-12 annotates slow motion *and* sets speed=.5. The
+                       # legacy renderer multiplies them, so apply it only once.
+                       video_effects=[e['name'] for e in owned('effects')
+                                      if not (e['name'] == 'slow_motion' and c['speed'] == .5)],
+                       sound_effects=[dict(sfx_key=s['name'], offset_in_segment=s['start']-c['start'])
+                                      for s in owned('sfx')],
+                       transition_in=next((t['name'] for t in owned('transitions') if t['name'] != 'fade_out'), 'cut'))
+        text = owned('text')
+        if text:
+            segment['title'] = text[0]['content'][:200]
+        segments.append(segment)
+    if options.get('fx'):
+        catalog = pipeline.hook('fx', 'metadata', job)
+        if catalog and 'zoom_punch' in catalog():
+            for s in segments:
+                length = (s['source_end'] - s['source_start']) / s['speed']
+                s['fx'] = [dict(name='zoom_punch', start=length*.4, end=length*.6, params={})]
+    return dict(segments=segments)
+
+
+def private_source(pipeline, job, source, scratch, suffix=''):
+    if not job['options'].get('privacy', True):
+        return source
+    sanitize = pipeline.hook('privacy', 'sanitize', job)
+    if not sanitize:
+        return source
+    with pipeline.stage(job, 'privacy' + suffix):
+        payload = dict(job['options'].get('privacy_options', {}))
+        payload.setdefault('game', job.get('game', 'generic'))
+        if payload['game'] == 'generic' and payload.get('regions') is None:
+            # Unknown games get conservative common HUD regions, not a guessed game.
+            from privacy.profiles import COMMON
+            payload['regions'] = {k: v.model_dump() for k, v in COMMON.items()}
+        path, track = sanitize(source, scratch / f'private{suffix}.mp4', payload)
+        job['privacy_track' + suffix] = track.model_dump(mode='json')
+        for warning in track.warnings:
+            pipeline.warn(job, warning)
+        return path
+
+
+def finish_output(pipeline, job, output, plan, scratch):
+    if job['options'].get('narration'):
+        build = pipeline.hook('narration', 'build', job)
+        render = pipeline.hook('narration.render', 'render', job)
+        if build and render:
+            with pipeline.stage(job, 'narration'):
+                track = build(job.get('clips') or [], plan, cache_dir=Path(job['dir']) / 'narration',
+                              allow_network=False)
+                for warning in track.warnings:
+                    pipeline.warn(job, warning)
+                job['narration_track'] = [dict(start=s.start, end=s.end, text=s.text,
+                                               has_audio=s.audio_file is not None) for s in track.segments]
+                output = render(output, track, scratch / 'narrated.mp4')
+    if job['options'].get('social'):
+        build = pipeline.hook('social', 'build_share_kit', job)
+        if build:
+            import shutil
+            with pipeline.stage(job, 'social'):
+                export = scratch / 'export'
+                export.mkdir(exist_ok=True)
+                shutil.copyfile(output, export / 'final_edit.mp4')
+                kit = build(export, job.get('clips') or [], plan, job.get('game', 'generic'))
+                target = Path(job['dir']) / 'share'
+                if target.exists():
+                    shutil.rmtree(target)
+                shutil.move(str(kit), target)
+                job['share_kit'] = 'share'
+    return Path(output)
