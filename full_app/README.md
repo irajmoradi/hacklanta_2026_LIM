@@ -15,6 +15,44 @@ AI-powered video editor that automatically finds highlights and lowlights in gam
 
 ## Quick Start
 
+The backend now persists jobs in `workspace/jobs.sqlite3` and runs analysis,
+planning and rendering in a bounded thread pool. Both existing frontends keep
+working. See [the job API](../docs/api.md) for asynchronous requests, SSE progress,
+clip editing, cancellation, restart behavior and optional module contracts.
+
+From `full_app`, install `requirements.txt`, set `GEMINI_API_KEY`, and run
+`python app.py`. Open `http://localhost:8000`. FFmpeg and FFprobe must be in PATH.
+Run a single server process per workspace; the development reloader is disabled.
+Use `JOB_WORKSPACE` for a different durable directory, `JOB_WORKERS` for worker
+count (default 2), and `MAX_UPLOAD_BYTES` for the upload cap (default 2 GiB).
+Request-supplied keys are memory-only and must be supplied again after restart.
+
+Example new API workflow (replace `JOB_ID` with the returned `job_id`):
+
+```bash
+curl -F 'video=@gameplay.mp4' http://localhost:8000/api/jobs
+curl -H 'Content-Type: application/json' -d '{"mode":"nice","style":"clean_edit"}' http://localhost:8000/api/jobs/JOB_ID/analyze
+curl -N http://localhost:8000/api/jobs/JOB_ID/events
+# Once status is planned:
+curl -H 'Content-Type: application/json' -d '{"preset":"vertical"}' http://localhost:8000/api/jobs/JOB_ID/render
+# Once status is done:
+curl -o montage.mp4 http://localhost:8000/api/jobs/JOB_ID/download
+```
+
+Cancel with `POST /api/jobs/JOB_ID/cancel`; cancellation takes effect between
+stages. Delete an inactive job with `DELETE /api/jobs/JOB_ID` to remove its source
+and output. Failed/interrupted jobs retain completed stages for retry. A crash
+before a provider response is checkpointed can repeat that external call.
+
+Run backend tests from the worktree root:
+
+```bash
+tools/remote_run.sh "cd full_app && python -m pytest -q"
+```
+
+These tests mock Gemini and generate synthetic video with FFmpeg, including real
+renders for all three output presets. No live credentials are required.
+
 ### Prerequisites
 
 - **Python 3.10+**

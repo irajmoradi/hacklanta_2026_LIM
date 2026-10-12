@@ -1,6 +1,5 @@
 """Application factory and compatible HTTP adapters."""
 import atexit
-import json
 import math
 import os
 import shutil
@@ -14,6 +13,7 @@ from models.effects import VIDEO_EFFECTS, SOUND_EFFECTS
 from services.probe import probe_video
 from .legacy import EDIT_STYLES
 from .pipeline import Pipeline, ROOT
+from .ownership import WorkspaceLease
 from .queue import Conflict, JobQueue
 from .store import JobStore
 from .validation import clips_valid, options_valid, plan_valid
@@ -44,10 +44,29 @@ def create_app(config=None, pipeline=None):
     app.config.update(config or {})
     workspace = Path(app.config['WORKSPACE']).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
+    lease = WorkspaceLease(workspace / '.worker.lock')
     store = JobStore(workspace / 'jobs.sqlite3')
-    queue = JobQueue(store, pipeline or Pipeline(), app.config['JOB_WORKERS'], app.config['JOB_CAPACITY'])
+    queue = JobQueue(store, pipeline or Pipeline(), app.config['JOB_WORKERS'], app.config['JOB_CAPACITY'], lease)
     app.extensions.update(job_store=store, job_queue=queue)
     atexit.register(queue.close)
+    # Only UUID job directories under this workspace are owned by this backend.
+    known = {job['id'] for job in store.all()}
+    for directory in workspace.iterdir():
+        if not directory.is_dir() or directory.is_symlink() or len(directory.name) != 32:
+            continue
+        try:
+            int(directory.name, 16)
+        except ValueError:
+            continue
+        if directory.name not in known:
+            shutil.rmtree(directory)
+        else:
+            scratch = directory / 'render_tmp'
+            if scratch.is_dir() and not scratch.is_symlink():
+                shutil.rmtree(scratch)
+            (directory / 'upload.part').unlink(missing_ok=True)
+            for segment in directory.glob('seg_*_source.mp4'):
+                segment.unlink(missing_ok=True)
     if app.config['RECOVER_JOBS']:
         queue.recover()
 
@@ -109,16 +128,18 @@ def create_app(config=None, pipeline=None):
     def status(job_id):
         return jsonify(public(store.get(job_id)))
 
-    def start(job_id, target, data, legacy=False):
+    def start(job_id, target, data, legacy=False, analysis_request=False):
         options = options_valid(data, EDIT_STYLES)
         job = store.get(job_id)
+        if 'edit_plan' in data and target != 'render':
+            raise ValueError('edit_plan is only accepted by render')
         custom = plan_valid(data['edit_plan'], job['meta']['duration']) if 'edit_plan' in data else None
         key = request.headers.get('X-API-Key') or data.get('api_key')
         if key is not None and (not isinstance(key, str) or len(key) > 4096):
             raise ValueError('Invalid API key')
         if legacy and target == 'render':
             options.setdefault('generate_thumbnails', True)
-        future = queue.submit(job_id, target, options, key, custom)
+        future = queue.submit(job_id, target, options, key, custom, analysis_request=analysis_request)
         if legacy:
             future.result()
             job = store.get(job_id)
@@ -134,7 +155,7 @@ def create_app(config=None, pipeline=None):
     @app.post('/api/jobs/<job_id>/analyze')
     def analyze(job_id):
         # The new workflow includes planning; legacy clients have a separate button.
-        return start(job_id, 'plan', body())
+        return start(job_id, 'plan', body(), analysis_request=True)
 
     @app.post('/api/jobs/<job_id>/plan')
     def plan(job_id):
@@ -142,7 +163,9 @@ def create_app(config=None, pipeline=None):
 
     @app.post('/api/jobs/<job_id>/render')
     def render(job_id):
-        return start(job_id, 'render', body())
+        data = body()
+        data.setdefault('preset', 'landscape')
+        return start(job_id, 'render', data)
 
     @app.post('/api/analyze')
     @app.post('/api/plan')
@@ -169,6 +192,8 @@ def create_app(config=None, pipeline=None):
                 raise Conflict('Job is busy')
             if job['clips'] is None:
                 raise Conflict('Analyze before editing clips')
+            if isinstance(data['clips'], list) and any(not isinstance(c, dict) or 'id' not in c for c in data['clips']):
+                raise ValueError('Each edited clip must include its id')
             incoming = clips_valid(data['clips'], job['meta']['duration'])
             known = {c['id']: c for c in job['clips']}
             edited = []
@@ -221,6 +246,10 @@ def create_app(config=None, pipeline=None):
                     cursor = seq
                     yield f'id: {seq}\nevent: progress\ndata: {data}\n\n'
                 if not rows:
+                    try:
+                        store.get(job_id)
+                    except KeyError:
+                        return
                     yield ': heartbeat\n\n'
                 # Keep idle jobs connected so later actions arrive on the same stream.
                 time.sleep(app.config['SSE_INTERVAL'])

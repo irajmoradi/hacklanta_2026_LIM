@@ -70,6 +70,8 @@ class Pipeline:
 
     def plan(self, job, key):
         options = job['options']
+        if not any(c.get('keep', True) for c in job['clips'] or []):
+            raise ValueError('No selected clips to plan')
         style = EDIT_STYLES[options.get('style', 'hype_montage')]
         prompt = (ROOT / 'prompts/editor.txt').read_text(encoding='utf-8').format(
             max_duration=options.get('max_duration', 180),
@@ -94,9 +96,10 @@ class Pipeline:
             if render_hook:
                 output = Path(render_hook(job=job, plan=plan, workspace=scratch))
             else:
-                preset = job['options'].get('preset', 'landscape')
-                width, height = {'landscape': (job['meta']['width'], job['meta']['height']),
-                                 'vertical': (1080, 1920), 'square': (1080, 1080)}[preset]
+                preset = job['options'].get('preset')
+                width, height = {'landscape': (1920, 1080),
+                                 'vertical': (1080, 1920), 'square': (1080, 1080),
+                                 None: (job['meta']['width'], job['meta']['height'])}[preset]
                 runner = FFmpegRunner(scratch, Path(job['source']), width, height, job['meta']['fps'])
                 output = runner.render(plan)
                 if job['options'].get('generate_thumbnails', False):

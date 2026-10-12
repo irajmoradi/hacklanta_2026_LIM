@@ -11,13 +11,14 @@ class Conflict(ValueError):
 class JobQueue:
     STAGES = ('analyze', 'plan', 'render')
 
-    def __init__(self, store, pipeline, workers=2, capacity=32):
+    def __init__(self, store, pipeline, workers=2, capacity=32, lease=None):
         self.store, self.pipeline = store, pipeline
         self.pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix='job')
         self.capacity = capacity
         self.active = {}
         self.keys = {}  # Never serialized, logged, or returned in status.
         self.lock = store.lock
+        self.lease = lease
 
     def recover(self):
         for job in self.store.all():
@@ -25,11 +26,13 @@ class JobQueue:
             if job['status'] in ('queued', 'analyzing', 'planning', 'rendering'):
                 self.submit(job['id'], job['target'], {}, recover=True)
 
-    def submit(self, job_id, target, options, key=None, custom_plan=None, recover=False):
+    def submit(self, job_id, target, options, key=None, custom_plan=None, recover=False, analysis_request=False):
         with self.lock:
             job = self.store.get(job_id)
             if job_id in self.active:
-                if job['target'] == target and all(job['options'].get(k) == v for k, v in options.items()) and custom_plan is None and job['status'] != 'cancelled':
+                same_options = all(job['options'].get(k) == v for k, v in options.items())
+                same_plan = custom_plan is None or custom_plan == job['edit_plan']
+                if job['target'] == target and same_options and same_plan and job['status'] != 'cancelled':
                     return self.active[job_id]
                 raise Conflict('Job is busy')
             if len(self.active) >= self.capacity and not recover:
@@ -39,7 +42,7 @@ class JobQueue:
             changed = {k for k, v in options.items() if job['options'].get(k) != v}
             analysis_keys = {'mode', 'provider', 'use_signals', 'splits'}
             # Prompt belongs to the stage requested by the caller.
-            if target == 'analyze' or (target == 'plan' and not job['clips']):
+            if analysis_request or target == 'analyze' or (target == 'plan' and not job['clips']):
                 analysis_keys |= {'prompt'}
             invalidate = None
             if changed & analysis_keys:
@@ -50,8 +53,10 @@ class JobQueue:
                 invalidate = 'render'
             if invalidate:
                 self.invalidate(job, invalidate)
+            if target != 'render' and 'analyze' not in job['completed'] and 'plan' in job['completed']:
+                self.invalidate(job, 'analyze')
             job['options'].update(options)
-            if custom_plan is not None:
+            if custom_plan is not None and custom_plan != job['edit_plan']:
                 self.invalidate(job, 'render')
                 job['edit_plan'] = custom_plan
                 if 'plan' not in job['completed']:
@@ -132,3 +137,5 @@ class JobQueue:
     def close(self):
         self.pool.shutdown(wait=True)
         self.keys.clear()
+        if self.lease:
+            self.lease.close()

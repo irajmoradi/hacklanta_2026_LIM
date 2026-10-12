@@ -33,7 +33,7 @@ def _split_video(path: Path, n_splits: int, duration: float) -> list[dict]:
              "-c:a", "aac",
              "-avoid_negative_ts", "1",
              str(seg_path)],
-            capture_output=True, text=True,
+            capture_output=True, text=True, timeout=3600,
         )
         if not seg_path.exists() or seg_path.stat().st_size == 0:
             raise RuntimeError(
@@ -239,9 +239,7 @@ def _generate_intro_outro(runner: FFmpegRunner, duration: float, client: GeminiV
         outro_clip = runner.image_to_clip(outro_img, 4.0, "outro")
         print(f"  [thumbnails] Outro clip ready")
 
-    except Exception as e:
-        print(f"  [thumbnails] Failed (non-fatal): {e}")
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        print("  [thumbnails] Failed (non-fatal)")
 
     return intro_clip, outro_clip
