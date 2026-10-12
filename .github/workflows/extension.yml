@@ -1,0 +1,61 @@
+name: Extension checks
+on:
+  push:
+    branches: [Extension]
+  pull_request:
+    branches: [Extension]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GEMINI_API_KEY: ""
+      GOOGLE_API_KEY: ""
+      GOOGLE_GENAI_USE_VERTEXAI: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: full_app/requirements*.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: full_app/production_frontend/package-lock.json
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Python dependencies
+        run: |
+          for req in full_app/requirements*.txt; do python -m pip install -r "$req"; done
+          python -m pip install pytest pytest-socket
+      - name: Offline pytest (network disabled, live tests excluded)
+        working-directory: full_app
+        run: python -m pytest -q -m 'not live' --disable-socket
+      - name: Synthetic evaluation smoke
+        working-directory: full_app
+        run: |
+          python -m eval.synthetic /tmp/lim-eval
+          python -m eval.runner /tmp/lim-eval/labels.json --mock --output /tmp/lim-eval/report.json
+      - name: Production frontend
+        working-directory: full_app/production_frontend
+        run: npm ci && npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-eval
+          path: /tmp/lim-eval/report.json
+      - name: Build default container
+        run: docker build -t lim:ci .
+      - name: Container health and frontend smoke
+        run: |
+          docker run -d --name lim-ci -p 8000:8000 lim:ci
+          trap 'docker logs lim-ci; docker rm -f lim-ci' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail http://localhost:8000/api/info; then break; fi
+            sleep 2
+          done
+          curl --fail http://localhost:8000/api/info
+          curl --fail http://localhost:8000/ | grep '/assets/'

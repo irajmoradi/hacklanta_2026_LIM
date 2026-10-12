@@ -162,3 +162,26 @@ builds the frontend, uploads the eval JSON, and builds/smoke-tests the default i
 No secrets are referenced and provider-key environment variables are empty.
 GitHub execution occurs after integration; local validation commands and limitations
 are recorded in the task's final report.
+
+## Validation in this task worktree
+
+- `bash tools/remote_run.sh "cd full_app && python -m pytest -q eval && python -m eval.synthetic /tmp/lim-ext08-eval && python -m eval.runner /tmp/lim-ext08-eval/labels.json --mock --output /tmp/lim-ext08-eval/report.json && python -m eval.runner /tmp/lim-ext08-eval/labels.json --output /tmp/lim-ext08-eval/optional-report.json && cd production_frontend && npm ci && npm run build"`
+  exited 0: the initial 18 metric/harness tests passed, both CLI modes completed,
+  and Vite built the production bundle.
+- `bash tools/remote_run.sh "python -m pip install -q pytest-socket && cd full_app && python -m pytest -q -m 'not live' --disable-socket"`
+  exited 0 with 18 tests. After adding the application regression,
+  `bash tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live' --disable-socket"`
+  exited 0 with **19 passed**. The added test uploads synthetic media, mocks Gemini
+  analysis/planning, renders with real ffmpeg, and downloads the result.
+- `docker compose config --quiet` and `docker build -t lim-ext08:test .` exited 0.
+  The image ran locally with `docker run -d --name lim-ext08-smoke -p 127.0.0.1:18008:8000 lim-ext08:test`.
+  PowerShell `Invoke-WebRequest` checks asserted HTTP 200 for `/api/info`, `/`, and
+  the index's JavaScript asset; `docker inspect --format '{{.State.Health.Status}}' lim-ext08-smoke`
+  returned `healthy`. The temporary container was removed; smoke checks exited 0.
+
+The runner preflight's `command -v docker` exited 1 because Docker is absent there;
+container validation used local Linux containers instead. The actual workflow has
+not run on GitHub, and optional ML image variants have not been built. npm reported
+an existing damaged-lockfile warning and eight dependency vulnerabilities (one low,
+one moderate, five high, one critical); install and build still succeeded. Frontend
+dependency updates are outside EXT-08's allowed paths and remain for integration.

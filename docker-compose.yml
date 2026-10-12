@@ -1,0 +1,20 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        INSTALL_WHISPER: ${INSTALL_WHISPER:-false}
+        INSTALL_OCR: ${INSTALL_OCR:-false}
+        INSTALL_SAM2: ${INSTALL_SAM2:-false}
+    ports:
+      - "8000:8000"
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite-preview}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-false}
+    volumes:
+      - workspace:/app/full_app/workspace
+    restart: unless-stopped
+volumes:
+  workspace:
