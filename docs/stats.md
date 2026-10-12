@@ -11,7 +11,6 @@ Run from `full_app`, using a writable persistent database path whose parent exis
 
 ```python
 from pathlib import Path
-from flask import g
 from stats import VoteStore, create_blueprint
 
 # app is the existing Flask app. These two application-specific functions must
@@ -178,3 +177,10 @@ inputs, identity/visibility, idempotency, persistence, group isolation, concurre
 vote contention, and ties. Existing job tests exercise the upload/analyze/plan/render
 lifecycle with mocked inference and ffmpeg-generated footage. No live Gemini calls
 are needed. Runtime dependencies: existing Flask plus Python standard library.
+
+EXT-26 verification on the Linux runner (2026-10-12): the command above initially
+returned exit 1 with 43 passed and three existing render tests failing because
+they patched the obsolete `server.pipeline.importlib` symbol. Updating that test
+patch to `pipeline.orchestrator.importlib` restored the intended optional-module
+fallback exercise. The same command then returned exit 0: **46 passed in 11.42s**,
+including square, vertical, and landscape renders. Live Gemini calls: **0**.
