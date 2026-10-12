@@ -24,5 +24,5 @@ if [ "$(cat .venv/.req 2>/dev/null)" != "$REQ" ]; then
   pip install -q pytest >/dev/null; echo "$REQ" > .venv/.req
 fi
 . .venv/bin/activate
-set +e; bash -lc "$CMD"; RC=$?; echo "remote exit=$RC"; exit $RC
+set +e; bash -c "$CMD"; RC=$?; echo "remote exit=$RC"; exit $RC
 REMOTE
