@@ -210,6 +210,8 @@ class Renderer:
                     "-b:a", "192k", "-t", str(total), "-movflags", "+faststart", str(muxed)],
                     "v2 music mux")
                 joined = muxed
+            from .audio import master_audio
+            joined = master_audio(joined, directory / 'mastered.mp4')
             output = self.workspace / "final_edit.mp4"
             joined.replace(output)
             return output

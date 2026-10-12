@@ -1,6 +1,17 @@
 """One mixer for all v2 paths: timed ducking, explicit gains and peak protection."""
 from pathlib import Path
+import subprocess
 from models.effects import SOUND_EFFECTS
+
+
+def master_audio(source, output):
+    """Final AAC headroom after segment encoding/concatenation; copy video unchanged."""
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', str(source),
+                    '-map', '0:v:0', '-map', '0:a:0', '-c:v', 'copy',
+                    '-af', 'alimiter=limit=0.85:level=0:latency=1',
+                    '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2',
+                    '-movflags', '+faststart', str(output)], check=True, capture_output=True)
+    return output
 
 
 def sfx_graph(sounds, first_input, duration, cache=None):

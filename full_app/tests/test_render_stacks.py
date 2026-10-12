@@ -35,3 +35,22 @@ def test_all_overlapping_sounds_are_mixed_and_ducked(tmp_path):
 def test_unknown_sound_is_not_silently_skipped():
     with pytest.raises(ValueError, match='Unknown'):
         sfx_graph([Sound(sfx_key='missing')],1,1)
+
+
+def test_final_master_leaves_aac_headroom(tmp_path):
+    import array
+    from render.audio import master_audio
+    source = tmp_path/'loud.mkv'
+    output = tmp_path/'mastered.mp4'
+    subprocess.run(['ffmpeg','-v','error','-y','-f','lavfi','-i','testsrc2=s=160x90:r=20:d=1',
+                    '-f','lavfi','-i','sine=frequency=400:duration=1','-af','volume=16',
+                    '-c:v','libx264','-c:a','pcm_f32le','-ac','2',str(source)],check=True,capture_output=True)
+    master_audio(source,output)
+    raw = subprocess.check_output(['ffmpeg','-v','error','-i',str(output),'-vn','-f','f32le','-'])
+    samples = array.array('f')
+    samples.frombytes(raw)
+    assert .7 < max(abs(s) for s in samples) < 1
+    # Mastering must not re-encode or alter a video frame.
+    def video_hash(path):
+        return subprocess.check_output(['ffmpeg','-v','error','-i',str(path),'-map','0:v','-c','copy','-f','hash','-'])
+    assert video_hash(source) == video_hash(output)
