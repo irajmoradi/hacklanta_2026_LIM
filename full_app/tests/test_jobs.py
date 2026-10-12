@@ -221,6 +221,14 @@ def test_bad_edits_and_plan(setup, video):
 @pytest.mark.parametrize('preset,dimensions', [('square', (1080, 1080)), ('vertical', (1080, 1920)),
                                                ('landscape', (1920, 1080))])
 def test_default_pipeline_mocked_gemini_and_real_render(tmp_path, video, monkeypatch, preset, dimensions):
+    # Exercise fallback deterministically even when other sprint tasks add hooks.
+    import importlib
+    from types import SimpleNamespace
+    def optional_import(name):
+        if name in {'signals', 'services.providers', 'captions', 'reactions', 'sam'}:
+            raise ImportError('optional integration intentionally absent in this test')
+        return importlib.import_module(name)
+    monkeypatch.setattr('server.pipeline.importlib', SimpleNamespace(import_module=optional_import))
     client_mock = Mock()
     client_mock.score_windows.return_value = []
     client_mock.find_clips.return_value = [{'start': '0:00', 'end': '0:01', 'description': 'kill'}]
