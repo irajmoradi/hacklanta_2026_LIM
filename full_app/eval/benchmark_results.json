@@ -1,0 +1,1218 @@
+{
+  "version": 1,
+  "pipelines": {
+    "signals-only": {
+      "status": "ok",
+      "summary": {
+        "videos": 4,
+        "thresholds": {
+          "0.3": {
+            "tp": 2,
+            "fp": 14,
+            "fn": 14,
+            "precision": 0.125,
+            "recall": 0.125,
+            "f1": 0.125,
+            "mAP": 0.049107142857142856
+          },
+          "0.5": {
+            "tp": 1,
+            "fp": 15,
+            "fn": 15,
+            "precision": 0.0625,
+            "recall": 0.0625,
+            "f1": 0.0625,
+            "mAP": 0.008928571428571428
+          }
+        },
+        "mAP": 0.029017857142857144,
+        "mean_time_to_first_clip_seconds": 0.6879945362501303,
+        "videos_with_clip": 4,
+        "cost_usd_per_minute": 0.0,
+        "forbidden_picks": 11,
+        "death_picks": 7,
+        "spectating_picks": 4,
+        "prediction_count": 16,
+        "seconds_per_footage_minute": 0.2896819100000549,
+        "estimated_api_usd_per_minute": 0.0
+      },
+      "videos": [
+        {
+          "id": "test-valorant",
+          "duration_seconds": 120.0,
+          "label_count": 4,
+          "prediction_count": 2,
+          "predictions": [
+            {
+              "start": 27.0,
+              "end": 33.5,
+              "score": 0.52255175
+            },
+            {
+              "start": 86.0,
+              "end": 94.5,
+              "score": 0.4984855
+            }
+          ],
+          "elapsed_seconds": 0.6330251510000835,
+          "time_to_first_clip_seconds": 0.6330251510000835,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 0,
+              "fp": 2,
+              "fn": 4,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "ap": 0.0
+            },
+            "0.5": {
+              "tp": 0,
+              "fp": 2,
+              "fn": 4,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "ap": 0.0
+            }
+          },
+          "forbidden_picks": 2,
+          "death_picks": 2,
+          "spectating_picks": 0,
+          "estimated_input_tokens": 0,
+          "estimated_output_tokens": 0,
+          "estimated_api_usd": 0.0
+        },
+        {
+          "id": "test-ow2",
+          "duration_seconds": 135.0,
+          "label_count": 4,
+          "prediction_count": 2,
+          "predictions": [
+            {
+              "start": 52.8,
+              "end": 63.6,
+              "score": 0.48391675
+            },
+            {
+              "start": 74.4,
+              "end": 85.2,
+              "score": 0.35316625
+            }
+          ],
+          "elapsed_seconds": 0.6560663900002055,
+          "time_to_first_clip_seconds": 0.6560663900002055,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 0,
+              "fp": 2,
+              "fn": 4,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "ap": 0.0
+            },
+            "0.5": {
+              "tp": 0,
+              "fp": 2,
+              "fn": 4,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "ap": 0.0
+            }
+          },
+          "forbidden_picks": 2,
+          "death_picks": 0,
+          "spectating_picks": 2,
+          "estimated_input_tokens": 0,
+          "estimated_output_tokens": 0,
+          "estimated_api_usd": 0.0
+        },
+        {
+          "id": "test-deadlock",
+          "duration_seconds": 150.0,
+          "label_count": 4,
+          "prediction_count": 5,
+          "predictions": [
+            {
+              "start": 107.667,
+              "end": 116.333,
+              "score": 0.52524275
+            },
+            {
+              "start": 32.0,
+              "end": 44.0,
+              "score": 0.4642615
+            },
+            {
+              "start": 116.333,
+              "end": 125.0,
+              "score": 0.40462125
+            },
+            {
+              "start": 99.0,
+              "end": 107.667,
+              "score": 0.36756225
+            },
+            {
+              "start": 84.0,
+              "end": 90.5,
+              "score": 0.35300725
+            }
+          ],
+          "elapsed_seconds": 0.712385495000035,
+          "time_to_first_clip_seconds": 0.712385495000035,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 0,
+              "fp": 5,
+              "fn": 4,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "ap": 0.0
+            },
+            "0.5": {
+              "tp": 0,
+              "fp": 5,
+              "fn": 4,
+              "precision": 0.0,
+              "recall": 0.0,
+              "f1": 0.0,
+              "ap": 0.0
+            }
+          },
+          "forbidden_picks": 4,
+          "death_picks": 3,
+          "spectating_picks": 1,
+          "estimated_input_tokens": 0,
+          "estimated_output_tokens": 0,
+          "estimated_api_usd": 0.0
+        },
+        {
+          "id": "test-league",
+          "duration_seconds": 165.0,
+          "label_count": 4,
+          "prediction_count": 7,
+          "predictions": [
+            {
+              "start": 23.0,
+              "end": 31.333,
+              "score": 0.64058975
+            },
+            {
+              "start": 50.0,
+              "end": 62.0,
+              "score": 0.43754275
+            },
+            {
+              "start": 8.0,
+              "end": 14.5,
+              "score": 0.4057395
+            },
+            {
+              "start": 111.667,
+              "end": 120.0,
+              "score": 0.397119
+            },
+            {
+              "start": 31.333,
+              "end": 39.667,
+              "score": 0.3958175
+            },
+            {
+              "start": 136.0,
+              "end": 148.0,
+              "score": 0.3945565
+            },
+            {
+              "start": 79.0,
+              "end": 90.0,
+              "score": 0.38513475
+            }
+          ],
+          "elapsed_seconds": 0.7505011090001972,
+          "time_to_first_clip_seconds": 0.7505011090001972,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 2,
+              "fp": 5,
+              "fn": 2,
+              "precision": 0.2857142857142857,
+              "recall": 0.5,
+              "f1": 0.36363636363636365,
+              "ap": 0.19642857142857142
+            },
+            "0.5": {
+              "tp": 1,
+              "fp": 6,
+              "fn": 3,
+              "precision": 0.14285714285714285,
+              "recall": 0.25,
+              "f1": 0.18181818181818182,
+              "ap": 0.03571428571428571
+            }
+          },
+          "forbidden_picks": 3,
+          "death_picks": 2,
+          "spectating_picks": 1,
+          "estimated_input_tokens": 0,
+          "estimated_output_tokens": 0,
+          "estimated_api_usd": 0.0
+        }
+      ],
+      "skipped": [],
+      "errors": []
+    },
+    "vlm-only": {
+      "status": "ok",
+      "summary": {
+        "videos": 4,
+        "thresholds": {
+          "0.3": {
+            "tp": 16,
+            "fp": 12,
+            "fn": 0,
+            "precision": 0.5714285714285714,
+            "recall": 1.0,
+            "f1": 0.7272727272727273,
+            "mAP": 0.8110119047619047
+          },
+          "0.5": {
+            "tp": 8,
+            "fp": 20,
+            "fn": 8,
+            "precision": 0.2857142857142857,
+            "recall": 0.5,
+            "f1": 0.36363636363636365,
+            "mAP": 0.20386904761904762
+          }
+        },
+        "mAP": 0.5074404761904762,
+        "mean_time_to_first_clip_seconds": 0.442634713750067,
+        "videos_with_clip": 4,
+        "cost_usd_per_minute": 0.0,
+        "forbidden_picks": 10,
+        "death_picks": 2,
+        "spectating_picks": 8,
+        "prediction_count": 28,
+        "seconds_per_footage_minute": 0.1863725110526598,
+        "estimated_api_usd_per_minute": 0.001930526315789474
+      },
+      "videos": [
+        {
+          "id": "test-valorant",
+          "duration_seconds": 120.0,
+          "label_count": 4,
+          "prediction_count": 7,
+          "predictions": [
+            {
+              "start": 6.154246189695975,
+              "end": 13.654246189695975,
+              "score": 0.7106101647940719
+            },
+            {
+              "start": 12.616808369768247,
+              "end": 21.116808369768247,
+              "score": 0.5194458840121754
+            },
+            {
+              "start": 38.11697840198078,
+              "end": 46.11697840198078,
+              "score": 0.8778672633718076
+            },
+            {
+              "start": 45.69353980427939,
+              "end": 53.19353980427939,
+              "score": 0.6371535509153567
+            },
+            {
+              "start": 59.37599752674535,
+              "end": 67.87599752674535,
+              "score": 0.6931993931565867
+            },
+            {
+              "start": 73.5950628565936,
+              "end": 79.5950628565936,
+              "score": 0.6635877094814732
+            },
+            {
+              "start": 99.48117372703805,
+              "end": 106.98117372703805,
+              "score": 0.7341709397677921
+            }
+          ],
+          "elapsed_seconds": 0.3739561610000237,
+          "time_to_first_clip_seconds": 0.3739561610000237,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 4,
+              "fp": 3,
+              "fn": 0,
+              "precision": 0.5714285714285714,
+              "recall": 1.0,
+              "f1": 0.7272727272727273,
+              "ap": 0.7291666666666666
+            },
+            "0.5": {
+              "tp": 3,
+              "fp": 4,
+              "fn": 1,
+              "precision": 0.42857142857142855,
+              "recall": 0.75,
+              "f1": 0.5454545454545454,
+              "ap": 0.375
+            }
+          },
+          "forbidden_picks": 2,
+          "death_picks": 0,
+          "spectating_picks": 2,
+          "estimated_input_tokens": 12200.0,
+          "estimated_output_tokens": 100,
+          "estimated_api_usd": 0.00391
+        },
+        {
+          "id": "test-ow2",
+          "duration_seconds": 135.0,
+          "label_count": 4,
+          "prediction_count": 7,
+          "predictions": [
+            {
+              "start": 9.941787072666942,
+              "end": 18.44178707266694,
+              "score": 0.8623678846052366
+            },
+            {
+              "start": 22.609422850598975,
+              "end": 29.609422850598975,
+              "score": 0.9514577280664185
+            },
+            {
+              "start": 45.28880013265777,
+              "end": 52.78880013265777,
+              "score": 0.8920925016259823
+            },
+            {
+              "start": 51.138743521177375,
+              "end": 59.138743521177375,
+              "score": 0.9160341253587803
+            },
+            {
+              "start": 78.3986642255486,
+              "end": 87.3986642255486,
+              "score": 0.6094758332058743
+            },
+            {
+              "start": 85.16614936685089,
+              "end": 91.66614936685089,
+              "score": 0.5662843887803994
+            },
+            {
+              "start": 100.39697183781348,
+              "end": 109.39697183781348,
+              "score": 0.6636820766015359
+            }
+          ],
+          "elapsed_seconds": 0.44931413700010125,
+          "time_to_first_clip_seconds": 0.44931413700010125,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 4,
+              "fp": 3,
+              "fn": 0,
+              "precision": 0.5714285714285714,
+              "recall": 1.0,
+              "f1": 0.7272727272727273,
+              "ap": 0.7678571428571428
+            },
+            "0.5": {
+              "tp": 1,
+              "fp": 6,
+              "fn": 3,
+              "precision": 0.14285714285714285,
+              "recall": 0.25,
+              "f1": 0.18181818181818182,
+              "ap": 0.03571428571428571
+            }
+          },
+          "forbidden_picks": 3,
+          "death_picks": 1,
+          "spectating_picks": 2,
+          "estimated_input_tokens": 13700.0,
+          "estimated_output_tokens": 100,
+          "estimated_api_usd": 0.00436
+        },
+        {
+          "id": "test-deadlock",
+          "duration_seconds": 150.0,
+          "label_count": 4,
+          "prediction_count": 7,
+          "predictions": [
+            {
+              "start": 7.701952368213167,
+              "end": 16.701952368213167,
+              "score": 0.6248503687629423
+            },
+            {
+              "start": 19.328149229345403,
+              "end": 26.328149229345403,
+              "score": 0.8180227450952845
+            },
+            {
+              "start": 32.52658302673282,
+              "end": 41.02658302673282,
+              "score": 0.574479183752079
+            },
+            {
+              "start": 47.80953292346047,
+              "end": 55.80953292346047,
+              "score": 0.6493243277317822
+            },
+            {
+              "start": 58.02114186512574,
+              "end": 66.52114186512574,
+              "score": 1.0
+            },
+            {
+              "start": 73.4545479001402,
+              "end": 81.9545479001402,
+              "score": 0.5697182924119943
+            },
+            {
+              "start": 86.79631312533196,
+              "end": 95.79631312533196,
+              "score": 0.6753645306274894
+            }
+          ],
+          "elapsed_seconds": 0.4486477450000166,
+          "time_to_first_clip_seconds": 0.4486477450000166,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 4,
+              "fp": 3,
+              "fn": 0,
+              "precision": 0.5714285714285714,
+              "recall": 1.0,
+              "f1": 0.7272727272727273,
+              "ap": 0.8303571428571428
+            },
+            "0.5": {
+              "tp": 2,
+              "fp": 5,
+              "fn": 2,
+              "precision": 0.2857142857142857,
+              "recall": 0.5,
+              "f1": 0.36363636363636365,
+              "ap": 0.19642857142857142
+            }
+          },
+          "forbidden_picks": 2,
+          "death_picks": 0,
+          "spectating_picks": 2,
+          "estimated_input_tokens": 15200.0,
+          "estimated_output_tokens": 100,
+          "estimated_api_usd": 0.00481
+        },
+        {
+          "id": "test-league",
+          "duration_seconds": 165.0,
+          "label_count": 4,
+          "prediction_count": 7,
+          "predictions": [
+            {
+              "start": 6.435856299786693,
+              "end": 14.435856299786693,
+              "score": 0.6812159773109577
+            },
+            {
+              "start": 35.53766846316359,
+              "end": 43.53766846316359,
+              "score": 0.742799861588552
+            },
+            {
+              "start": 52.67308608235362,
+              "end": 60.17308608235362,
+              "score": 0.9181331896811832
+            },
+            {
+              "start": 64.87064350850184,
+              "end": 71.37064350850184,
+              "score": 0.5405269658577734
+            },
+            {
+              "start": 81.85520241120582,
+              "end": 89.85520241120582,
+              "score": 0.7355491772428672
+            },
+            {
+              "start": 122.92983341637404,
+              "end": 130.42983341637404,
+              "score": 0.5834145580118507
+            },
+            {
+              "start": 135.32372549425284,
+              "end": 142.82372549425284,
+              "score": 0.712037599471938
+            }
+          ],
+          "elapsed_seconds": 0.49862081200012653,
+          "time_to_first_clip_seconds": 0.49862081200012653,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 4,
+              "fp": 3,
+              "fn": 0,
+              "precision": 0.5714285714285714,
+              "recall": 1.0,
+              "f1": 0.7272727272727273,
+              "ap": 0.9166666666666666
+            },
+            "0.5": {
+              "tp": 2,
+              "fp": 5,
+              "fn": 2,
+              "precision": 0.2857142857142857,
+              "recall": 0.5,
+              "f1": 0.36363636363636365,
+              "ap": 0.20833333333333331
+            }
+          },
+          "forbidden_picks": 3,
+          "death_picks": 1,
+          "spectating_picks": 2,
+          "estimated_input_tokens": 16700.0,
+          "estimated_output_tokens": 100,
+          "estimated_api_usd": 0.00526
+        }
+      ],
+      "skipped": [],
+      "errors": []
+    },
+    "signals-vlm": {
+      "status": "ok",
+      "summary": {
+        "videos": 4,
+        "thresholds": {
+          "0.3": {
+            "tp": 13,
+            "fp": 4,
+            "fn": 3,
+            "precision": 0.7647058823529411,
+            "recall": 0.8125,
+            "f1": 0.787878787878788,
+            "mAP": 0.74375
+          },
+          "0.5": {
+            "tp": 9,
+            "fp": 8,
+            "fn": 7,
+            "precision": 0.5294117647058824,
+            "recall": 0.5625,
+            "f1": 0.5454545454545455,
+            "mAP": 0.475
+          }
+        },
+        "mAP": 0.609375,
+        "mean_time_to_first_clip_seconds": 1.1306384102501283,
+        "videos_with_clip": 4,
+        "cost_usd_per_minute": 0.0,
+        "forbidden_picks": 0,
+        "death_picks": 0,
+        "spectating_picks": 0,
+        "prediction_count": 17,
+        "seconds_per_footage_minute": 0.476058278000054,
+        "estimated_api_usd_per_minute": 0.0027031578947368418
+      },
+      "videos": [
+        {
+          "id": "test-valorant",
+          "duration_seconds": 120.0,
+          "label_count": 4,
+          "prediction_count": 3,
+          "predictions": [
+            {
+              "start": 45.0,
+              "end": 52.0,
+              "score": 0.5289467085943055
+            },
+            {
+              "start": 57.0,
+              "end": 64.0,
+              "score": 0.5319832255065293
+            },
+            {
+              "start": 94.5,
+              "end": 103.0,
+              "score": 0.491869044453494
+            }
+          ],
+          "elapsed_seconds": 1.0069904090000819,
+          "time_to_first_clip_seconds": 1.0069904090000819,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 3,
+              "fp": 0,
+              "fn": 1,
+              "precision": 1.0,
+              "recall": 0.75,
+              "f1": 0.8571428571428571,
+              "ap": 0.75
+            },
+            "0.5": {
+              "tp": 3,
+              "fp": 0,
+              "fn": 1,
+              "precision": 1.0,
+              "recall": 0.75,
+              "f1": 0.8571428571428571,
+              "ap": 0.75
+            }
+          },
+          "forbidden_picks": 0,
+          "death_picks": 0,
+          "spectating_picks": 0,
+          "estimated_input_tokens": 7900.0,
+          "estimated_output_tokens": 800,
+          "estimated_api_usd": 0.00437
+        },
+        {
+          "id": "test-ow2",
+          "duration_seconds": 135.0,
+          "label_count": 4,
+          "prediction_count": 3,
+          "predictions": [
+            {
+              "start": 85.2,
+              "end": 96.0,
+              "score": 0.5474194057942718
+            },
+            {
+              "start": 7.0,
+              "end": 14.0,
+              "score": 0.5182031980915969
+            },
+            {
+              "start": 42.0,
+              "end": 52.8,
+              "score": 0.48018369563149493
+            }
+          ],
+          "elapsed_seconds": 1.1053947450002397,
+          "time_to_first_clip_seconds": 1.1053947450002397,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 3,
+              "fp": 0,
+              "fn": 1,
+              "precision": 1.0,
+              "recall": 0.75,
+              "f1": 0.8571428571428571,
+              "ap": 0.75
+            },
+            "0.5": {
+              "tp": 2,
+              "fp": 1,
+              "fn": 2,
+              "precision": 0.6666666666666666,
+              "recall": 0.5,
+              "f1": 0.5714285714285715,
+              "ap": 0.3333333333333333
+            }
+          },
+          "forbidden_picks": 0,
+          "death_picks": 0,
+          "spectating_picks": 0,
+          "estimated_input_tokens": 11800.0,
+          "estimated_output_tokens": 1100,
+          "estimated_api_usd": 0.00629
+        },
+        {
+          "id": "test-deadlock",
+          "duration_seconds": 150.0,
+          "label_count": 4,
+          "prediction_count": 5,
+          "predictions": [
+            {
+              "start": 20.0,
+              "end": 32.0,
+              "score": 0.4596148856031711
+            },
+            {
+              "start": 70.0,
+              "end": 80.0,
+              "score": 0.45687242894835955
+            },
+            {
+              "start": 45.0,
+              "end": 51.5,
+              "score": 0.5639251000000001
+            },
+            {
+              "start": 60.0,
+              "end": 70.0,
+              "score": 0.4743247384269038
+            },
+            {
+              "start": 51.5,
+              "end": 58.0,
+              "score": 0.4992892953466183
+            }
+          ],
+          "elapsed_seconds": 1.1610400530000788,
+          "time_to_first_clip_seconds": 1.1610400530000788,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 4,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.8,
+              "recall": 1.0,
+              "f1": 0.888888888888889,
+              "ap": 0.8500000000000001
+            },
+            "0.5": {
+              "tp": 3,
+              "fp": 2,
+              "fn": 1,
+              "precision": 0.6,
+              "recall": 0.75,
+              "f1": 0.6666666666666665,
+              "ap": 0.5666666666666667
+            }
+          },
+          "forbidden_picks": 0,
+          "death_picks": 0,
+          "spectating_picks": 0,
+          "estimated_input_tokens": 13600.0,
+          "estimated_output_tokens": 1300,
+          "estimated_api_usd": 0.00733
+        },
+        {
+          "id": "test-league",
+          "duration_seconds": 165.0,
+          "label_count": 4,
+          "prediction_count": 6,
+          "predictions": [
+            {
+              "start": 50.0,
+              "end": 62.0,
+              "score": 0.4903139586960787
+            },
+            {
+              "start": 111.667,
+              "end": 120.0,
+              "score": 0.46566501342133293
+            },
+            {
+              "start": 31.333,
+              "end": 39.667,
+              "score": 0.5303567261503622
+            },
+            {
+              "start": 79.0,
+              "end": 90.0,
+              "score": 0.5506505210901549
+            },
+            {
+              "start": 124.0,
+              "end": 136.0,
+              "score": 0.491382773994648
+            },
+            {
+              "start": 39.667,
+              "end": 48.0,
+              "score": 0.46815015823165285
+            }
+          ],
+          "elapsed_seconds": 1.249128434000113,
+          "time_to_first_clip_seconds": 1.249128434000113,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 3,
+              "fp": 3,
+              "fn": 1,
+              "precision": 0.5,
+              "recall": 0.75,
+              "f1": 0.6,
+              "ap": 0.625
+            },
+            "0.5": {
+              "tp": 1,
+              "fp": 5,
+              "fn": 3,
+              "precision": 0.16666666666666666,
+              "recall": 0.25,
+              "f1": 0.2,
+              "ap": 0.25
+            }
+          },
+          "forbidden_picks": 0,
+          "death_picks": 0,
+          "spectating_picks": 0,
+          "estimated_input_tokens": 14800.0,
+          "estimated_output_tokens": 1300,
+          "estimated_api_usd": 0.00769
+        }
+      ],
+      "skipped": [],
+      "errors": []
+    },
+    "fusion-audio-chat": {
+      "status": "ok",
+      "summary": {
+        "videos": 4,
+        "thresholds": {
+          "0.3": {
+            "tp": 13,
+            "fp": 4,
+            "fn": 3,
+            "precision": 0.7647058823529411,
+            "recall": 0.8125,
+            "f1": 0.787878787878788,
+            "mAP": 0.7270833333333333
+          },
+          "0.5": {
+            "tp": 10,
+            "fp": 7,
+            "fn": 6,
+            "precision": 0.5882352941176471,
+            "recall": 0.625,
+            "f1": 0.6060606060606061,
+            "mAP": 0.49583333333333335
+          }
+        },
+        "mAP": 0.6114583333333333,
+        "mean_time_to_first_clip_seconds": 1.5980704490000903,
+        "videos_with_clip": 4,
+        "cost_usd_per_minute": 0.0,
+        "forbidden_picks": 0,
+        "death_picks": 0,
+        "spectating_picks": 0,
+        "prediction_count": 17,
+        "seconds_per_footage_minute": 0.672871768000038,
+        "estimated_api_usd_per_minute": 0.0027031578947368418
+      },
+      "videos": [
+        {
+          "id": "test-valorant",
+          "duration_seconds": 120.0,
+          "label_count": 4,
+          "prediction_count": 4,
+          "predictions": [
+            {
+              "start": 45.0,
+              "end": 52.0,
+              "score": 0.750775148921467
+            },
+            {
+              "start": 7.0,
+              "end": 19.0,
+              "score": 0.629375579699487
+            },
+            {
+              "start": 57.0,
+              "end": 64.0,
+              "score": 0.8050068882597939
+            },
+            {
+              "start": 94.5,
+              "end": 103.0,
+              "score": 0.782278616680241
+            }
+          ],
+          "elapsed_seconds": 1.4039965949998532,
+          "time_to_first_clip_seconds": 1.4039965949998532,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 4,
+              "fp": 0,
+              "fn": 0,
+              "precision": 1.0,
+              "recall": 1.0,
+              "f1": 1.0,
+              "ap": 1.0
+            },
+            "0.5": {
+              "tp": 3,
+              "fp": 1,
+              "fn": 1,
+              "precision": 0.75,
+              "recall": 0.75,
+              "f1": 0.75,
+              "ap": 0.75
+            }
+          },
+          "forbidden_picks": 0,
+          "death_picks": 0,
+          "spectating_picks": 0,
+          "estimated_input_tokens": 7900.0,
+          "estimated_output_tokens": 800,
+          "estimated_api_usd": 0.00437
+        },
+        {
+          "id": "test-ow2",
+          "duration_seconds": 135.0,
+          "label_count": 4,
+          "prediction_count": 5,
+          "predictions": [
+            {
+              "start": 85.2,
+              "end": 96.0,
+              "score": 0.7903447086914077
+            },
+            {
+              "start": 27.5,
+              "end": 35.0,
+              "score": 0.6297353497319268
+            },
+            {
+              "start": 7.0,
+              "end": 14.0,
+              "score": 0.7453360955894853
+            },
+            {
+              "start": 20.0,
+              "end": 27.5,
+              "score": 0.5719779732013971
+            },
+            {
+              "start": 42.0,
+              "end": 52.8,
+              "score": 0.7720062684472423
+            }
+          ],
+          "elapsed_seconds": 1.5493704540001545,
+          "time_to_first_clip_seconds": 1.5493704540001545,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 4,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.8,
+              "recall": 1.0,
+              "f1": 0.888888888888889,
+              "ap": 0.95
+            },
+            "0.5": {
+              "tp": 3,
+              "fp": 2,
+              "fn": 1,
+              "precision": 0.6,
+              "recall": 0.75,
+              "f1": 0.6666666666666665,
+              "ap": 0.4833333333333333
+            }
+          },
+          "forbidden_picks": 0,
+          "death_picks": 0,
+          "spectating_picks": 0,
+          "estimated_input_tokens": 11800.0,
+          "estimated_output_tokens": 1100,
+          "estimated_api_usd": 0.00629
+        },
+        {
+          "id": "test-deadlock",
+          "duration_seconds": 150.0,
+          "label_count": 4,
+          "prediction_count": 4,
+          "predictions": [
+            {
+              "start": 70.0,
+              "end": 80.0,
+              "score": 0.6330718282557686
+            },
+            {
+              "start": 45.0,
+              "end": 51.5,
+              "score": 0.7310727939706541
+            },
+            {
+              "start": 60.0,
+              "end": 70.0,
+              "score": 0.7292044826403555
+            },
+            {
+              "start": 51.5,
+              "end": 58.0,
+              "score": 0.7292586180199274
+            }
+          ],
+          "elapsed_seconds": 1.6365481420002652,
+          "time_to_first_clip_seconds": 1.6365481420002652,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 3,
+              "fp": 1,
+              "fn": 1,
+              "precision": 0.75,
+              "recall": 0.75,
+              "f1": 0.75,
+              "ap": 0.625
+            },
+            "0.5": {
+              "tp": 3,
+              "fp": 1,
+              "fn": 1,
+              "precision": 0.75,
+              "recall": 0.75,
+              "f1": 0.75,
+              "ap": 0.625
+            }
+          },
+          "forbidden_picks": 0,
+          "death_picks": 0,
+          "spectating_picks": 0,
+          "estimated_input_tokens": 13600.0,
+          "estimated_output_tokens": 1300,
+          "estimated_api_usd": 0.00733
+        },
+        {
+          "id": "test-league",
+          "duration_seconds": 165.0,
+          "label_count": 4,
+          "prediction_count": 4,
+          "predictions": [
+            {
+              "start": 31.333,
+              "end": 39.667,
+              "score": 0.6957575823658848
+            },
+            {
+              "start": 79.0,
+              "end": 90.0,
+              "score": 0.6563814566352322
+            },
+            {
+              "start": 124.0,
+              "end": 136.0,
+              "score": 0.6362207109919721
+            },
+            {
+              "start": 39.667,
+              "end": 48.0,
+              "score": 0.6340957554878208
+            }
+          ],
+          "elapsed_seconds": 1.8023666050000884,
+          "time_to_first_clip_seconds": 1.8023666050000884,
+          "cost_usd": 0.0,
+          "cost_usd_per_minute": 0.0,
+          "metrics": {
+            "0.3": {
+              "tp": 2,
+              "fp": 2,
+              "fn": 2,
+              "precision": 0.5,
+              "recall": 0.5,
+              "f1": 0.5,
+              "ap": 0.3333333333333333
+            },
+            "0.5": {
+              "tp": 1,
+              "fp": 3,
+              "fn": 3,
+              "precision": 0.25,
+              "recall": 0.25,
+              "f1": 0.25,
+              "ap": 0.125
+            }
+          },
+          "forbidden_picks": 0,
+          "death_picks": 0,
+          "spectating_picks": 0,
+          "estimated_input_tokens": 14800.0,
+          "estimated_output_tokens": 1300,
+          "estimated_api_usd": 0.00769
+        }
+      ],
+      "skipped": [],
+      "errors": []
+    }
+  },
+  "mode": "synthetic-mock-vlm",
+  "seed": 2026,
+  "noise_amplitude": 0.3,
+  "train_ids": [
+    "train-valorant",
+    "train-ow2",
+    "train-deadlock",
+    "train-league"
+  ],
+  "test_ids": [
+    "test-valorant",
+    "test-ow2",
+    "test-deadlock",
+    "test-league"
+  ],
+  "weights": {
+    "signals-vlm": {
+      "signals": 0.6,
+      "vlm": 0.4,
+      "audio": 0.0,
+      "chat": 0.0,
+      "death_penalty": 0.2,
+      "threshold": 0.45
+    },
+    "fusion-audio-chat": {
+      "signals": 0.2,
+      "vlm": 0.6,
+      "audio": 0.1,
+      "chat": 0.1,
+      "death_penalty": 0.2,
+      "threshold": 0.55
+    }
+  },
+  "tuning": {
+    "signals-vlm": {
+      "trials": 27,
+      "train_mean_f1": 0.7575757575757576
+    },
+    "fusion-audio-chat": {
+      "trials": 99,
+      "train_mean_f1": 0.7419354838709677
+    }
+  },
+  "environment": {
+    "python": "3.12.3",
+    "platform": "Linux-6.8.0-146-generic-x86_64-with-glibc2.39"
+  },
+  "cost_assumptions": {
+    "input_tokens_per_second": 100,
+    "input_tokens_per_call": 200,
+    "output_tokens_per_call": 100,
+    "input_usd_per_million": 0.3,
+    "output_usd_per_million": 2.5
+  },
+  "timing_note": "Component wall times plus scoring; shared extraction measured once and charged to each applicable pipeline. Mock scans full media even for windows. Excludes generation/tuning. No inference/network latency."
+}

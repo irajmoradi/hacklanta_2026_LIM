@@ -100,3 +100,22 @@ def test_bad_weights(tmp_path, value):
     path.write_text(json.dumps({"signals-vlm": w, "fusion-audio-chat": w}))
     with pytest.raises(ValueError):
         bench.load_weights(path)
+
+
+def test_published_report_recomputes_from_heldout_labels():
+    from pathlib import Path
+    from .metrics import detection_metrics
+    root = Path(__file__).parent
+    report = json.loads((root / "benchmark_results.json").read_text())
+    metadata = {v["id"]: v for v in json.loads((root / "benchmark_manifest.json").read_text())["videos"]}
+    assert report["weights"] == bench.load_weights()
+    assert len(report["train_ids"]) == len(report["test_ids"]) == 4
+    assert set(report["train_ids"]).isdisjoint(report["test_ids"])
+    for pipeline in report["pipelines"].values():
+        assert pipeline["status"] == "ok"
+        assert {v["id"] for v in pipeline["videos"]} == set(report["test_ids"])
+        for row in pipeline["videos"]:
+            truth = metadata[row["id"]]
+            for threshold in (.3, .5):
+                assert row["metrics"][str(threshold)] == detection_metrics(row["predictions"], truth["highlights"], threshold)
+            assert row["forbidden_picks"] == sum(any(bench.overlap(p, f) > 0 for f in truth["forbidden"]) for p in row["predictions"])

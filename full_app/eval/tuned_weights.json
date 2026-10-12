@@ -1,0 +1,18 @@
+{
+  "signals-vlm": {
+    "signals": 0.6,
+    "vlm": 0.4,
+    "audio": 0.0,
+    "chat": 0.0,
+    "death_penalty": 0.2,
+    "threshold": 0.45
+  },
+  "fusion-audio-chat": {
+    "signals": 0.2,
+    "vlm": 0.6,
+    "audio": 0.1,
+    "chat": 0.1,
+    "death_penalty": 0.2,
+    "threshold": 0.55
+  }
+}
