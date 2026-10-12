@@ -27,12 +27,13 @@ def test_chat_undo_sse_and_auth(tmp_path):
         assert response.json['plan']['segments'][0]['source_start'] == 1
         saved = store.get(job['id'])
         assert saved['output'] is None and 'render' not in saved['completed']
-        assert response.json['version'] == 1
+        assert response.json['version'] == response.json['plan_version'] == 1
         events = client.get(url+'/events', headers=headers).text
         assert 'event: agent_step' in events and 'trim_clip' in events
         assert 'event: progress' in events
         response = client.post(url+'/agent/undo', headers=headers)
-        assert response.json['plan'] == original and response.json['version'] == 2
+        assert response.json['plan'] == original and response.json['version'] == response.json['plan_version'] == 2
+        assert response.json['trace'][0]['step'] == 0
         assert client.post(url+'/agent/undo', headers=headers).status_code == 409
     finally:
         queue.close()

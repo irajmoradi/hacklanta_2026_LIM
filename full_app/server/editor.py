@@ -54,14 +54,17 @@ def submit(queue, job_id, instruction, model_factory=None, max_steps=8, call_lim
                 result = run(queue, job, instruction, model_factory, max_steps, call_limit)
                 with queue.lock:
                     if queue.store.get(job_id)['status'] == 'cancelled':
-                        return dict(result, fallback=True, reason='cancelled', plan=job['edit_plan'])
+                        version = job.get('agent_version', 0)
+                        return dict(result, fallback=True, reason='cancelled', plan=job['edit_plan'],
+                                    version=version, plan_version=version)
                     apply_result(queue, job, result)
                     status = previous_status if result['fallback'] else 'planned'
                     if job.get('edit_plan') and previous_status == 'analyzed':
                         status = 'planned'
                     job.update(status=status, stage='agent')
                     queue.store.save(job)
-                    return dict(result, version=job.get('agent_version', 0))
+                    version = job.get('agent_version', 0)
+                    return dict(result, version=version, plan_version=version)
             finally:
                 with queue.lock:
                     current = queue.store.get(job_id)
@@ -89,10 +92,11 @@ def undo(queue, job_id):
         job.update(status='planned' if job['edit_plan'] else 'analyzed', stage='agent')
         if job['edit_plan'] is None:
             job['completed'] = [s for s in job['completed'] if s != 'plan']
-        step = dict(tool='undo', args={}, rationale='Restore previous plan version',
+        step = dict(step=0, tool='undo', args={}, rationale='Restore previous plan version',
                     diff={'plan': {'after': job['edit_plan']}}, error=None)
         job['agent_trace'] = [step]
         job.pop('agent_result', None)
         queue.store.save(job)
         queue.store.append_event(job_id, 'agent_step', step)
-        return dict(plan=job['edit_plan'], trace=[step], version=job['agent_version'])
+        return dict(plan=job['edit_plan'], trace=[step], version=job['agent_version'],
+                    plan_version=job['agent_version'])
