@@ -1,6 +1,27 @@
 # Deadlock real-footage calibration (DEADLOCK-1)
 
 Branch: `ext/DEADLOCK-1`. Implementation milestone: `35ff180`.
+Reproduction/live harness milestone: `a362ed3`. No push or merge performed.
+
+Changed files (all within the task allowlist):
+
+```text
+full_app/profiles/data/deadlock.json
+full_app/profiles/deadlock_hud.py
+full_app/profiles/detection.py
+full_app/profiles/hud.py
+full_app/signals/detector.py
+full_app/signals/ocr.py
+full_app/privacy/profiles.py
+full_app/prompts/games/deadlock.txt
+full_app/tests/test_deadlock.py
+demo_video/deadlock/.gitignore
+demo_video/deadlock/measure.py
+demo_video/deadlock/launch_live.py
+demo_video/deadlock/live_smoke.py
+docs/game_profiles.md
+docs/deadlock.md
+```
 
 The source is `/srv/demo_in/deadlock_ccby_aXZYyd4SoWM.mp4`, a 1,113.683-second
 1080p60 VP9 recording supplied on runner 1. Its adjacent attribution file identifies
@@ -70,7 +91,7 @@ express. It never writes credentials. The single resumable job has a durable
 windows and no VLM game-detection call. Ordinary tests block provider access.
 
 The smoke uses stock `POST /api/jobs`, `/analyze` with `game=auto`, `/plan`, and
-`/render`, privacy off, local planner and the runner's team reaction pack. It
+`/render`, `ingest=true`, privacy off, local planner and the runner's team reaction pack. It
 copies `/srv/packs/team` into the runner worktree only. **Do not resync while the
 live render is using that runner-only pack**: the helper's `rsync --delete` would
 remove it. The launcher recopies it on a resumed run. It reuses the marker and
@@ -94,8 +115,45 @@ Initial full-suite invocation failed before pytest because of Windows shell
 quoting (remote exit 2; local exit 1). The corrected invocation uses
 `set -o pipefail` with `tee` to preserve pytest's exit code.
 
-Full-source baseline: generic / 0.000, zero OCR events, 30 scene cuts, 431.85 s,
-exit 0. Updated auto detection: deadlock / 0.781 (16 sampled frames).
+Final full suite: **1,072 passed, 20 skipped**, 639.20 s, exit 0, using:
+
+```sh
+bash tools/remote_run.sh 'set -o pipefail; cd full_app && OMP_THREAD_LIMIT=1 python -m pytest -q 2>&1 | tee /srv/demo_out/deadlock/pytest-full.log'
+```
+
+The initial direct-source live run exited 1 during `whole_video`: the stock
+600-second 1080p60 chunk encoding reached the provider's 300-second processing
+timeout. It had spent 12 window-scoring calls. The harness now enables the
+existing stock ingest path (normalized media plus analysis proxy/chunks), then
+retries the same job without resetting its ledger. The uploaded original remains
+the render source. No provider or pipeline files were modified. The failure
+snapshot is preserved as `previous-error-status.json`.
+
+Full-source scans both exited 0, with uninterrupted OCR:
+
+| Measurement | Auto game / confidence | Feed candidates | Souls-gain candidates | Scene cuts | Total time |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Original full-frame OCR + generic keyword parser | generic / 0.000 | 0 | 0 | 30 | 431.85 s |
+| Updated HUD + row parser | deadlock / 0.781 | 19 | 74 | 30 | 437.71 s |
+
+Updated detection itself took 35.88 s (16 sampled frames). Both scans covered
+all 1,113.683 seconds. Neither scan detected a death or explicit objective
+destruction. This does **not** establish that the recording contains none.
+The 19 feed candidates include other players and assists, and several adjacent
+timestamps may be duplicate OCR identities. The 74 economy candidates are weak
+proposals and can include numeric OCR errors. These are not recall/precision
+scores or verified event totals. Timing reflects shared runner load.
+
+Manually inspected source frames (file timestamps, not the HUD match clock):
+
+| File time | Visible evidence | Attribution limit |
+| --- | --- | --- |
+| 225 s / 03:45 | Upper-left elimination row and centre KILL ASSIST badge | An assist, not proof of a recorder kill |
+| 945 s / 15:45 | Upper-left elimination row while the recorder uses a zipline | Global teammate event; recorder attribution unknown |
+| 1,025 s / 17:05 | Upper-left elimination row, centre KILL badge and 7 KILL STREAK | Recorder elimination corroborated by the badge |
+
+The HUD match clock is nine seconds ahead of the file clock in these inspected
+frames. Measurements and exported clip source ranges use file seconds.
 
 Remaining validation results and artifact sizes are recorded below after the
 full scan, full suite, and live smoke complete.

@@ -102,9 +102,11 @@ def main():
         data = snapshot()
         if data['status'] in ('queued', 'analyzing', 'planning', 'rendering'):
             data = wait()
+        if data['status'] == 'error':
+            (ROOT/'previous-error-status.json').write_text(json.dumps(data, indent=2))
         if 'analyze' not in data['completed']:
             client.post(url+'/analyze', json=dict(game='auto', planner=True, window_scoring=True,
-                use_signals=True, privacy=False, mode='nice', style='hype_montage', max_duration=45,
+                use_signals=True, ingest=True, privacy=False, mode='nice', style='hype_montage', max_duration=45,
                 captions=False, reactions=True, prompt='Find genuine highlights and lowlights across the full recording.')).raise_for_status()
             data = wait()
         (ROOT/'analysis-status.json').write_text(json.dumps(data, indent=2))

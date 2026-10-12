@@ -1,6 +1,6 @@
 # Shared game profiles
 
-The package supplies game-specific regions, vocabulary, and detection. It does not change Flask routes or the current Gemini prompts.
+The package supplies game-specific regions, vocabulary, detection and scoring prompt fragments.
 Profiles are JSON data loaded into standard-library dataclasses; no Python ML,
 OCR, image or model dependency is required to import the package.
 
