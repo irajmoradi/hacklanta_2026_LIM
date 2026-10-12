@@ -9,7 +9,12 @@ import {
 } from "./api";
 import { ClipEditor, Timeline } from "./components/ReviewTimeline";
 import "./styles/editor.css";
+import { baseCapabilities, demoCapabilities, extensionDefaults, type Capabilities } from "./features";
+import { EditSettings } from "./components/EditSettings";
+import { SourceInputs, type PlayerUpload } from "./components/SourceInputs";
+import { ShareKit } from "./components/ShareKit";
 const initialOptions: Options = {
+  ...extensionDefaults,
   game: "auto",
   profile: "balanced",
   mode: "nice",
@@ -29,6 +34,15 @@ export default function App() {
         ? "legacy"
         : "jobs";
   const api = useMemo(() => new EditorApi(mode), [mode]);
+  const [capabilities, setCapabilities] = useState<Capabilities>(mode === "mock" ? demoCapabilities : baseCapabilities);
+  const [capabilityNotice, setCapabilityNotice] = useState("");
+  useEffect(() => {
+    let active = true;
+    void api.discover().then(c => { if (active) setCapabilities(c); }).catch(() => {
+      if (active) setCapabilityNotice("Could not check feature availability. Basic editing remains available.");
+    });
+    return () => { active = false; };
+  }, [api]);
   const [options, setOptions] = useState(initialOptions);
   const [job, setJob] = useState<Job>();
   const [clips, setClips] = useState<ReviewClip[]>([]);
@@ -54,6 +68,8 @@ export default function App() {
         "rendering",
         "uploading_to_gemini",
         "splitting_video",
+        "importing",
+        "syncing",
         "generating_thumbnails",
       ].includes(job.status));
   useEffect(
@@ -86,30 +102,48 @@ export default function App() {
       setBusy(false);
     }
   }
+  function validateFiles(files: File[]) {
+    if (files.some(file => !file.type.startsWith("video/") && !/\.(mp4|mov|webm|mkv)$/i.test(file.name)))
+      throw new Error("Choose a video file (MP4, MOV, WebM or MKV).");
+    if (files.reduce((sum, file) => sum + file.size, 0) >= 2 * 1024 ** 3)
+      throw new Error("Choose videos with a combined size smaller than 2 GB.");
+  }
+  function acceptJob(next: Job, label: string, file?: File) {
+    dirtyRef.current = false;
+    setDirty(false); setSaved(false); setClips([]); setJob(next);
+    lastPlan.current = undefined; rangeEnd.current = undefined;
+    setSource(file ? URL.createObjectURL(file) : ""); setFilename(label);
+    setOptions(o => ({ ...o, music_asset_id: "", chat_asset_id: "" }));
+  }
   function upload(file?: File) {
     if (!file || working) return;
-    if (
-      !file.type.startsWith("video/") &&
-      !/\.(mp4|mov|webm|mkv)$/i.test(file.name)
-    ) {
-      setError("Choose a video file (MP4, MOV, WebM or MKV).");
-      return;
-    }
-    if (file.size > 2 * 1024 ** 3) {
-      setError("Choose a video smaller than 2 GB.");
-      return;
-    }
+    void run(async () => { validateFiles([file]); acceptJob(await api.create(file), file.name, file); });
+  }
+  function uploadTeam(players: PlayerUpload[]) {
+    if (working) return;
     void run(async () => {
-      const next = await api.create(file);
-      dirtyRef.current = false;
-      setDirty(false);
-      setSaved(false);
-      setClips([]);
-      setJob(next);
-      lastPlan.current = undefined;
-      setSource(URL.createObjectURL(file));
-      setFilename(file.name);
+      validateFiles(players.map(p => p.file));
+      acceptJob(await api.createTeam(players), players.map(p => p.name).join(" + "), players[0].file);
     });
+  }
+  function importVod(url: string, owned: boolean) {
+    if (working) return;
+    void run(async () => acceptJob(await api.importVod(url, owned), "Imported VOD"));
+  }
+  function uploadAsset(kind: "music" | "chat", file: File) {
+    if (!job || working) return;
+    void run(async () => {
+      if (file.size > 100 * 1024 ** 2) throw new Error("Choose an attachment smaller than 100 MB.");
+      if (kind === "chat" && !/\.jsonl?$/i.test(file.name)) throw new Error("Choose a JSON or JSONL chat replay.");
+      if (kind === "music" && !file.type.startsWith("audio/") && !/\.(wav|mp3|m4a|ogg|flac)$/i.test(file.name))
+        throw new Error("Choose an audio track.");
+      const assetId = await api.uploadAsset(job.id, kind, file);
+      setOptions(o => ({ ...o, [`${kind}_asset_id`]: assetId }));
+    });
+  }
+  function validateSettings() {
+    if (options.music === "upload" && !options.music_asset_id) throw new Error("Attach your music track before continuing.");
+    if (options.chat && !options.chat_asset_id && !options.twitch_vod_id) throw new Error("Supply a Twitch VOD ID or chat replay before continuing.");
   }
   const refresh = async () => {
     const next = await api.get(job!.id);
@@ -206,108 +240,19 @@ export default function App() {
             </h2>
             <fieldset disabled={working}>
               <legend className="sr-only">Upload and analysis settings</legend>
-              <label
-                className="dropzone"
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  upload(e.dataTransfer.files[0]);
-                }}
-              >
-                <span className="upload-icon">&#8613;</span>
-                <strong>{filename || "Drop your gameplay here"}</strong>
-                <small>or choose a video - up to 2 GB</small>
-                <input
-                  aria-label="Upload gameplay"
-                  type="file"
-                  accept="video/*,.mkv"
-                  onChange={(e) => upload(e.target.files?.[0])}
-                />
-              </label>
-              <label>
-                Game
-                <select
-                  value={options.game}
-                  onChange={(e) => option("game", e.target.value)}
-                >
-                  <option value="auto">Auto-detect</option>
-                  <option value="valorant">Valorant</option>
-                  <option value="cs2">Counter-Strike 2</option>
-                  <option value="fortnite">Fortnite</option>
-                  <option value="other">Other game</option>
-                </select>
-              </label>
-              <label>
-                Profile
-                <select
-                  value={options.profile}
-                  onChange={(e) => option("profile", e.target.value)}
-                >
-                  <option value="balanced">Balanced moments</option>
-                  <option value="competitive">Competitive plays</option>
-                  <option value="comedy">Comedy & chaos</option>
-                </select>
-              </label>
-              <label>
-                Mode
-                <select
-                  value={options.mode}
-                  onChange={(e) =>
-                    option("mode", e.target.value as Options["mode"])
-                  }
-                >
-                  <option value="nice">Nice - Hype reel</option>
-                  <option value="mean">Mean - Roast reel</option>
-                </select>
-              </label>
-              <label>
-                Style
-                <select
-                  value={options.style}
-                  onChange={(e) => option("style", e.target.value)}
-                >
-                  <option value="hype_montage">Hype montage</option>
-                  <option value="clean_edit">Clean edit</option>
-                  <option value="meme_edit">Meme edit</option>
-                  <option value="cinematic">Cinematic</option>
-                </select>
-              </label>
-              <label>
-                Provider
-                <select
-                  disabled={mode === "legacy"}
-                  value={options.provider}
-                  onChange={(e) => option("provider", e.target.value)}
-                >
-                  <option value="gemini">Gemini</option>
-                  <option value="local">Local VLM</option>
-                </select>
-              </label>
-              <div className="toggles">
-                {(
-                  [
-                    ["use_signals", "Gameplay signals"],
-                    ["captions", "Captions"],
-                    ["reactions", "Meme reactions"],
-                    ["sam", "SAM spotlight"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <label key={key}>
-                    <input
-                      type="checkbox"
-                      disabled={mode === "legacy"}
-                      checked={options[key]}
-                      onChange={(e) => option(key, e.target.checked)}
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
+              <SourceInputs capabilities={capabilities} upload={upload} team={uploadTeam} importVod={importVod}
+                teamMode={options.team_mode ?? "best"} setTeamMode={v => option("team_mode", v)} />
+              {filename && <p className="source-name" role="status">Source: {filename}</p>}
+              {capabilityNotice && <p className="notice">{capabilityNotice}</p>}
+              {mode === "jobs" && !capabilities.options.includes("privacy_blur") && <p className="hint">More features are available in demo mode. Disabled settings need backend support; privacy blur is not active on this server.</p>}
+              <EditSettings options={options} change={option} capabilities={capabilities} legacy={mode === "legacy"}
+                preset={preset} setPreset={setPreset} uploadAsset={uploadAsset} hasJob={!!job} />
               <button
                 className="primary"
                 disabled={!job}
                 onClick={() =>
                   void run(async () => {
+                    validateSettings();
                     dirtyRef.current = false;
                     setDirty(false);
                     setSaved(false);
@@ -438,6 +383,7 @@ export default function App() {
             disabled={!job || !kept.length || working}
             onClick={() =>
               void run(async () => {
+                validateSettings();
                 await save();
                 await api.render(
                   job!.id,
@@ -480,6 +426,7 @@ export default function App() {
             )}
           </section>
         )}
+        {job?.status === "done" && <ShareKit key={job.id} kit={job.share_kit} demo={mode === "mock"} />}
         <footer>
           LIM STUDIO <span>Made for the moments between respawns.</span>
           <a href={mode === "mock" ? "/" : "/?mock=1"}>

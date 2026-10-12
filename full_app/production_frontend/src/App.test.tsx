@@ -51,7 +51,7 @@ it("uploads, analyzes, previews a bounded range, edits, and simulates export wit
   unmount();
   expect(revoke).toHaveBeenCalledWith("blob:test");
 });
-it("rejects oversized uploads before making a request", async () => {
+it("rejects oversized uploads without posting video data", async () => {
   const fetcher = vi.fn();
   vi.stubGlobal("fetch", fetcher);
   render(<App />);
@@ -63,5 +63,5 @@ it("rejects oversized uploads before making a request", async () => {
   await waitFor(() =>
     expect(screen.getByRole("alert")).toHaveTextContent("smaller than 2 GB"),
   );
-  expect(fetcher).not.toHaveBeenCalled();
+  expect(fetcher).toHaveBeenCalledExactlyOnceWith("/api/info", { method: "GET" });
 });
