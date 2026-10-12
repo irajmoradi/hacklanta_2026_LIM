@@ -13,6 +13,8 @@ CLIP_IT = re.compile(r"\bclip\s*(?:it|that|this)\b", re.I)
 
 def _messages(source):
     if isinstance(source, (str, Path)):
+        if Path(source).suffix.lower() == ".jsonl":
+            return _json_lines(source)
         with Path(source).open(encoding="utf-8-sig") as handle:
             source = json.load(handle)
     if isinstance(source, dict):
@@ -23,6 +25,13 @@ def _messages(source):
         return iter(source)
     except TypeError as exc:
         raise IngestError("Chat must be a JSON array, export object, or message iterable") from exc
+
+
+def _json_lines(path):
+    with Path(path).open(encoding="utf-8-sig") as handle:
+        for line in handle:
+            if line.strip():
+                yield json.loads(line)
 
 
 def chat_signal(source, duration: float, *, offset: float = 0) -> list[dict]:
@@ -48,7 +57,11 @@ def chat_signal(source, duration: float, *, offset: float = 0) -> list[dict]:
         if isinstance(message, dict):
             body = message.get("body")
             if body is None:
-                body = "".join(f.get("text", "") for f in message.get("fragments", []) if isinstance(f, dict))
+                fragments = message.get("fragments") or []
+                if not isinstance(fragments, list):
+                    continue
+                body = "".join(f["text"] for f in fragments
+                               if isinstance(f, dict) and isinstance(f.get("text"), str))
         else:
             body = message
         if not isinstance(body, str):

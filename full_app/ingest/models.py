@@ -19,8 +19,9 @@ class Limits:
     def __post_init__(self):
         import math
 
-        if self.max_bytes <= 0 or not math.isfinite(self.max_duration) or self.max_duration <= 0:
-            raise IngestError("Limits must be positive and finite")
+        if (not isinstance(self.max_bytes, int) or self.max_bytes <= 0
+                or not math.isfinite(self.max_duration) or self.max_duration <= 0):
+            raise IngestError("max_bytes must be a positive integer; max_duration must be positive and finite")
 
 
 @dataclass(frozen=True)

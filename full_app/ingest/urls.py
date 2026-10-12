@@ -71,12 +71,15 @@ def download(url: str, directory: Path, *, limits: Limits, owns_content: bool,
     }
     if progress:
         progress({"stage": "download", "status": "metadata"})
-    with yt_dlp.YoutubeDL(options) as client:
-        info = client.extract_info(url, download=False)
-        if not isinstance(info, dict):
-            raise IngestError("URL did not resolve to a video")
-        check_info(info)
-        client.process_ie_result(info, download=True)
+    try:
+        with yt_dlp.YoutubeDL(options) as client:
+            info = client.extract_info(url, download=False)
+            if not isinstance(info, dict):
+                raise IngestError("URL did not resolve to a video")
+            check_info(info)
+            client.process_ie_result(info, download=True)
+    except yt_dlp.utils.DownloadError as exc:
+        raise IngestError("URL download failed; check access, availability, and yt-dlp installation") from exc
     candidates = [p for p in directory.glob("source.*")
                   if p.suffix.lower() in (".mp4", ".mkv", ".webm", ".mov", ".flv", ".ts")]
     if len(candidates) != 1:

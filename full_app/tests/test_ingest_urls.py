@@ -25,6 +25,8 @@ def fake_ytdlp(monkeypatch):
         def extract_info(self, url, download=False):
             assert download is False
             state["calls"].append("metadata")
+            if state.get("fail"):
+                raise state["error_type"]("unavailable")
             return state["info"]
 
         def process_ie_result(self, info, download=True):
@@ -37,7 +39,9 @@ def fake_ytdlp(monkeypatch):
             Path(self.options["outtmpl"].replace("%(ext)s", "mp4")).write_bytes(state["payload"])
             return info
 
-    monkeypatch.setitem(sys.modules, "yt_dlp", SimpleNamespace(YoutubeDL=YoutubeDL))
+    state["error_type"] = type("DownloadError", (Exception,), {})
+    monkeypatch.setitem(sys.modules, "yt_dlp", SimpleNamespace(
+        YoutubeDL=YoutubeDL, utils=SimpleNamespace(DownloadError=state["error_type"])))
     return state
 
 
@@ -107,3 +111,10 @@ def test_prepare_url_mocked_end_to_end_and_cleanup(tmp_path, fake_ytdlp):
     with pytest.raises(IngestError):
         prepare("https://youtu.be/owned", owns_content=True, cache_dir=cache)
     assert not list(cache.glob("download-*"))
+
+
+def test_adapter_error_wrapped_and_staging_cleaned(tmp_path, fake_ytdlp):
+    fake_ytdlp["fail"] = True
+    with pytest.raises(IngestError, match="URL download failed"):
+        prepare("https://youtu.be/owned", owns_content=True, cache_dir=tmp_path)
+    assert not list(tmp_path.glob("download-*"))

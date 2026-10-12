@@ -82,16 +82,19 @@ def _prepare_local(source, root, height, chunk_seconds, overlap_seconds, limits,
     media.check_file(source, limits)
     emit("probe")
     info = media.probe(source)
-    if info["duration"] > limits.max_duration:
+    if max(info["duration"], info["container_duration"]) > limits.max_duration:
         raise IngestError("Input exceeds max_duration")
     emit("hash")
     before = source.stat()
     digest = media.content_hash(source)
+    after = source.stat()
+    if (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+        raise IngestError("Input changed while hashing; retry after upload completes")
     base = root / f"{digest}-v1"
     with media.cache_lock(root / f"{digest}.lock"):
         base.mkdir(exist_ok=True)
         normalized = base / "normalized"
-        normal_meta = media.cached(normalized)
+        normal_meta = media.cached(normalized, {"video.mp4"}, has_duration=True)
         if normal_meta is None:
             emit("normalize", cache_hit=False)
             with tempfile.TemporaryDirectory(prefix="normalize-", dir=base) as stage:
@@ -103,12 +106,12 @@ def _prepare_local(source, root, height, chunk_seconds, overlap_seconds, limits,
                 normal_info = media.probe(staging / "video.mp4")
                 media.write_manifest(staging, duration=normal_info["duration"])
                 _publish(staging, normalized)
-            normal_meta = media.cached(normalized)
+            normal_meta = media.cached(normalized, {"video.mp4"}, has_duration=True)
         else:
             emit("normalize", cache_hit=True)
         duration = normal_meta["duration"]
         proxy_dir = base / f"proxy-{height}"
-        if media.cached(proxy_dir) is None:
+        if media.cached(proxy_dir, {"proxy.mp4"}) is None:
             emit("proxy", cache_hit=False)
             with tempfile.TemporaryDirectory(prefix="proxy-", dir=base) as stage:
                 staging = Path(stage)
@@ -124,7 +127,7 @@ def _prepare_local(source, root, height, chunk_seconds, overlap_seconds, limits,
         else:
             length, overlap = round(chunk_seconds * 30), round(overlap_seconds * 30)
             chunk_dir = base / f"chunks-{height}-{length}-{overlap}"
-            if media.cached(chunk_dir) is None:
+            if media.cached(chunk_dir, {f"{i:05d}.mp4" for i in range(len(ranges))}) is None:
                 with tempfile.TemporaryDirectory(prefix="chunks-", dir=base) as stage:
                     staging = Path(stage)
                     for index, (start, end) in enumerate(ranges):

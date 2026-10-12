@@ -34,11 +34,14 @@ def probe(path: Path) -> dict:
     try:
         duration = float(video.get("duration") or data["format"]["duration"])
         fps = float(Fraction(video.get("avg_frame_rate", "0/1")))
+        container_duration = float(data.get("format", {}).get("duration") or duration)
     except (KeyError, ValueError, ZeroDivisionError) as exc:
         raise IngestError("Input has no usable duration/frame rate") from exc
-    if not math.isfinite(duration) or duration <= 0 or fps <= 0:
+    if (not math.isfinite(duration) or duration <= 0 or fps <= 0
+            or not math.isfinite(container_duration) or container_duration <= 0):
         raise IngestError("Input has no usable duration/frame rate")
-    return {"duration": duration, "fps": fps, "video_index": video["index"],
+    return {"duration": duration, "container_duration": container_duration,
+            "fps": fps, "video_index": video["index"],
             "width": video["width"], "height": video["height"]}
 
 
@@ -114,9 +117,16 @@ def cache_lock(path: Path, timeout: float = 3600):
                 fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def cached(directory: Path) -> dict | None:
+def cached(directory: Path, expected_files: set[str], *, has_duration: bool = False) -> dict | None:
     try:
         manifest = json.loads((directory / "manifest.json").read_text())
+        if (not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict)
+                or set(manifest["files"]) != expected_files):
+            return None
+        if has_duration:
+            duration = manifest["duration"]
+            if not isinstance(duration, (int, float)) or not math.isfinite(duration) or duration <= 0:
+                return None
         for name, size in manifest["files"].items():
             if Path(name).name != name or size <= 0 or (directory / name).stat().st_size != size:
                 return None

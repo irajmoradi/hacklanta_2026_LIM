@@ -60,6 +60,17 @@ def test_vfr_to_cfr_proxy_audio_and_chunks(vfr_video, tmp_path):
         assert media.probe(chunk.path)["duration"] == pytest.approx(chunk.duration, abs=1 / 30)
         assert float(frames(chunk.path)[0]["best_effort_timestamp_time"]) == pytest.approx(0, abs=0.001)
         assert chunk.global_timestamp(0.25) == chunk.start + 0.25
+        # Compare visual content at the global offset, not just container timing.
+        def sample(path, start):
+            return subprocess.run([
+                "ffmpeg", "-v", "error", "-ss", str(start), "-i", str(path),
+                "-frames:v", "1", "-vf", "scale=64:48", "-pix_fmt", "gray",
+                "-f", "rawvideo", "pipe:1",
+            ], check=True, capture_output=True).stdout
+        original_frame = sample(result.proxy, chunk.start)
+        chunk_frame = sample(chunk.path, 0)
+        assert len(original_frame) == len(chunk_frame) == 64 * 48
+        assert sum(abs(a - b) for a, b in zip(original_frame, chunk_frame)) / len(chunk_frame) < 5
     with pytest.raises(IngestError):
         result.chunks[0].global_timestamp(9)
     assert events[-1]["stage"] == "complete"
@@ -161,3 +172,51 @@ def test_multi_hour_ranges_and_exact_tail():
     assert all(a[1] - b[0] == 15 for a, b in zip(ranges, ranges[1:]))
     assert list(chunk_ranges(10, 5, 0)) == [(0, 5), (5, 10)]
     assert list(chunk_ranges(9, 5, 1)) == [(0, 5), (4, 9)]
+
+
+@pytest.mark.parametrize("manifest", ["[]", "{}", '{"files": {}}',
+                                      '{"files": ["video.mp4"], "duration": 1}',
+                                      '{"files": {"video.mp4": 2}}',
+                                      '{"files": {"video.mp4": 2}, "duration": "nan"}'])
+def test_invalid_cache_manifests_are_misses(tmp_path, manifest):
+    (tmp_path / "video.mp4").write_bytes(b"xx")
+    (tmp_path / "manifest.json").write_text(manifest)
+    assert media.cached(tmp_path, {"video.mp4"}, has_duration=True) is None
+
+
+def test_audio_longer_than_video_is_duration_limited(tmp_path):
+    video = tmp_path / "long-audio.mp4"
+    media.run([
+        "ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i",
+        "testsrc2=size=160x90:rate=30:duration=1", "-f", "lavfi", "-i",
+        "sine=frequency=440:duration=3", "-c:v", "libx264", "-c:a", "aac", str(video),
+    ])
+    assert media.probe(video)["duration"] == 1
+    with pytest.raises(IngestError, match="max_duration"):
+        prepare(video, cache_dir=tmp_path / "cache", limits=Limits(max_duration=2))
+
+
+def test_input_mutation_during_hash_is_rejected(vfr_video, tmp_path, monkeypatch):
+    source = tmp_path / "changing.mp4"
+    shutil.copyfile(vfr_video, source)
+    hasher = media.content_hash
+
+    def mutate(path):
+        digest = hasher(path)
+        with path.open("ab") as handle:
+            handle.write(b"changed")
+        return digest
+
+    monkeypatch.setattr(media, "content_hash", mutate)
+    with pytest.raises(IngestError, match="changed while hashing"):
+        prepare(source, cache_dir=tmp_path / "cache")
+
+
+def test_audio_only_and_missing_media_fail_cleanly(tmp_path):
+    audio = tmp_path / "audio.wav"
+    media.run(["ffmpeg", "-nostdin", "-v", "error", "-f", "lavfi", "-i",
+               "sine=duration=1", str(audio)])
+    with pytest.raises(IngestError, match="no video stream"):
+        prepare(audio, cache_dir=tmp_path / "cache")
+    with pytest.raises(IngestError, match="nonempty"):
+        prepare(tmp_path / "missing.mp4", cache_dir=tmp_path / "cache")

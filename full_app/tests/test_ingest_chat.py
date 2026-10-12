@@ -69,3 +69,16 @@ def test_optional_vod_fetch_mocked_and_closed(monkeypatch):
         list(twitch_messages("1234", 2))
     with pytest.raises(IngestError, match="digits"):
         list(twitch_messages("bad/id", 2))
+
+
+def test_json_lines_streaming_and_bad_fragments(tmp_path):
+    path = tmp_path / "chat.jsonl"
+    records = [
+        {"offset": 0.2, "text": "KEKW"},
+        {"offset": 1.1, "message": {"fragments": [{"text": None}, {"text": "LUL"}]}},
+        {"offset": 1.2, "message": {"fragments": 42}},
+    ]
+    path.write_text("\n".join(json.dumps(row) for row in records) + "\n\n", encoding="utf-8")
+    rows = chat_signal(path, 2)
+    assert [r["signals"]["chat_emotes"] for r in rows] == [1, 1]
+    assert [r["signals"]["chat_activity"] for r in rows] == [1, 1]
