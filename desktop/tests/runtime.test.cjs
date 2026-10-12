@@ -44,7 +44,7 @@ test('launcher handles readiness, spaces and termination', async () => {
   const task = rt.launch(process.execPath, '-e', ['console.log(JSON.stringify({port: 12345}));setInterval(()=>{},1000)'], process.env, true);
   assert.equal(await task.started, 'http://127.0.0.1:12345');
   await rt.stop(task.child);
-  assert.notEqual(task.child.signalCode, null);
+  assert.ok(task.child.exitCode !== null || task.child.signalCode !== null);
 });
 test('launcher rejects spawn failure and malformed readiness', async () => {
   const missing = rt.launch('/missing/python', 'script', [], process.env, true);

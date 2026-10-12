@@ -10,7 +10,7 @@ const settingsURL = pathToFileURL(path.join(__dirname, 'settings.html')).href;
 const report = error => dialog.showErrorBox('LIM Editor', error.message);
 const script = () => path.join(runtime, 'sidecar.py');
 async function credential(action, value) {
-  return JSON.parse(await rt.run(python, [script(), 'credential'], {}, JSON.stringify({action, value})));
+  return JSON.parse(await rt.run(python, [script(), 'credential'], {timeout: 60000}, JSON.stringify({action, value})));
 }
 function secureWindow(options) {
   const win = new BrowserWindow({...options, webPreferences: {nodeIntegration: false, contextIsolation: true, sandbox: true, ...(options.webPreferences || {})}});
@@ -54,7 +54,7 @@ async function toggleCapture() {
 async function startBackend(key) {
   env = rt.environment(runtime, data, config, key, randomBytes(32).toString('hex'));
   for (const binary of ['ffmpeg', 'ffprobe']) {
-    try {await rt.run(binary, ['-version'], {env});}
+    try {await rt.run(binary, ['-version'], {env, timeout: 10000});}
     catch {throw Error(`${binary} was not found. Install ffmpeg on PATH or set its folder in Settings, then restart.`);}
   }
   const task = rt.launch(python, script(), ['server'], env, true);

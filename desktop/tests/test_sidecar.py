@@ -10,7 +10,9 @@ import urllib.error
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-spec = importlib.util.spec_from_file_location('desktop_sidecar', ROOT / 'desktop/sidecar.py')
+RUNTIME = Path(os.environ.get('LIM_TEST_RUNTIME', ROOT))
+SIDECAR = ROOT / 'desktop/sidecar.py' if RUNTIME == ROOT else RUNTIME / 'sidecar.py'
+spec = importlib.util.spec_from_file_location('desktop_sidecar', SIDECAR)
 sidecar = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sidecar)
 
@@ -20,7 +22,7 @@ def app(tmp_path):
     frontend = tmp_path / 'frontend'
     frontend.mkdir()
     (frontend / 'index.html').write_text('production frontend')
-    instance = sidecar.make_app(ROOT / 'full_app', frontend, tmp_path / 'jobs', 'test-token')
+    instance = sidecar.make_app(RUNTIME / 'full_app', frontend, tmp_path / 'jobs', 'test-token')
     yield instance
     instance.extensions['job_queue'].close()
 
@@ -49,8 +51,8 @@ def test_real_sidecar_ephemeral_port_and_parent_shutdown(tmp_path):
     frontend = tmp_path / 'frontend'
     frontend.mkdir()
     (frontend / 'index.html').write_text('ready')
-    env = {**os.environ, 'LIM_BACKEND': str(ROOT / 'full_app'), 'LIM_FRONTEND': str(frontend), 'JOB_WORKSPACE': str(tmp_path / 'jobs'), 'LIM_TOKEN': 'test-token'}
-    child = subprocess.Popen([sys.executable, str(ROOT / 'desktop/sidecar.py'), 'server'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    env = {**os.environ, 'LIM_BACKEND': str(RUNTIME / 'full_app'), 'LIM_FRONTEND': str(frontend), 'JOB_WORKSPACE': str(tmp_path / 'jobs'), 'LIM_TOKEN': 'test-token'}
+    child = subprocess.Popen([sys.executable, str(SIDECAR), 'server'], env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         import select
         assert select.select([child.stdout], [], [], 30)[0], 'sidecar readiness timeout'
@@ -86,3 +88,20 @@ def test_native_keychain_only(monkeypatch):
     assert sidecar.credential('get') == 'test-key'
     sidecar.credential('set', '')
     assert sidecar.credential('get') == ''
+
+
+def test_capture_adds_private_token(monkeypatch):
+    sys.path.insert(0, str(RUNTIME / 'full_app'))
+    import capture.__main__ as capture
+    original = capture.UploadClient
+    def fake_main(argv):
+        assert argv == ['--watch', '/recordings']
+        with_client = capture.UploadClient('http://127.0.0.1:12345')
+        try:
+            assert with_client.http.headers['X-LIM-Token'] == 'private-token'
+        finally:
+            with_client.close()
+        return 0
+    monkeypatch.setattr(capture, 'main', fake_main)
+    assert sidecar.run_capture('private-token', ['--watch', '/recordings']) == 0
+    assert capture.UploadClient is original

@@ -48,6 +48,22 @@ def make_app(root, frontend, workspace, token):
     return app
 
 
+def run_capture(token, argv):
+    import capture.__main__ as capture
+    original = capture.UploadClient
+
+    class AuthenticatedClient(original):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.http.headers['X-LIM-Token'] = token
+
+    capture.UploadClient = AuthenticatedClient
+    try:
+        return capture.main(argv)
+    finally:
+        capture.UploadClient = original
+
+
 def main():
     mode = sys.argv[1]
     if mode == 'credential':
@@ -63,16 +79,7 @@ def main():
         os._exit(0)
     threading.Thread(target=parent_closed, daemon=True).start()
     if mode == 'capture':
-        import capture.__main__ as capture
-        original = capture.UploadClient
-
-        class AuthenticatedClient(original):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.http.headers['X-LIM-Token'] = token
-
-        capture.UploadClient = AuthenticatedClient
-        raise SystemExit(capture.main(sys.argv[2:]))
+        raise SystemExit(run_capture(token, sys.argv[2:]))
     from werkzeug.serving import make_server
     app = make_app(root, Path(os.environ['LIM_FRONTEND']), Path(os.environ['JOB_WORKSPACE']), token)
     server = make_server('127.0.0.1', 0, app, threaded=True)
