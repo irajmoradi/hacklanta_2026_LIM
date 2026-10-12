@@ -8,7 +8,7 @@ import subprocess
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps, ImageStat
 
-SIZES = {"youtube": (1280, 720), "vertical": (1080, 1920)}
+SIZES = {"youtube": (1280, 720), "vertical": (1080, 1920), "square": (1080, 1080)}
 logger = logging.getLogger(__name__)
 
 
@@ -97,7 +97,8 @@ def fit_text(draw, text, area):
 
 
 def render_thumbnail(frame: Image.Image, text: str, size: tuple[int, int],
-                     subject_cutout: bool = False) -> tuple[Image.Image, dict]:
+                     subject_cutout: bool = False, *, preserve_scene: bool = False,
+                     reaction: bool = False) -> tuple[Image.Image, dict]:
     center = saliency_center(frame)
     # Center the saliency point in the crop, clamped to image boundaries.
     w, h = frame.size
@@ -106,6 +107,23 @@ def render_thumbnail(frame: Image.Image, text: str, size: tuple[int, int],
     y = max(0, min(h - crop_h, center[1] * h - crop_h / 2))
     canvas = frame.crop((x, y, x + crop_w, y + crop_h)).resize(size, Image.Resampling.LANCZOS).convert("RGBA")
     mode = "saliency"
+    if preserve_scene and size[0] / size[1] < 1.5:
+        # A reaction usually sits beside the action in the generated master.
+        # A single narrow crop loses one of them: stack independently recomposed
+        # action/head panels for portrait; retain the full master for square.
+        if reaction and size[0] < size[1]:
+            split = int(size[1] * .52)
+            action = frame.crop((0, 0, w * .62, h))
+            head = frame.crop((w * .55, 0, w, h))
+            canvas = Image.new("RGBA", size)
+            canvas.paste(ImageOps.fit(action, (size[0], split)), (0, 0))
+            canvas.paste(ImageOps.fit(head, (size[0], size[1] - split)), (0, split))
+            mode = "action_reaction_panels"
+        else:
+            canvas = ImageOps.fit(frame, size).filter(ImageFilter.GaussianBlur(30)).convert("RGBA")
+            scene = ImageOps.contain(frame, size)
+            canvas.paste(scene, ((size[0] - scene.width) // 2, (size[1] - scene.height) // 2))
+            mode = "full_scene"
     if subject_cutout:
         try:
             # Optional adapter contract; no model download or heavy dependency here.

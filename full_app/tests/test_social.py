@@ -99,7 +99,7 @@ def test_bad_gemini_metadata_falls_back(clips, response):
 @pytest.mark.parametrize("fails", [False, True])
 def test_mocked_image_generation_and_failure(job, clips, fails):
     client = Mock(model="mock")
-    def generate(reference, prompt, output):
+    def generate(reference, prompt, output, **kwargs):
         if fails:
             raise RuntimeError("offline")
         Image.new("RGB", (128, 256), "green").save(output)
@@ -107,7 +107,7 @@ def test_mocked_image_generation_and_failure(job, clips, fails):
     client.generate_thumbnail.side_effect = generate
     client.client.models.generate_content.side_effect = RuntimeError("offline")
     kit = build_share_kit(job, clips, {"social": {"gemini_image": True, "gemini_metadata": True}}, "Deadlock", client=client)
-    client.generate_thumbnail.assert_called_once()
+    assert client.generate_thumbnail.call_count == 2
     client.client.models.generate_content.assert_called_once()
     data = json.loads((kit / "metadata.json").read_text())
     assert data["thumbnails"]["youtube"]["provider"] == ("local" if fails else "gemini")
