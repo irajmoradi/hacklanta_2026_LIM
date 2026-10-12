@@ -13,7 +13,7 @@ from services.gemini_client import GeminiProvider
 from services.provider_errors import ProviderFailure
 from social import build_share_kit
 from social.image_candidates import candidates, reaction_frame
-from social.thumbnails import SIZES
+from social.thumbnails import SIZES, render_thumbnail
 from test_social import job, clips  # synthetic ffmpeg fixtures
 
 
@@ -66,6 +66,22 @@ def test_shared_budget_blocks_transport(provider, tmp_path):
     with pytest.raises(ProviderFailure, match="budget"):
         provider.generate_thumbnail(reference, "", tmp_path / "out.png")
     provider.client.models.generate_content.assert_not_called()
+
+
+def test_direct_and_share_calls_use_same_job_image_ledger(provider, tmp_path):
+    provider.budget = CallBudget(tmp_path / "gemini-budget.sqlite3")
+    reference = tmp_path / "frame.png"
+    Image.new("RGB", (80, 45)).save(reference)
+    # Legacy intro/outro thumbnail calls and share-kit calls share the four slots.
+    for _ in range(2):
+        provider.generate_thumbnail(reference, "", tmp_path / "out.png")
+    for _ in range(2):
+        provider.generate_thumbnail(reference, "", tmp_path / "out.png",
+            image_budget=CallBudget(tmp_path / "thumbnail-budget.sqlite3", limit=4))
+    provider.image_budget = CallBudget(limit=4)  # Simulate a newly constructed client.
+    with pytest.raises(ProviderFailure, match="budget"):
+        provider.generate_thumbnail(reference, "", tmp_path / "out.png")
+    assert provider.client.models.generate_content.call_count == 4
 
 
 @pytest.mark.parametrize("flag,client_present,reason", [
@@ -155,3 +171,44 @@ def test_reaction_failure_is_visible(provider, tmp_path):
         provider, tmp_path, tmp_path, warnings)
     assert warnings == ["Thumbnail reaction unavailable; continuing with gameplay only."]
     assert all(e["provider"] == "gemini" and e["reaction"] is None for _, e in results)
+
+
+def test_reaction_reference_and_mode_prompt(provider, tmp_path, monkeypatch):
+    def extract(name, output):
+        Image.new("RGBA", (24, 32), (255, 0, 0, 128)).save(output)
+        return {"file": name, "timestamp": .5}
+    monkeypatch.setattr("social.image_candidates.reaction_frame", extract)
+    warnings = []
+    title, results = candidates(Image.new("RGB", (80, 45)),
+        {"gemini_image": True, "mode": "mean", "reaction_head": "hype.alpha.webm"},
+        "Deadlock", provider, tmp_path, tmp_path, warnings)
+    assert not warnings and title == "SKILL ISSUE"
+    for call in provider.client.models.generate_content.call_args_list:
+        contents = call.kwargs["contents"]
+        assert len(contents) == 3
+        with Image.open(io.BytesIO(contents[1].inline_data.data)) as image:
+            assert image.mode == "RGBA" and image.getchannel("A").getextrema() == (128, 128)
+        assert "Deadlock" in contents[-1] and "playful roast" in contents[-1]
+        assert "consented teammate" in contents[-1] and "No text" in contents[-1]
+    assert all(e["reaction"]["file"] == "hype.alpha.webm" for _, e in results)
+
+
+def test_plan_flag_overrides_job_default(job, clips, provider):
+    state = {"dir": str(job), "options": {"gemini_image": True}}
+    build_share_kit(job, clips, {"social": {"gemini_image": False}}, "Valorant", client=provider, job=state)
+    provider.client.models.generate_content.assert_not_called()
+    assert all("disabled" in warning for warning in state["warnings"])
+
+
+def test_portrait_keeps_action_and_reaction_in_separate_panels():
+    frame = Image.new("RGB", (1600, 900), "red")
+    frame.paste("blue", (880, 0, 1600, 900))
+    image, details = render_thumbnail(frame, "NO SHOT", SIZES["vertical"],
+                                     preserve_scene=True, reaction=True)
+    assert details["composition"] == "action_reaction_panels"
+    assert image.getpixel((900, 850)) == (255, 0, 0)
+    assert image.getpixel((900, 1700)) == (0, 0, 255)
+    square, details = render_thumbnail(frame, "NO SHOT", SIZES["square"], preserve_scene=True)
+    assert details["composition"] == "full_scene"
+    assert square.getpixel((40, 800)) == (255, 0, 0)
+    assert square.getpixel((1040, 800)) == (0, 0, 255)

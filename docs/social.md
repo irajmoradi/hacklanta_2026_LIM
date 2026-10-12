@@ -1,6 +1,6 @@
 # Montage share kits
 
-`social.build_share_kit(job_dir, clips, plan, game) -> pathlib.Path` creates a
+`social.build_share_kit(job_dir, clips, plan, game, *, client=None, job=None) -> pathlib.Path` creates a
 posting kit at `job_dir.parent/share/job_dir.name/`. It is an opt-in library;
 the Flask routes and existing render defaults are unchanged. Run it after render.
 
@@ -26,6 +26,10 @@ The directory contains:
 - `video.mp4`: a byte-for-byte copy of the rendered montage.
 - `thumbnail_youtube.jpg`: 1280 x 720 (16:9).
 - `thumbnail_vertical.jpg`: 1080 x 1920 (9:16), shared Shorts/TikTok cover.
+- `thumbnail_square.jpg`: 1080 x 1080 (1:1).
+- `thumbnail_candidate_{1,2}_{youtube,vertical,square}.jpg`: both candidates,
+  each recomposed locally. The first successful generated candidate is selected;
+  the conventional filenames above are aliases of it (candidate 1 if both fail).
 - `metadata.json`: three title options per platform, descriptions, game hashtags,
   structured montage chapters, frame scores, text layout bounds and provider status.
 - `chapters.txt`: full montage-relative chapter list, including an intro if present.
@@ -89,7 +93,9 @@ plan["social"] = {
     "source_path": "source.mp4",
     "intro_duration": 0,
     "captions_path": "captions.srt",
-    "thumbnail_text": "LAST-SECOND SAVE",
+    "thumbnail_text": "LAST SECOND SAVE",
+    "mode": "nice",  # nice or mean
+    "reaction_head": "iraj-hype.alpha.webm",  # optional, only /srv/packs/team
     "subject_cutout": True,
     "gemini_metadata": False,
     "gemini_image": False,
@@ -100,7 +106,9 @@ Local thumbnails use an edge-saliency crop, outlined white text in a dark panel,
 and a bright outlined arrow. Text is measured, wrapped (including long unbroken
 strings), and shrunk inside the safe rectangle: x=8–88%, y=12–38%. These deliberately
 generous margins help avoid overlays, but preview the cover in the target app.
-Text is capped at 160 characters. Fonts without a requested glyph may show a
+Share-kit titles use 2-4 words, defaulting to `NO SHOT` (nice) or `SKILL ISSUE`
+(mean); supplied titles are uppercased and limited to four words. The low-level
+renderer caps text at 160 characters. Fonts without a requested glyph may show a
 replacement glyph; install a suitable system font for the intended language.
 
 When `subject_cutout=True`, an optional importable `sam` adapter is called as
@@ -114,15 +122,64 @@ enable the corresponding flag. The client follows the existing
 `services.gemini_client.GeminiVideoClient` pattern:
 
 - Metadata: `client.client.models.generate_content(model=client.model, ...)`.
-- Image: `client.generate_thumbnail(reference_path, prompt, output_path)`.
+- Image: `client.generate_thumbnail(reference_path_or_list, prompt, output_path,
+  image_budget=ledger)`. Custom adapters must honor the supplied `CallBudget` by
+  reserving each transport attempt, as `GeminiProvider` does.
 
-Each enabled pass makes at most one call, without retries (two total). API keys
-alone never enable network access. Metadata errors or malformed JSON use the
-deterministic title/description templates. Image errors keep the local frame.
-Fallbacks log generic messages without provider exception text.
-Generated imagery is composed locally afterward so output sizes and text bounds
-remain fixed. Provider exceptions are not serialized because they may contain
-credentials. The task tests mock both calls; no live calls were needed.
+Image generation requires the literal boolean `gemini_image=True` and an explicit
+client. Two candidate requests use different color treatments and include game,
+mode and the best scored gameplay frame. The optional reaction comes only from a
+resolved `.alpha.webm` inside `/srv/packs/team`; arbitrary portraits and symlinks
+outside the pack are rejected. Four frames are sampled from the chosen expressive
+reaction clip; visible motion chooses a frame, not a facial-expression detector.
+Missing/invalid reactions warn and continue with gameplay. No new ML dependency.
+
+The model is `GEMINI_IMAGE_MODEL` (default `gemini-3.1-flash-image`). For Vertex
+express set `GOOGLE_GENAI_USE_VERTEXAI=true` and `GOOGLE_API_KEY` in the process
+environment, or construct `GeminiVideoClient(vertexai=True)` explicitly. The SDK
+uses `genai.Client(vertexai=True, api_key=...)`. API keys alone never enable image
+generation. See Google's [express-mode model list](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/start/express-mode/overview).
+
+Each candidate uses exactly one attempt, with SDK and application image retries
+disabled. Each attempt reserves both the client's shared job budget and a durable
+`thumbnail-budget.sqlite3` ledger capped at **four image calls per job**. Failed
+transport attempts count. Supply the existing pipeline client with its
+`gemini-budget.sqlite3` budget; when calling the library independently, bind that
+shared budget yourself if it must survive process restarts. The image ledger is
+always durable. Reservations are conservative: if the global budget refuses a
+call, its image reservation stays spent. Repeated builds/restarts do not reset
+the image ledger. Normal successful builds use two image calls, and metadata
+generation remains independently opt-in.
+Direct legacy intro/outro calls also use the same image ledger when the client's
+shared budget is bound to the job directory, so they cannot bypass the four-call cap.
+
+Generation never supplies the title: prompts request no text, then Pillow adds
+measured text and an arrow. Landscape retains the master; square retains the full
+scene on a blurred background; portrait with a reaction stacks the action and
+reaction crops so both remain visible. No extra model calls for aspect ratios.
+
+Every disabled/missing-client/failed candidate has `provider="local"`, a safe
+`reason`, and a warning in `metadata.json`. Success uses `provider="gemini"` and
+`reason=null`. All candidates and variants are in `thumbnail_candidates`; selected
+variants remain in `thumbnails` for compatibility. The top-level `provider`
+continues to describe posting-copy generation, not image generation. Provider
+exception text is never serialized. Local frames remain usable when generation
+fails. Pass the mutable `job=job_state` to also append warnings to its `warnings`
+list and inherit `job_state['options']`; `plan['social']` explicitly overrides
+those options. The job directory owns the image ledger even if export uses a
+temporary scratch directory. Callers must persist the updated job as usual.
+
+```python
+from services.gemini_client import GeminiVideoClient
+from services.call_budget import CallBudget
+from pathlib import Path
+
+job['options'].update(gemini_image=True, mode='nice')
+with GeminiVideoClient(vertexai=True) as client:
+    client.budget = CallBudget(Path(job['dir']) / 'gemini-budget.sqlite3')
+    kit = build_share_kit(job['dir'], job['clips'], job['edit_plan'], 'Valorant',
+                          client=client, job=job)
+```
 
 Game aliases include Valorant, Overwatch/Overwatch 2, Deadlock, and
 League/League of Legends/LoL; unknown games receive generic gaming hashtags.
@@ -144,7 +201,7 @@ avoid invented achievements, but review generated copy and imagery before postin
 From the worktree root, run on the Linux runner:
 
 ```sh
-tools/remote_run.sh "cd full_app && python -m pip install -q -r social/requirements.txt && python -m pytest -q tests/test_social.py"
+tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_social.py tests/test_thumb.py"
 ```
 
 Tests generate synthetic `testsrc2` video with `sine` audio, block socket
@@ -154,3 +211,61 @@ caption export, path containment, and cleanup after an unsuccessful export.
 
 Call this library after rendering. Install `social/requirements.txt` when
 enabling share-kit exports.
+
+## THUMB-1 integration handoff (outside this task's allowed paths)
+
+Line numbers refer to the unmodified files on this task branch. **Preset/UI flags
+alone are insufficient**: the existing caller does not pass a client or job.
+These changes belong to the integrator:
+
+1. `full_app/pipeline/experience.py:7`: add `gemini_image=True` next to
+   `social=True` in `FULL_EXPERIENCE`.
+2. `full_app/production_frontend/src/features.ts:7`: add `gemini_image: false`
+   to `extensionDefaults` so manual mode stays opt-in. In
+   `full_app/production_frontend/src/components/EditSettings.tsx:32`, add
+   `"gemini_image"` to the Full experience button's list set to `true`. Add
+   `["gemini_image", "AI thumbnails", "Generate two covers for your share kit."]`
+   alongside the share-kit toggle at line 26.
+3. `full_app/server/validation.py:24`: include `gemini_image` in
+   `EXTENSION_FLAGS`; `full_app/server/capabilities.py:10`: include it in the
+   `social` controls list. Without capability advertising,
+   `production_frontend/src/api.ts:205-208` filters the UI option out.
+4. `full_app/pipeline/extensions.py:309-310`: keep the executed share plan, but
+   call `build(..., client=image_client, job=job)`. Construct the image client
+   only when requested, using the existing runtime credentials/backend and
+   `CallBudget(Path(job['dir']) / 'gemini-budget.sqlite3')`; close it in `finally`.
+   A missing key should warn and pass `client=None` so this library records
+   `client_unavailable`. For local video providers, use a dedicated Gemini image
+   client only if explicitly requested; `LocalClient` has no image method.
+   Passing `job` propagates `gemini_image`, mode and warnings and anchors the
+   four-call ledger outside the temporary export directory.
+5. `full_app/pipeline/extensions.py:318`: optionally build covers from each
+   `metadata['thumbnail_candidates'][i]['variants']` to expose both candidates
+   in the UI. All candidate files already appear in the existing download list.
+
+The simple frontend's `generate_thumbnails` checkbox and the legacy API flag
+control video intro/outro cards, a separate feature; they do not enable share-kit
+Nano Banana images. This branch does not change their defaults.
+
+## Explicit live smoke
+
+`demo_video/thumb/live_smoke.py` is an opt-in executable, never a pytest test.
+It probes the old model ID once, then generates two candidates each for the
+Valorant montage and the specified Deadlock CC BY VOD. It has a durable eight-call
+run ledger, two candidate requests per job, and the production four-call job
+ledger. The `--retry-failed` option reuses those ledgers. The PowerShell launcher
+reads `GOOGLE_API_KEY` from the user's existing external `.env` at runtime and
+sends only the key over SSH stdin; it never writes the key to disk or arguments.
+
+```powershell
+bash tools/remote_run.sh 'python -m py_compile demo_video/thumb/live_smoke.py'
+powershell -NoProfile -ExecutionPolicy Bypass -File demo_video/thumb/run_live.ps1
+# Only after a quota cooldown, and without resetting either ledger:
+powershell -NoProfile -ExecutionPolicy Bypass -File demo_video/thumb/run_live.ps1 -RetryFailed
+```
+
+Retrieve `demo_video/thumb/out/` from the runner before another remote sync
+(the sync uses `--delete`). Outputs are ignored by `demo_video/thumb/.gitignore`.
+The report records the exact model, sources, frame timestamps, attempts, warnings,
+and all output files. Local recomposition of existing masters costs no API calls:
+`python demo_video/thumb/live_smoke.py --compose-only`.

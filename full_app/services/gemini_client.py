@@ -261,7 +261,10 @@ class GeminiProvider(VideoUnderstandingProvider):
                 data = io.BytesIO()
                 reference.convert("RGBA").save(data, format="PNG")
                 contents.append(types.Part.from_bytes(data=data.getvalue(), mime_type="image/png"))
-        (image_budget if image_budget is not None else self.image_budget).reserve()
+        if image_budget is None:
+            image_budget = (CallBudget(Path(self.budget.path).with_name("thumbnail-budget.sqlite3"), limit=4)
+                            if self.budget.path else self.image_budget)
+        image_budget.reserve()
         self.budget.reserve()
         response = self.client.models.generate_content(
             model=self.image_model, contents=[*contents, prompt],

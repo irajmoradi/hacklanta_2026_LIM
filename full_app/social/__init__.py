@@ -115,7 +115,8 @@ def build_share_kit(job_dir, clips, plan, game, *, client=None, job=None) -> Pat
         for image, evidence in images:
             variants = {}
             for variant, size in SIZES.items():
-                thumbnail, details = render_thumbnail(image, title, size, options.get("subject_cutout", False))
+                thumbnail, details = render_thumbnail(image, title, size, options.get("subject_cutout", False),
+                    preserve_scene=evidence["provider"] == "gemini", reaction=evidence["reaction"] is not None)
                 filename = f"thumbnail_candidate_{evidence['id']}_{variant}.jpg"
                 thumbnail.save(staging / filename, quality=94)
                 variants[variant] = {"file": filename, **evidence, **details}
