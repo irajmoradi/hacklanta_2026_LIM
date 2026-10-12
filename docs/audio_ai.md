@@ -181,3 +181,18 @@ behavior. An espeak-ng/espeak test synthesizes speech locally if available,
 otherwise skips. It checks activity timing, not real ASR accuracy. Model accuracy
 on gameplay and actual pretrained inference remain deployment validation work;
 no model weights, media fixtures, or credentials belong in git.
+
+### Sprint validation
+
+Linux runner results for this task:
+
+- `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_audio_ai.py"`
+  — exit 0; initial milestone: 19 passed, 1 skipped.
+- `tools/remote_run.sh "cd full_app && python -m pytest -q"`
+  — exit 0; final suite: 23 passed, 1 skipped. The skip is local speech synthesis
+  because neither espeak-ng nor espeak is installed on the runner.
+
+Additional regression checks cover partial model-inference failure, invalid
+classifier scores, VAD override behavior, and imports without heavy frameworks.
+There were zero paid API calls and no pretrained model downloads. Real Whisper,
+WebRTC, and YAMNet quality/installation were not validated by these mocked tests.

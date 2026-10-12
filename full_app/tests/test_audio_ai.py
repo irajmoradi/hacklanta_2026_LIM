@@ -102,6 +102,39 @@ def test_optional_failures_preserve_baseline(synthetic, monkeypatch):
     assert result.backends == baseline.backends
 
 
+def test_mid_inference_failures_are_atomic(synthetic, monkeypatch):
+    def broken_transcript(*args):
+        yield Word(start=1, end=1.2, text="bro")
+        raise RuntimeError("inference failed after first word")
+    def broken_classifier(*args):
+        yield (0, 1, {"laugh": .99})
+        raise RuntimeError("inference failed after first window")
+    monkeypatch.setattr(backends, "transcribe", broken_transcript)
+    monkeypatch.setattr(backends, "classify", broken_classifier)
+    baseline = offline(synthetic[1])
+    result = analyze(synthetic[1], vad="energy", events="yamnet")
+    assert result.words == []
+    assert result.seconds == baseline.seconds
+    assert len(result.warnings) == 2
+
+
+def test_nonfinite_classifier_scores_retain_heuristics(synthetic, monkeypatch):
+    monkeypatch.setattr(backends, "classify", lambda *args: [(1, 2, {"laugh": float("nan")})])
+    baseline = offline(synthetic[1])
+    result = offline(synthetic[1], events="yamnet")
+    assert result.seconds == baseline.seconds
+    assert result.backends["events"] == "heuristic"
+    assert result.warnings
+
+
+def test_vad_overrides_energy_without_changing_loudness(synthetic, monkeypatch):
+    monkeypatch.setattr(backends, "speech_activity", lambda samples: np.zeros(int(np.ceil(len(samples) / 320))))
+    result = analyze(synthetic[1], speech="off", vad="webrtc")
+    assert result.backends["vad"] == "webrtc"
+    assert all(row.signals["audio_speech_activity"] == 0 for row in result.seconds)
+    assert result.seconds[3].signals["audio_rms"] > .4
+
+
 def test_word_timestamps_phrases_and_classifier(synthetic, monkeypatch):
     monkeypatch.setattr(backends, "transcribe", lambda *args: [
         Word(start=1.8, end=1.95, text="LET’S", probability=.9),
@@ -214,6 +247,16 @@ def test_whisper_adapter_is_cpu_cached_and_word_level(monkeypatch):
     assert backends.transcribe(np.zeros(RATE, np.float32))[0].text == "bro"
     assert calls == dict(model="tiny", device="cpu", compute_type="int8", local_files_only=True,
                          word_timestamps=True, vad_filter=True)
+    backends.transcribe(np.zeros(RATE, np.float32), model="base", allow_downloads=True)
+    assert calls["local_files_only"] is False
+    assert calls["model"] == "base"
+
+
+def test_import_does_not_load_optional_frameworks():
+    code = ("import sys; import audio_ai; "
+            "assert not {'tensorflow', 'tensorflow_hub', 'torch', 'faster_whisper', 'webrtcvad'}"
+            ".intersection(sys.modules)")
+    run(sys.executable, "-c", code)
 
 
 def test_webrtc_adapter_pcm_frames(monkeypatch):
