@@ -91,8 +91,6 @@ def _download(url: str, directory: Path, *, limits: Limits, owns_content: bool,
         "max_filesize": limits.max_bytes, "match_filter": match_filter,
         "progress_hooks": [hook], "socket_timeout": 30, "retries": 2,
         "fragment_retries": 2, "concurrent_fragment_downloads": 1,
-        # The native downloader invokes byte-limit hooks, including HLS fragments.
-        "hls_prefer_native": True,
         "proxy": "", "enable_file_urls": False,
         "logger": _QuietLogger(),
     }

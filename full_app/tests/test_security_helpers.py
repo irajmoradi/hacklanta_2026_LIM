@@ -40,7 +40,7 @@ def test_url_syntax(url):
 @pytest.mark.parametrize('address', ['127.0.0.1', '10.0.0.1', '169.254.169.254',
                                       '192.168.1.1', '100.64.0.1', '::1', 'fc00::1',
                                       'fe80::1%eth0', '::ffff:127.0.0.1', '224.0.0.1',
-                                      '2002:7f00:1::', '0.0.0.0'])
+                                      '2002:7f00:1::', '64:ff9b::a00:1', '0.0.0.0'])
 def test_nonpublic_addresses(address):
     assert not public_address(address)
 

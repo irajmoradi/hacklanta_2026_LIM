@@ -94,8 +94,18 @@ def test_response_budgets_and_deadline():
     with pytest.raises(IngestError, match='byte limit'):
         bounded.read()
     assert stream.closed
+    expired = io.BytesIO(b'a')
     with pytest.raises(IngestError, match='timed out'):
-        BoundedReader(io.BytesIO(b'a'), 2, 0).read()
+        BoundedReader(expired, 2, 0).read()
+    assert expired.closed
+
+
+def test_rejected_redirect_closes_response():
+    response = Mock()
+    with pytest.raises(ValueError):
+        SafeRedirect().redirect_request(urllib.request.Request('https://youtu.be/a'),
+                                        response, 302, '', {}, 'https://127.0.0.1/a')
+    response.close.assert_called_once()
 
 
 def test_ytdlp_transport_adapts_real_request(monkeypatch):

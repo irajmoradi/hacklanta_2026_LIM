@@ -54,7 +54,8 @@ def public_address(address):
             return False
         if isinstance(ip, ipaddress.IPv6Address):
             # Reject transition/tunnel addresses as well as mapped private IPv4.
-            if ip.sixtofour or ip.teredo:
+            if (ip.sixtofour or ip.teredo or ip in ipaddress.ip_network('64:ff9b::/96')
+                    or ip in ipaddress.ip_network('64:ff9b:1::/48')):
                 return False
             if ip.ipv4_mapped:
                 return public_address(str(ip.ipv4_mapped))

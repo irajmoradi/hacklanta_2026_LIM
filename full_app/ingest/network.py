@@ -59,7 +59,12 @@ class PublicHTTPSHandler(urllib.request.HTTPSHandler):
 
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, response, code, message, headers, url):
-        validate_target(url)
+        try:
+            validate_target(url)
+        except ValueError:
+            if response is not None:
+                response.close()
+            raise
         return super().redirect_request(request, response, code, message, headers, url)
 
 
@@ -69,6 +74,7 @@ class BoundedReader:
 
     def read(self, size=-1):
         if time.monotonic() > self.deadline:
+            self.close()
             raise IngestError('URL import timed out')
         read_all = size is None or size < 0
         budget = min(self.remaining, 8 * 1024**2) if read_all else self.remaining
