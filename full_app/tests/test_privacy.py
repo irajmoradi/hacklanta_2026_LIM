@@ -7,7 +7,7 @@ import pytest
 from pydantic import ValidationError
 
 from privacy import (BlurBox, BlurTrack, PrivacyOptions, build_filtergraph,
-                     detect_video, render_private_source, sanitize)
+                     detect_video, render_private_source, render_montage, sanitize)
 from privacy.detector import smooth
 from privacy.ocr import RapidOCR, Tesseract, Word
 from privacy.profiles import regions_for
@@ -166,3 +166,27 @@ def test_rapidocr_adapter_without_optional_dependency():
     reader = RapidOCR.__new__(RapidOCR)
     reader.engine = lambda frame: ([[[[10, 20], [40, 20], [40, 30], [10, 30]], "Other", .9]], None)
     assert reader.read(np.zeros((50, 50, 3), dtype=np.uint8)) == [Word("Other", 10, 20, 31, 11)]
+
+
+def test_whitelist_does_not_allow_substrings_or_mixed_lines(names_video):
+    class Reader:
+        def read(self, frame):
+            return [Word("Uploader Enemy", 10, 10, 150, 30),
+                    Word("Uploader2", 300, 100, 100, 30)]
+    track = detect_video(names_video, {"regions": FULL, "own_name": "Uploader", "keep_own_name": True}, reader=Reader())
+    assert len(track.boxes) == 2
+
+
+def test_montage_adapter_preserves_runner_and_cleans_source(video, tmp_path, monkeypatch):
+    from services.ffmpeg_runner import FFmpegRunner
+    monkeypatch.setattr("services.ffmpeg_runner.HAS_NVENC", False)
+    runner = FFmpegRunner(tmp_path, video, 160, 120, 10)
+    final, track = render_montage(runner, {"segments": [
+        {"source_start": 1, "source_end": 2, "video_effects": [], "speed": 1.5}
+    ]}, {"backend": "none", "regions": {}, "manual_boxes": [
+        dict(x=0, y=0, width=.2, height=.2, start=1, end=2)]})
+    assert final.exists()
+    assert runner.source == video and video.exists()
+    assert not list(tmp_path.glob("privacy-*"))
+    assert track.boxes[0].start == 1
+    assert frame_at(final, 0).shape == (120, 160, 3)

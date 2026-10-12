@@ -61,11 +61,12 @@ def detect_video(source, options=None, *, reader=None):
         active = {k: v for k, v in regions.items() if k != "webcam"}
         try:
             reader = reader if reader is not None else get_reader(options.backend)
-        except (ImportError, OSError, RuntimeError) as exc:
+        except Exception as exc:
             warnings.append(f"OCR unavailable ({type(exc).__name__}); using whole-region fallback")
             reader = None
         if reader is None:
-            warnings.append("Whole-region fallback cannot preserve the uploader name")
+            if active:
+                warnings.append("Whole-region fallback cannot preserve the uploader name")
             boxes.extend(BlurBox(**b.model_dump(), end=duration, kind=k) for k, b in active.items())
         else:
             interval = 1 / options.sample_fps
