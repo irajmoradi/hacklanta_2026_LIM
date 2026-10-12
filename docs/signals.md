@@ -206,3 +206,123 @@ PySceneDetect, model inference, and performance skips are not evidence of a pass
 Try the unchanged module commands at the top of this document or run the targeted
 suite above; its videos and audio are synthetic. Real pretrained inference and
 the opt-in performance benchmark were not run during this maintenance pass.
+
+## FIX-5: Valorant feed recognition and offline validation
+
+Valorant uses names and a weapon icon, rather than the literal word `KILLED`.
+Its feed crop is now `(0.64, 0.08, 1.0, 0.32)` in normalized coordinates
+(approximately x=1228..1920, y=86..345 at 1080p), below the score strip.
+The announcement crop moves to the upper center. Coordinates scale with the
+source frame; synthetic regressions cover 1920, 1280 and 960 pixel widths.
+
+For the stock Valorant regions, OCR first locates short horizontal bars containing
+both red and teal background spans. It extracts each row, scales it to at least
+48 pixels high, masks bright low-chroma text, and runs Tesseract in single-line
+mode. Two name-like tokens are required. Other profiles and custom region maps
+retain keyword parsing. Missing Tesseract or subprocess failures still disable
+OCR gracefully, without downloading dependencies or contacting a provider.
+
+Feed identity follows both participants across row movement, tolerating modest
+OCR spelling jitter. Each sighting refreshes an eight-second identity window
+(or the configured cooldown if longer), so a persistent row does not repeatedly
+emit a kill. Comparing participants separately preserves different victims in
+a rapid multikill. Events explicitly carry `attribution: unknown`: both teams
+appear in the feed, including during spectator footage. These are candidate
+signals, not verified kills by the recorder. Short/non-Latin names, colorblind
+palettes, resized/custom HUDs, missed samples and OCR errors remain limitations.
+
+Reproduce the full-source local-only measurement from the worktree root:
+
+```sh
+bash tools/remote_run.sh 'PYTHONPATH=full_app python full_app/tests/measure_fix5.py /srv/demo_in/valorant_phoenix_44k.mp4 --baseline'
+bash tools/remote_run.sh 'PYTHONPATH=full_app python full_app/tests/measure_fix5.py /srv/demo_in/valorant_phoenix_44k.mp4'
+bash tools/remote_run.sh 'cd full_app && python -m pytest tests/test_fix5.py -q'
+bash tools/remote_run.sh 'cd full_app && python -m pytest -q'
+```
+
+`--baseline` injects the original full-frame OCR reader to bypass the new layout
+pass. On this source it selects generic, whose crop and keyword parser are
+unchanged. Both scans use 2 fps decoding, 960-pixel OCR frames, a two-second OCR
+interval, and the entire video stream (1,871.916667 seconds; container duration
+is 1,871.970). This is a controlled local before/after comparison, not a rerun of
+the demo's paid analysis or its five-second OCR sampling. The script prints only
+aggregate counts; no player names, video frames or credentials are saved.
+The helper sets `OMP_THREAD_LIMIT=1` to avoid Tesseract oversubscription on the
+shared runner and converts OCR-disable warnings into errors. A reported completed
+measurement therefore cannot silently stop recognizing HUDs partway through.
+
+Completed October 12, 2026, with the final implementation and uninterrupted OCR:
+
+| Measurement | Auto profile | Confidence | OCR kill events | Elapsed |
+| --- | --- | ---: | ---: | ---: |
+| Original full-frame/keyword path | generic | 0.000 | 0 | 834.11 s |
+| FIX-5 layout and feed path | valorant | 0.725 | 135 | 359.07 s |
+
+Both processed the complete 1,871.916667-second video stream and independently
+reported 166 scene cuts. The recording is described as approximately **44 POV
+kills**, while these **135 events include both teams' feed entries**, with unknown
+player attribution. This is not a 135/44 recall score or a verified kill tally.
+It establishes nonzero local feed evidence where the prior path found none.
+False positives, duplicate/missed OCR identities and spectator entries still
+require downstream verification. Timings include detection and local scanning
+on a shared, variably loaded runner; they are not a controlled speed benchmark.
+
+The final measurement command ran both scans sequentially and exited **0**:
+
+```sh
+bash tools/remote_run.sh 'PYTHONPATH=full_app python full_app/tests/measure_fix5.py /srv/demo_in/valorant_phoenix_44k.mp4 --baseline && PYTHONPATH=full_app python full_app/tests/measure_fix5.py /srv/demo_in/valorant_phoenix_44k.mp4'
+```
+
+Synthetic fixtures are generated in `tests/test_fix5.py`, including a feed with
+invented tokens, timer, health, ability slots and minimap polygons. Temporary
+ffmpeg video exercises sampling and the real Tesseract path. Tests also cover
+blank/partial HUDs, moving persistent rows, distinct victims, strict rejection of
+oversized explicit plans, and shorter requests through the stock local planner.
+All ordinary tests block network access. No key was read and zero paid calls
+were made during FIX-5.
+
+FIX-5 changed files (all within the task allowlist):
+
+```text
+full_app/profiles/data/valorant.json
+full_app/profiles/detection.py
+full_app/profiles/hud.py
+full_app/profiles/registry.py
+full_app/signals/ocr.py
+full_app/server/queue.py
+full_app/tests/measure_fix5.py
+full_app/tests/test_fix5.py
+full_app/tests/test_server_limits.py
+docs/game_profiles.md
+docs/signals.md
+docs/pipeline.md
+```
+
+Milestones on `ext/FIX-5`: `f59a724` (queue admission and deterministic SSE
+regression), `f1df0f0` (HUD/feed implementation, synthetic regressions and
+reproduction helper). No push or merge was performed.
+
+Focused runner commands and outcomes:
+
+- `bash tools/remote_run.sh 'cd full_app && python -m pytest tests/test_fix5.py tests/test_server_limits.py -q'`
+  exited 0: 33 passed, 1 skipped (20.59 s).
+- `bash tools/remote_run.sh 'cd full_app && python -m pytest tests/test_fix5.py -q'`
+  exited 0 on the final implementation: 11 passed (11.20 s).
+- `bash tools/remote_run.sh 'cd full_app && python -m pytest -q'`
+  exited 0: **1,052 passed, 21 skipped** in 814.36 s. This includes the formerly
+  flaky SSE regression under full-suite load; skips are not claimed as passes.
+- An earlier server/profile/signal run exited 1: 85 passed, 3 skipped, one
+  failure because the new API clock stub omitted `time.time` used during upload.
+  The stub now retains real wall-clock timestamps while controlling SSE time.
+- An earlier FIX-5/profile/server run exited 1: 74 passed, 1 skipped, one
+  failure because the one-second synthetic video had only four frames; its
+  final requested sample was beyond the last frame. The fixture now uses 10 fps
+  and verifies three real decoded samples; the detector threshold was retained.
+- Two preliminary diagnostic runs exited 1 while serializing NumPy booleans;
+  evidence flags now return ordinary Python booleans. The temporary diagnostic
+  script and inspected full frame were removed before committing.
+- Initial concurrent full-VOD measurements hit a Tesseract timeout under runner
+  load and continued with OCR disabled. The baseline exited 0 (984.09 s) but its
+  incomplete OCR count is excluded. The updated scan was intentionally stopped
+  after disablement (exit 1) to free runner capacity. This prompted the helper's
+  single-thread setting and fail-on-disable guard, followed by sequential scans.

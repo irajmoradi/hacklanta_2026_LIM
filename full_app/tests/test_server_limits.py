@@ -51,7 +51,16 @@ def test_unconfigured_remote_peer_fails_closed(setup):
     assert client.get('/api/info').status_code == 200
 
 
-def test_stream_capacity_lifetime_and_idle_close(setup, video):
+def test_stream_capacity_lifetime_and_idle_close(setup, video, monkeypatch):
+    from types import SimpleNamespace
+    from server import api
+    # Patch only the SSE module's clock, not process-wide time used by workers.
+    now = [0.0]
+    sleeps = []
+    def sleep(seconds):
+        sleeps.append(seconds)
+        now[0] += seconds
+    monkeypatch.setattr(api, 'time', SimpleNamespace(monotonic=lambda: now[0], sleep=sleep, time=time.time))
     app, client, _ = setup
     job = upload(client, video)
     url = '/api/jobs/' + job
@@ -71,10 +80,14 @@ def test_stream_capacity_lifetime_and_idle_close(setup, video):
         assert client.get(url).status_code == 200
         assert time.monotonic() - started < 1
         assert b'heartbeat' in responses[0].data
+        assert now[0] == pytest.approx(.05)
+        assert sleeps and all(0 < delay <= app.config['SSE_INTERVAL'] for delay in sleeps)
     finally:
         for response in responses:
             response.close()
-    assert client.get(url + '/events').status_code == 200
+    replacement = client.get(url + '/events', buffered=False)
+    assert replacement.status_code == 200
+    replacement.close()
 
 
 @pytest.mark.parametrize('change', [

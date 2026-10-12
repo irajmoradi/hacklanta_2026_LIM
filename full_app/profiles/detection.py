@@ -133,6 +133,7 @@ def detect_game(video_path: str | Path, *, sample_count: int = 16,
     except (ValueError, OSError, subprocess.SubprocessError):
         return "generic", 0.0
     images, frames = [], []
+    layouts = {name: 0 for name in list_profiles() if get_profile(name).detection_layout}
     reader = ocr if ocr is not None else lambda png: tesseract_ocr(png, language=language)
     for index in range(sample_count):
         timestamp = duration*(index+.5)/sample_count
@@ -145,7 +146,19 @@ def detect_game(video_path: str | Path, *, sample_count: int = 16,
             continue
         images.append(result.stdout)
         frames.append((width, height, reader(result.stdout)))
+        # An injected OCR hook retains its original full-frame-only contract.
+        if ocr is None:
+            from .hud import layout_evidence
+            for name in layouts:
+                cues = layout_evidence(result.stdout, get_profile(name), reader)
+                # A feed can be empty between eliminations; its position is
+                # corroborating evidence rather than a mandatory persistent HUD.
+                layouts[name] += bool(cues) and all(cues.get(k) for k in ('timer', 'health', 'abilities', 'minimap'))
     detected = detect_frames(frames)
+    supported = [name for name, count in layouts.items() if count >= max(3, math.ceil(len(images)*.18))]
+    if detected[0] == 'generic' and len(supported) == 1:
+        name = supported[0]
+        detected = name, round(min(.94, .65 + .3*layouts[name]/max(1, len(images))), 3)
     if detected[0] == "generic" and images and vlm_fallback is not None:
         name, confidence = vlm_fallback(tuple(images[::max(1, len(images)//3)][:3]))
         if name not in list_profiles() or not isinstance(confidence, (int, float)) or not math.isfinite(confidence) or not 0 <= confidence <= 1:
