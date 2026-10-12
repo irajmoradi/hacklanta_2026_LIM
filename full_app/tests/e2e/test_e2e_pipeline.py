@@ -8,7 +8,7 @@ from types import ModuleType
 import pytest
 
 from demo.make_demo_gameplay import events_for, ffmpeg, generate, probe
-from pipeline.demo import (Progress, Unavailable, clean_plan, coverage, fallback_windows,
+from demo.pipeline import (Progress, Unavailable, clean_plan, coverage, fallback_windows,
                            legacy_plan, offline, optional_call, run, score_windows)
 
 
@@ -27,9 +27,10 @@ def test_pipeline(demo_result):
     truth = report["ground_truth"]
     hits = report["chosen_clips_vs_ground_truth"]
     assert set(truth["top_event_ids"]) <= {item["event_id"] for item in hits}
-    required = {"generate", "upload", "ingest", "signals", "audio_ai", "vlm_window_scoring",
-                "planner_v2", "planner"}
-    required |= {f"{stage}_{preset}" for stage in ["render_v2", "render", "reactions", "social", "download"]
+    assert report["backend_stages"] == ["upload", "analyze", "plan", "render"]
+    assert {"signals", "window_scoring", "whole_video", "edit_plan", "render"} <= report["backend_timings"].keys()
+    required = {"generate", "upload", "analyze_plan"}
+    required |= {f"{stage}_{preset}" for stage in ["render", "download"]
                  for preset in ["landscape", "vertical"]}
     assert {entry["stage"] for entry in report["progress"]} == required
     for stage in required:
@@ -59,13 +60,7 @@ def test_top_events_are_in_encoded_pixels(demo_result):
     report = demo_result
     expected_colors = {"event_2": (0, 255, 0), "event_4": (255, 0, 255)}
     for preset, result in report["outputs"].items():
-        is_legacy = any(entry["stage"] == f"render_v2_{preset}" and entry["status"] == "skipped"
-                        for entry in report["progress"])
         y = result["height"] - 6
-        if preset == "vertical" and is_legacy:
-            # The legacy renderer pads a downscaled 16:9 image into a 9:16 frame.
-            active_height = int(result["width"] * 9 / 16) // 2 * 2
-            y = (result["height"] + active_height) // 2 - 3
         for hit in report["chosen_clips_vs_ground_truth"]:
             if hit["event_id"] not in expected_colors:
                 continue
@@ -132,7 +127,7 @@ def test_installed_module_errors_are_not_skips(monkeypatch):
     monkeypatch.setitem(sys.modules, module.__name__, module)
     with pytest.raises(ValueError, match="real regression"):
         optional_call(module.__name__, ["prepare"], {"source": "video"})
-    with pytest.raises(Unavailable, match="adapter needed"):
+    with pytest.raises(TypeError):
         optional_call(module.__name__, ["prepare"], {})
     def missing_dependency(source):
         raise ModuleNotFoundError("dependency broken", name="optional_dependency")
@@ -165,74 +160,24 @@ def test_failure_still_writes_progress_report(tmp_path):
 
 
 @pytest.mark.slow
-def test_optional_stages_chain_when_modules_land(tmp_path, monkeypatch):
-    """Contract stand-ins test orchestration, not unmerged module implementations."""
-    import shutil
-    from services.ffmpeg_runner import FFmpegRunner
+def test_factory_isolation_and_cleanup(tmp_path, monkeypatch):
+    from server.ownership import WorkspaceLease
+    default = tmp_path / "must-not-exist"
+    monkeypatch.setenv("JOB_WORKSPACE", str(default))
+    run(tmp_path / "demo", duration=28, budget=8)
+    assert not default.exists()
+    # A second owner can acquire the workspace after success.
+    lease = WorkspaceLease(tmp_path / "demo/jobs/.worker.lock")
+    lease.close()
 
-    calls = []
-    def install(name, export, function):
-        module = ModuleType(name)
-        setattr(module, export, function)
-        monkeypatch.setitem(sys.modules, name, module)
 
-    def prepare(source):
-        destination = Path(source).with_name("prepared.mp4")
-        shutil.copyfile(source, destination)
-        calls.append("ingest")
-        return {"path": destination}
-
-    def detect_candidates(video_path, profile):
-        assert Path(video_path).name == "prepared.mp4"
-        calls.append("signals")
-        return fallback_windows(28)
-
-    def analyze(video_path, transcribe=True):
-        assert not transcribe
-        calls.append("audio_ai")
-        return {"events": [], "signals": {"voice": [0.1]}}
-
-    def build_plan(ranked_clips, target_length, audio_signals, use_llm=True):
-        assert audio_signals["signals"]["voice"] == [0.1]
-        assert not use_llm
-        calls.append("planner")
-        return {"clips": [{"start": segment["source_start"], "end": segment["source_end"]}
-                          for segment in clean_plan(ranked_clips, target_length)["segments"]]}
-
-    def render_plan(source, plan, preset, workspace):
-        assert "clips" in plan
-        width, height = (640, 360) if preset == "landscape" else (360, 640)
-        calls.append(f"render_{preset}")
-        return FFmpegRunner(workspace, source, width, height, 15).render(legacy_plan(plan))
-
-    def render_overlay(base_clip, reaction, preset):
-        assert Path(reaction["file"]).is_file()
-        assert reaction["speaker"] == "Tone Bot"
-        calls.append(f"reactions_{preset}")
-        # Contract-only stand-in: real overlay implementation is not merged.
-        output = Path(base_clip).with_name("reacted.mp4")
-        shutil.copyfile(base_clip, output)
-        return output
-
-    def build_share_kit(job_dir, clips, plan, game):
-        assert (job_dir / "montage.mp4").exists()
-        assert clips and plan and game == "generic"
-        calls.append(f"social_{job_dir.name}")
-        share = job_dir / "share"
-        share.mkdir()
-        shutil.copyfile(job_dir / "montage.mp4", share / "video.mp4")
-        return share
-
-    for name, export, function in [
-        ("ingest", "prepare", prepare), ("signals", "detect_candidates", detect_candidates),
-        ("audio_ai", "analyze", analyze), ("planner", "build_plan", build_plan),
-        ("render", "render_plan", render_plan), ("reactions", "render_overlay", render_overlay),
-        ("social", "build_share_kit", build_share_kit),
-    ]:
-        install(name, export, function)
-    report = run(tmp_path, duration=28, budget=8)
-    assert calls == ["ingest", "signals", "audio_ai", "planner", "render_landscape",
-                     "reactions_landscape", "social_landscape", "render_vertical",
-                     "reactions_vertical", "social_vertical"]
-    assert all(entry["status"] in {"started", "completed"} for entry in report["progress"])
-    assert all(Path(result["share_kit"]).is_dir() for result in report["outputs"].values())
+def test_queue_closes_after_failure(tmp_path, monkeypatch):
+    from server.ownership import WorkspaceLease
+    from pipeline import Pipeline
+    def fail(*args):
+        raise RuntimeError("intentional render failure")
+    monkeypatch.setattr(Pipeline, "render", fail)
+    with pytest.raises(AssertionError, match="Job failed"):
+        run(tmp_path / "demo", duration=28, budget=8)
+    lease = WorkspaceLease(tmp_path / "demo/jobs/.worker.lock")
+    lease.close()

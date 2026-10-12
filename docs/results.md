@@ -1,6 +1,6 @@
 ﻿# EVAL-02 results: synthetic benchmark, mocked VLM
 
-Measured on the Linux runner, 2026-10-12 (Python 3.12.3, Linux 6.8 x86_64).
+Rerun for FIX-3 on the Linux runner, 2026-10-12 (Python 3.12.3, Linux 6.8 x86_64).
 **These numbers evaluate a designed synthetic experiment, not real gameplay or
 Gemini accuracy.** No paid calls were made, and no credential file was read.
 
@@ -50,10 +50,10 @@ it overlaps more than one interval. Touching boundaries does not count.
 
 | Pipeline | Death picks | Spectator picks | Combined / selected | Seconds per footage minute | Mean first clip (s) | Estimated API USD / footage minute |
 |---|---:|---:|---:|---:|---:|---:|
-| Signals only | 7 | 4 | 11 / 16 (68.75%) | 0.2897 | 0.6880 | 0.000000 |
-| VLM only, whole video | 2 | 8 | 10 / 28 (35.71%) | 0.1864 | 0.4426 | 0.001931 |
-| Signals + window VLM | 0 | 0 | 0 / 17 (0%) | 0.4761 | 1.1306 | 0.002703 |
-| Fusion + audio AI + chat | 0 | 0 | 0 / 17 (0%) | 0.6729 | 1.5981 | 0.002703 |
+| Signals only | 7 | 4 | 11 / 16 (68.75%) | 0.4248 | 1.0088 | 0.000000 |
+| VLM only, whole video | 2 | 8 | 10 / 28 (35.71%) | 0.2853 | 0.6775 | 0.001931 |
+| Signals + window VLM | 0 | 0 | 0 / 17 (0%) | 0.7100 | 1.6863 | 0.002703 |
+| Fusion + audio AI + chat | 0 | 0 | 0 / 17 (0%) | 0.9580 | 2.2752 | 0.002703 |
 
 Actual API cost is **$0 for every pipeline**. Estimated costs assume 100 input
 tokens/video-second, 200 input tokens/request, 100 output tokens/request,
@@ -67,7 +67,8 @@ Runtime includes real local video decode and relevant signal/audio/chat extracti
 plus mock scoring; reused component times are charged to each applicable pipeline.
 Generation and tuning are excluded. Mock window scoring scans the full media.
 These measurements say nothing about real VLM inference or upload latency and are
-single-run measurements on shared hardware. First clip means batch completion;
+single-run measurements on shared hardware. The FIX-3 rerun overlapped the
+offline regression suite; runtime differences do not establish a performance regression. First clip means batch completion;
 all four videos returned clips for every pipeline.
 
 ## Tuned defaults
@@ -112,7 +113,7 @@ run is not a guarantee: the mock deliberately misses some death state evidence.
 Real captures, human labels, multiple seeds, OCR, learned audio, measured token
 usage, and a real-provider evaluation remain follow-up work.
 
-## Validation
+## Historical EVAL-02 validation (before later integration fixes)
 
 - `bash tools/remote_run.sh "cd full_app && python -m eval.benchmark_data /tmp/lim-eval02-benchmark && python -m eval.benchmark /tmp/lim-eval02-benchmark/labels.json --output /tmp/lim-eval02-results"`
   exited 0: eight videos generated, weights tuned on four, all four pipelines
@@ -152,3 +153,71 @@ Independent failure reproduction (without collecting `eval/`):
 `bash tools/remote_run.sh "cd full_app && python -m pytest -q tests/e2e/test_e2e_pipeline.py tests/test_capture.py::test_synthetic_video_flows_through_real_api tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render tests/test_perf.py::test_single_pass_streams_duration --tb=short"`
 exited 1: **19 passed, the same 8 failed and 2 errors**, in 11.61s. This confirms
 the failures also occur without the new benchmark tests executing.
+
+
+## FIX-3 validation and disposition (2026-10-12)
+
+The eight-video benchmark was regenerated and rerun, including training-only tuning:
+
+```sh
+bash tools/remote_run.sh "cd full_app && python -m eval.benchmark_data /tmp/lim-fix3-benchmark && python -m eval.benchmark /tmp/lim-fix3-benchmark/labels.json --output /tmp/lim-fix3-results"
+```
+
+Exit **0**. A comparison through `tools/remote_run.sh` exited **0**, asserting exact
+agreement with the previous report for all held-out predictions, metrics,
+forbidden/death/spectator counts, weights and tuning results. Only timing changed;
+the runtime table and published JSON now reflect this rerun. Mean mAP remains
+**0.0290 / 0.5074 / 0.6094 / 0.6115**. Actual API spend was **$0**; no key file was read.
+An initial Git Bash `scp` command failed with a quoting error (exit **1**); the
+subsequent direct `scp.exe` artifact transfer succeeded (exit **0**).
+
+- **P1-03 fixed:** the CLI and E2E tests share `demo.pipeline.run`, which uses
+  `create_app`, the real `Pipeline`, asynchronous jobs and `JobStore`. Synthetic
+  media is really rendered/downloaded. Queue/lease cleanup and default-workspace
+  isolation are tested. Optional library stage guessing was replaced by the
+  production pipeline's current adapters. The demo explicitly limits its claims
+  to enabled stages; unrelated standalone optional libraries are not exercised.
+- **P1-07 fixed:** common interval normalization accepts signal dataclasses. A
+  generated-burst regression exercises nonempty real detector output. Comparative
+  scoring requires explicit replay/scorer selection; the shipped local adapter
+  calls the real local VLM provider and maps its typed results. A fake transport
+  test still runs actual frame extraction and structured response validation.
+- **P1-08 fixed:** at most three SDK generation attempts, including failures, are
+  counted immediately before inference. SDK/application attempts are one, agentic
+  inference is disabled, and actual source duration must fit one 600-second chunk.
+  Every provider invocation closes in `finally`, clearing uploaded files. Fake-SDK
+  tests cover long-source rejection, retryable failures, boundary exhaustion,
+  cleanup and Vertex express construction. No paid verification was performed.
+- **P2-09 / P2-11 partially fixed across repository, fixed in this scope:** oracle
+  limitations are explicit, real adapter tests were added, and demo/eval docs now
+  describe current persistent jobs and providers. Historical benchmark failures
+  above are dated evidence, not a claim about this checkout's current status.
+- **P2-10 partially fixed:** active CLI/E2E callers now share one demo adapter.
+  `full_app/pipeline/demo.py` remains an older duplicate outside allowed paths;
+  consolidating/removing it is left to its owner. Other audit P2/P3 items require
+  changes outside this task's paths and were not modified.
+
+Commands and observed results:
+
+- `bash tools/remote_run.sh "cd full_app && python -m pytest -q tests/e2e --tb=short"`
+  exited **0**, **20 passed** (initial 18.89s; final planner-handoff revision 24.17s).
+- `bash tools/remote_run.sh "cd full_app && python -m pytest -q eval --tb=short"`
+  exited **0**, **37 passed** in 13.85s.
+- The default demo in the combined command below completed its 150-second source
+  in 16.458s. Both real montages measured 7.221333s, at 1280x720 and 720x1280.
+  Artifacts are in `/tmp/lim-fix3-demo` on the runner.
+- `bash tools/remote_run.sh "bash full_app/demo/run_demo.sh --output /tmp/lim-fix3-demo && cd full_app && python -m pytest -q -m 'not live'"`
+  exited **0**: **917 passed, 19 skipped, 1 deselected** in 422.40s. The final
+  mock-planner prompt handoff change was independently covered by the later
+  20-test E2E run above. Skipped optional/live coverage is not claimed as tested.
+- `bash tools/remote_run.sh "cd full_app && python -m pytest -q eval/test_benchmark.py::test_published_report_recomputes_from_heldout_labels"`
+  exited **0**, **1 passed**, verifying the refreshed benchmark artifact.
+- Local `git diff --check` exited **0**. All changed files are within FIX-3's
+  allowed paths. No pushes or merges were performed.
+
+Try the repaired flow with
+`bash full_app/demo/run_demo.sh --output /tmp/lim-demo --duration 28 --budget 8`,
+or reproduce on Linux through `tools/remote_run.sh` as above. Inspect the two
+montages and `report.json`. The real local evaluation scorer requires a configured
+local VLM server; its transport was mocked for automated validation. Actual Gemini
+quality, optional ML models and unrelated feature integration remain untested.

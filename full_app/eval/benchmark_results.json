@@ -26,14 +26,14 @@
           }
         },
         "mAP": 0.029017857142857144,
-        "mean_time_to_first_clip_seconds": 0.6879945362501303,
+        "mean_time_to_first_clip_seconds": 1.0087876342502113,
         "videos_with_clip": 4,
         "cost_usd_per_minute": 0.0,
         "forbidden_picks": 11,
         "death_picks": 7,
         "spectating_picks": 4,
         "prediction_count": 16,
-        "seconds_per_footage_minute": 0.2896819100000549,
+        "seconds_per_footage_minute": 0.42475268810535216,
         "estimated_api_usd_per_minute": 0.0
       },
       "videos": [
@@ -54,8 +54,8 @@
               "score": 0.4984855
             }
           ],
-          "elapsed_seconds": 0.6330251510000835,
-          "time_to_first_clip_seconds": 0.6330251510000835,
+          "elapsed_seconds": 0.8698688209997272,
+          "time_to_first_clip_seconds": 0.8698688209997272,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -102,8 +102,8 @@
               "score": 0.35316625
             }
           ],
-          "elapsed_seconds": 0.6560663900002055,
-          "time_to_first_clip_seconds": 0.6560663900002055,
+          "elapsed_seconds": 0.9525778110000829,
+          "time_to_first_clip_seconds": 0.9525778110000829,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -165,8 +165,8 @@
               "score": 0.35300725
             }
           ],
-          "elapsed_seconds": 0.712385495000035,
-          "time_to_first_clip_seconds": 0.712385495000035,
+          "elapsed_seconds": 1.1193494710005325,
+          "time_to_first_clip_seconds": 1.1193494710005325,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -238,8 +238,8 @@
               "score": 0.38513475
             }
           ],
-          "elapsed_seconds": 0.7505011090001972,
-          "time_to_first_clip_seconds": 0.7505011090001972,
+          "elapsed_seconds": 1.0933544340005028,
+          "time_to_first_clip_seconds": 1.0933544340005028,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -298,14 +298,14 @@
           }
         },
         "mAP": 0.5074404761904762,
-        "mean_time_to_first_clip_seconds": 0.442634713750067,
+        "mean_time_to_first_clip_seconds": 0.6774805982497583,
         "videos_with_clip": 4,
         "cost_usd_per_minute": 0.0,
         "forbidden_picks": 10,
         "death_picks": 2,
         "spectating_picks": 8,
         "prediction_count": 28,
-        "seconds_per_footage_minute": 0.1863725110526598,
+        "seconds_per_footage_minute": 0.2852549887367403,
         "estimated_api_usd_per_minute": 0.001930526315789474
       },
       "videos": [
@@ -351,8 +351,8 @@
               "score": 0.7341709397677921
             }
           ],
-          "elapsed_seconds": 0.3739561610000237,
-          "time_to_first_clip_seconds": 0.3739561610000237,
+          "elapsed_seconds": 0.6068363490003321,
+          "time_to_first_clip_seconds": 0.6068363490003321,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -424,8 +424,8 @@
               "score": 0.6636820766015359
             }
           ],
-          "elapsed_seconds": 0.44931413700010125,
-          "time_to_first_clip_seconds": 0.44931413700010125,
+          "elapsed_seconds": 0.7217289239997626,
+          "time_to_first_clip_seconds": 0.7217289239997626,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -497,8 +497,8 @@
               "score": 0.6753645306274894
             }
           ],
-          "elapsed_seconds": 0.4486477450000166,
-          "time_to_first_clip_seconds": 0.4486477450000166,
+          "elapsed_seconds": 0.7028861939998023,
+          "time_to_first_clip_seconds": 0.7028861939998023,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -570,8 +570,8 @@
               "score": 0.712037599471938
             }
           ],
-          "elapsed_seconds": 0.49862081200012653,
-          "time_to_first_clip_seconds": 0.49862081200012653,
+          "elapsed_seconds": 0.6784709259991359,
+          "time_to_first_clip_seconds": 0.6784709259991359,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -630,14 +630,14 @@
           }
         },
         "mAP": 0.609375,
-        "mean_time_to_first_clip_seconds": 1.1306384102501283,
+        "mean_time_to_first_clip_seconds": 1.686279581000008,
         "videos_with_clip": 4,
         "cost_usd_per_minute": 0.0,
         "forbidden_picks": 0,
         "death_picks": 0,
         "spectating_picks": 0,
         "prediction_count": 17,
-        "seconds_per_footage_minute": 0.476058278000054,
+        "seconds_per_footage_minute": 0.7100124551578981,
         "estimated_api_usd_per_minute": 0.0027031578947368418
       },
       "videos": [
@@ -663,8 +663,8 @@
               "score": 0.491869044453494
             }
           ],
-          "elapsed_seconds": 1.0069904090000819,
-          "time_to_first_clip_seconds": 1.0069904090000819,
+          "elapsed_seconds": 1.476711262000208,
+          "time_to_first_clip_seconds": 1.476711262000208,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -716,8 +716,8 @@
               "score": 0.48018369563149493
             }
           ],
-          "elapsed_seconds": 1.1053947450002397,
-          "time_to_first_clip_seconds": 1.1053947450002397,
+          "elapsed_seconds": 1.6743178460001218,
+          "time_to_first_clip_seconds": 1.6743178460001218,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -779,8 +779,8 @@
               "score": 0.4992892953466183
             }
           ],
-          "elapsed_seconds": 1.1610400530000788,
-          "time_to_first_clip_seconds": 1.1610400530000788,
+          "elapsed_seconds": 1.8222503309998501,
+          "time_to_first_clip_seconds": 1.8222503309998501,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -847,8 +847,8 @@
               "score": 0.46815015823165285
             }
           ],
-          "elapsed_seconds": 1.249128434000113,
-          "time_to_first_clip_seconds": 1.249128434000113,
+          "elapsed_seconds": 1.7718388849998519,
+          "time_to_first_clip_seconds": 1.7718388849998519,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -907,14 +907,14 @@
           }
         },
         "mAP": 0.6114583333333333,
-        "mean_time_to_first_clip_seconds": 1.5980704490000903,
+        "mean_time_to_first_clip_seconds": 2.275154409499237,
         "videos_with_clip": 4,
         "cost_usd_per_minute": 0.0,
         "forbidden_picks": 0,
         "death_picks": 0,
         "spectating_picks": 0,
         "prediction_count": 17,
-        "seconds_per_footage_minute": 0.672871768000038,
+        "seconds_per_footage_minute": 0.9579597513680997,
         "estimated_api_usd_per_minute": 0.0027031578947368418
       },
       "videos": [
@@ -945,8 +945,8 @@
               "score": 0.782278616680241
             }
           ],
-          "elapsed_seconds": 1.4039965949998532,
-          "time_to_first_clip_seconds": 1.4039965949998532,
+          "elapsed_seconds": 2.002943779997622,
+          "time_to_first_clip_seconds": 2.002943779997622,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -1008,8 +1008,8 @@
               "score": 0.7720062684472423
             }
           ],
-          "elapsed_seconds": 1.5493704540001545,
-          "time_to_first_clip_seconds": 1.5493704540001545,
+          "elapsed_seconds": 2.3441822690001572,
+          "time_to_first_clip_seconds": 2.3441822690001572,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -1066,8 +1066,8 @@
               "score": 0.7292586180199274
             }
           ],
-          "elapsed_seconds": 1.6365481420002652,
-          "time_to_first_clip_seconds": 1.6365481420002652,
+          "elapsed_seconds": 2.43390651000027,
+          "time_to_first_clip_seconds": 2.43390651000027,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
@@ -1124,8 +1124,8 @@
               "score": 0.6340957554878208
             }
           ],
-          "elapsed_seconds": 1.8023666050000884,
-          "time_to_first_clip_seconds": 1.8023666050000884,
+          "elapsed_seconds": 2.319585078998898,
+          "time_to_first_clip_seconds": 2.319585078998898,
           "cost_usd": 0.0,
           "cost_usd_per_minute": 0.0,
           "metrics": {
