@@ -1,6 +1,7 @@
-"""Planner-facing schema. All timestamps are seconds; tracks are clip-local."""
+"""Renderer input: source cuts in seconds; placements and tracks in output-local seconds."""
 
 from typing import Literal
+from .contracts import Preset
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -33,11 +34,38 @@ class Word(Model):
 class Sound(Model):
     sfx_key: str
     offset_in_segment: float = Field(default=0, ge=0)
+    duration: float | None = Field(default=None, gt=0)
+    gain: float = Field(default=.7, ge=0, le=1)
+
+
+class TimedEffect(Model):
+    name: str
+    start: float = Field(ge=0)
+    duration: float = Field(gt=0)
+
+
+class TimedText(Model):
+    start: float = Field(ge=0)
+    duration: float = Field(gt=0)
+    content: str = Field(max_length=240)
+    position: Literal['lower_safe', 'center'] = 'lower_safe'
+
+
+class TimedReaction(Model):
+    start: float = Field(ge=0)
+    duration: float = Field(gt=0)
+    label: str
+    position: Literal['top_right', 'bottom_right'] = 'bottom_right'
+    duck_game_audio: bool = True
 
 
 class Segment(Model):
     source_start: float = Field(ge=0)
     source_end: float = Field(gt=0)
+    speed: float = Field(default=1, ge=.1, le=8)
+    timed_effects: list[TimedEffect] = Field(default_factory=list, max_length=100)
+    texts: list[TimedText] = Field(default_factory=list, max_length=100)
+    reactions: list[TimedReaction] = Field(default_factory=list, max_length=100)
     video_effects: list[str] = Field(default_factory=list)
     sound_effects: list[Sound] = Field(default_factory=list)
     title: str | None = Field(default=None, max_length=200)
@@ -61,8 +89,14 @@ class Segment(Model):
             times = [p.time for p in self.sam.subject_track]
             if any(b <= a for a, b in zip(times, times[1:])):
                 raise ValueError("Track times must be strictly increasing")
-        # Speed effects change the timeline; use explicit source cuts in v2.
+        # Playback speed is explicit; placement clocks are already output-local.
         from models.effects import VIDEO_EFFECTS
+        for placement in [*self.timed_effects, *self.texts, *self.reactions]:
+            if placement.start + placement.duration > self.duration + .001:
+                raise ValueError('Placement exceeds segment duration')
+        for effect in self.timed_effects:
+            if effect.name not in VIDEO_EFFECTS or effect.name in ('slow_motion', 'speed_2x'):
+                raise ValueError('Timed speed effects must use segment speed')
         for effect in self.video_effects:
             if effect not in VIDEO_EFFECTS or effect in (
                 "slow_motion", "speed_2x", "chromatic_aberration", "fade_out"
@@ -72,7 +106,7 @@ class Segment(Model):
 
     @property
     def duration(self):
-        return self.source_end - self.source_start
+        return (self.source_end - self.source_start) / self.speed
 
 
 class Captions(Model):
@@ -107,7 +141,7 @@ class Card(Model):
 class RenderPlan(Model):
     render_version: Literal[2] = 2
     segments: list[Segment] = Field(min_length=1, max_length=100)
-    preset: Literal["landscape", "vertical", "square"] = "landscape"
+    preset: Preset = "landscape"
     resolution: Literal[720, 1080] = 1080
     fps: int = Field(default=30, ge=10, le=60)
     reframe: Literal["crosshair", "motion", "blur"] = "crosshair"

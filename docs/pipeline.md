@@ -1,9 +1,8 @@
-# Integrated Extension pipeline (INT-02)
+# Integrated Extension pipeline
 
 The durable Flask queue calls `pipeline.Pipeline`. All options below are accepted
 by the analyze, plan and render JSON endpoints described in `docs/api.md`.
 This document supersedes that document's old optional-module import table.
-`docs/api.md` and `demo/run_demo.sh` are outside INT-02's allowed paths.
 
 ```mermaid
 flowchart TD
@@ -33,10 +32,10 @@ Flags must be JSON booleans. Unknown fields are rejected.
 | `ingest` | false | Job-owned normalized video, low-resolution analysis proxy and overlapping 900-second chunks; timestamps offset back to source |
 | `chat` | absent | With ingest: numerical replay bins, described below |
 | `vjepa` | false | Contributes only when `VJEPA_HEAD` names an existing trained head; missing extras/head contribute no scores |
-| `planner` | false | EXT-12 deterministic narrative planning; unavailable, incompatible or empty plans fall back to the existing Gemini planner |
-| `fx` | false | EXT-18 catalog selects timed zoom punches in deterministic plans; renderer composes validated timed registry requests |
+| `planner` | false | Deterministic narrative planning; unavailable, incompatible or empty plans fall back to the existing Gemini planner |
+| `fx` | false | The effect catalog selects timed zoom punches in deterministic plans; renderer composes validated timed registry requests |
 | `privacy` | **true** | Detect and blur player-name regions on source media before edits, reframing or team composition |
-| `privacy_options` | defaults | EXT-20 payload: game, OCR backend, own-name preservation, webcam, regions and manual timed boxes |
+| `privacy_options` | defaults | Privacy payload: game, OCR backend, own-name preservation, webcam, regions and manual timed boxes |
 | `multipov` | false | Align repeated multipart video uploads by audio, rank viewpoints using local evidence, compose selected primary-timeline intervals |
 | `team_mode` | best | best, split or pip; ambiguous synchronization warns and retains primary POV |
 | `music` | false | Generate an offline energetic/chill bed when the plan has no user-supplied music; duck under gameplay audio |
@@ -70,21 +69,45 @@ scored. A non-alive or unknown viewpoint veto suppresses overlapping candidates
 from both local and whole-video analysis. Alive neutral windows are omitted.
 Ranking uses 0.35 * local score + 0.65 * hype / 10 for verified windows, followed by
 nonmaximum suppression at half the shorter interval. Unscored local scores are
-clamped to [0, 1]. Whole-video results retain their score or default to 0.5.
+normalized monotonically as `0.5 + atan(raw_score) / pi` to (0, 1); provenance is recorded as `atan_signal`. The UI converts unit scores to percent. Whole-video results retain their score or default to 0.5.
 
 Profiles contribute both the whole-video prompt and the provider's window prompt.
 Ingest changes analysis media only; rendering retains original-quality media.
 Chunk results are offset before fusion, and cached chunks are never deleted as
 legacy split scratch files. `splits` is superseded when ingest supplies chunks.
 
-EXT-12's narrative plan and the renderer's segment plan are distinct schemas.
-The adapter preserves cuts, speed, effect choices, sound offsets, titles and the
-native plan as `planner_plan` metadata. Its hook/climax repetition is intentional.
-The adapter applies EXT-12 slow-motion annotations only once (the native plan
-also supplies speed=0.5). Legacy speed changes are prepared before v2 reframing and their actual encoded
-durations reset the segment clock. Timed FX currently accept duration-preserving
-registry effects; time-changing registry requests fail validation rather than
-silently desynchronizing audio. SAM freezes can extend the planned duration.
+The planner v2 output and renderer v2 input meet at
+`planner.adapter.to_render_plan` (adapter version 1). Shared style/aspect names
+live in `render.contracts`. The adapter validates the native version, rejects
+empty plans, and subtracts each clip's output start from all placements. Speed
+is applied once by the renderer; captions, reactions, effects, transitions and
+SFX already use output seconds and are not divided by speed again. Native plans
+remain available in `planner_plan`. Music mood/energy are intent, not an asset;
+licensed/generated music must still be supplied separately.
+
+Legacy preparation retains titles and retimes words, subject tracks and timed FX
+by the measured encoded/source duration ratio, including unchanged segments in
+a mixed plan. Native v2 plans retain top-level music, cards, fps and transitions.
+SAM spotlight freezes can extend the planned duration.
+
+React sends current caption/reaction/SAM flags and style at export. Editable
+clip text is a title (`title`), not a transcript. Planning settings are persisted
+separately; a changed style submits no stale explicit plan, allowing the
+queue to replan from saved reviewed clips. Provider credentials must be configured
+on the backend for the React UI; it has no key-entry control.
+
+`services.provider_config` owns provider IDs and secret-free configuration
+reporting. `gemini` uses GEMINI_API_KEY by default; set
+GOOGLE_GENAI_USE_VERTEXAI=true and GOOGLE_API_KEY for Vertex express. An explicit
+request key overrides the environment key in the selected mode. `local` and
+`local_vlm` are hybrid: local analysis with Gemini planning unless `planner=true`.
+Unknown provider IDs raise without constructing a paid client.
+
+Scope limitation: `server/api.py` still needs to use `configuration()` for
+`/api/info`, and `server/validation.py` needs `validate_provider()` for synchronous
+HTTP rejection. Those files belong to the server worker. Pipeline rejection is
+already enforced; the old info endpoint can still report a GOOGLE-only setup as
+unconfigured. The HTTP plan-admission/security work is likewise separate.
 
 `perf:false` or `LIM_PERF=0` selects the comparison renderer. Source-time trimming
 is now the perf default, matching the corrected legacy renderer. Explicit
@@ -153,6 +176,11 @@ integration, not model accuracy. It exercises the native planner, then retains
 complete event cuts for the barcode coverage oracle. Dedicated integration tests
 separately render the unmodified native planner output. The e2e tests decode every
 output frame and check the top events in encoded pixels in both aspect ratios.
+
+## Historical INT-02 verification (before FIX-2)
+
+The following counts describe the earlier integration snapshot, not the current
+FIX-2 validation recorded at the end of this document.
 
 INT-02 Linux baseline: **597 passed, 8 failed, 14 skipped, 1 deselected, 2 errors**,
 289.63 seconds, exit 1. **Final: 627 passed, 14 skipped, 1 deselected; exit 0**.
@@ -240,3 +268,106 @@ The verification retry completed with **627 passed, 14 skipped, 1 deselected in
 347.77 seconds**. Both the `tools/remote_run.sh` process and the saved pytest exit
 code were **0**. Scope audit: all 20 changed files are within INT-02's allowed
 paths; no live calls, pushes or merges occurred.
+
+
+## FIX-2 QA follow-up (2026-10-12)
+
+| Audit item | Status | Change / remaining boundary |
+| --- | --- | --- |
+| P1-04 | Fixed | Current render flags/style, saved planning settings, title mapping, preserved explicit v2 options, caption pixel test |
+| P1-05 | Fixed | Square safe-area layout, invalid-preset rejection, all 24 preset/caption/reaction/SAM combinations with synthetic media |
+| P1-09 | Partial | Shared provider/credential resolver, Vertex express and unknown-provider rejection in the pipeline; server info and HTTP admission remain outside allowed paths |
+| P2-01 | Fixed | Versioned planner-to-render adapter, shared style/aspect types, output-local text/effect/SFX/reaction placements, single speed application, empty-plan rejection |
+| P2-02 | Fixed | Monotonic signal normalization, unit-score provenance, percent display and unit-score saves, real reaction aliases |
+| P2-03 | Fixed | Preserve titles and retime words/subject tracks/FX across all prepared segments |
+| P2-04 | Fixed | Duration-aware fade-out, frame normalization before fades, labelled chromatic graph preserving retimed audio and dimensions |
+| P2-06 | Partial (integration dependency) | Share-kit receives exported caption events rather than the renderer options object; standalone social discovery/cutout APIs are outside scope |
+| P2-10 / P2-11 | Partial | Shared provider and style/aspect primitives; current pipeline/render contracts documented. Cross-package duplication and other docs remain with their owners |
+| P3-1 / P3-3 | Fixed in allowed paths | Removed unused executor import and obsolete task-ownership comments; server helper is outside scope |
+| P3-4 | Fixed | Unknown JSON is narrowed at the frontend boundary; no unrestricted `any` wire type |
+
+No live calls, credentials read, pushes, or merges. Optional ML inference and
+hardware encoders are not validated by the synthetic CPU/fake-provider tests.
+SAM freezes extend the output timeline; exported subtitle event starts within a
+freeze-extended segment retain their pre-freeze clock, while subsequent segment
+starts account for the measured duration. Social mask-to-cutout support remains
+outside this task.
+
+To try the fixes, analyze an owned video, save edited clip text, change style or
+caption/reaction/SAM toggles, and render square. A configured REACTION_PACK is
+required for real reactions. For the local planner, send `planner:true` during
+analysis/planning. For an offline check, run the tests below; all provider calls
+are mocked and all media is generated with FFmpeg.
+
+Validation history (all media tests used tools/remote_run.sh):
+
+- Focused pipeline/render/planner/reaction/provider baseline: 146 passed, exit 0.
+- One `-k` invocation lost nested shell quotes: no tests executed, remote exit 4
+  (PowerShell wrapper exit 1). Retried with explicit test paths.
+- Expanded pipeline/adapter/provider run: 65 passed, one new test failed because
+  FFmpeg rejected `.2` as a seek timestamp; corrected to `0.2` (exit 1).
+- Adapter/provider/pixel/fade/share integration run: 13 passed, three failures
+  exposed fade-frame duplication and the share-kit caption schema mismatch;
+  fixed both (exit 1).
+- Fade/share regression retry: 3 passed; frontend tests: 24 passed; TypeScript
+  check and Vite production build passed; combined command exit 0.
+
+
+Integrator test migration: in
+`tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render`, change
+`provider:'optional'` to `provider:'gemini'` and replace the assertion expecting a
+`services.providers` fallback warning with the existing intentionally missing
+`signals` warning. The three preset cases otherwise retain their real HTTP,
+queue, provider-mock and FFmpeg assertions. Unknown-provider behavior is covered
+separately in `tests/test_provider_config.py` and must never construct Gemini.
+This test file is outside FIX-2's allowed paths and was not edited.
+
+Changed files:
+
+- `pipeline/{extensions,orchestrator,providers,ranking,rendering}.py`
+- `planner/{adapter,models}.py`
+- `render/{captions,contracts,engine,placements,plan}.py`
+- `reactions/render.py`
+- `services/{ffmpeg_runner,gemini_client,provider_config}.py`
+- `production_frontend/src/{api.ts,api.test.ts}`
+- `tests/{test_pipeline,test_pipeline_settings,test_planner_adapter,test_provider_config}.py`
+- `docs/{pipeline,rendering}.md`
+
+All application paths above are relative to `full_app/`; documentation paths are
+relative to the repository root.
+
+
+Full non-live suite at implementation milestone `11caffb`:
+
+```sh
+tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live'"
+```
+
+Result: **952 passed, 3 failed, 19 skipped, 1 deselected**, 431.32 seconds,
+**exit 1**. All three failures are the provider-fallback cases identified above
+(`test_jobs.py:246`), which conflict with P1-09's required rejection. The full
+suite is therefore not green until the integrator updates those out-of-scope
+tests. Subsequent changes receive the final focused verification below.
+
+
+Final focused verification:
+
+```sh
+tools/remote_run.sh 'cd full_app && python -m pytest -q tests/test_pipeline*.py tests/test_render*.py tests/test_reactions*.py tests/test_planner*.py tests/test_provider*.py tests/test_video_understanding.py && cd production_frontend && npm test -- --run && npm run build'
+```
+
+**192 Python tests passed** (200.54 seconds; four pre-existing unregistered
+`slow` marker warnings), **25 frontend tests passed**, TypeScript check and Vite
+production build passed; **exit 0**. This includes all 24 feature combinations,
+real HTTP/queue settings flow, caption pixels, native planner renders, malformed
+versions, provider selection, legacy metadata retiming and fade/chromatic A/V.
+
+A final explicit-plan preservation adjustment in the frontend was verified with:
+
+```sh
+tools/remote_run.sh 'cd full_app/production_frontend && npm test -- --run && npm run build'
+```
+
+**25 passed**, TypeScript/Vite build passed, **exit 0**. Local
+`git diff --check` and Python `compileall` also returned **0**. All changed files
+remain within FIX-2 allowed paths. No full-suite green result is claimed.

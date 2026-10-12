@@ -1,5 +1,6 @@
-"""Normalize EXT-01/02 outputs and fuse independent candidate sources."""
+"""Normalize signal/provider outputs and fuse independent candidate sources."""
 from dataclasses import asdict, is_dataclass
+import math
 
 
 def candidate_dict(value):
@@ -21,11 +22,13 @@ def rank_merge(candidates, scored, whole):
     for candidate in candidates:
         c = {**candidate, **assessments.get((candidate['start'], candidate['end']), {})}
         clip = dict(start_seconds=c['start'], end_seconds=c['end'],
-                    score=min(1, max(0, c.get('score', 0))),
+                    score=.5 + math.atan(candidate.get('score', 0)) / math.pi,
+                    score_scale='unit', score_provenance='atan_signal',
                     description=c.get('caption', 'Signal candidate'), type='good',
+                    label=c.get('label', ''), suggested_reaction_label=c.get('suggested_reaction_label', c.get('label')),
                     source='signals', signals=c.get('signals', {}), events=c.get('events', []))
         if 'player_alive' in c:
-            # Unknown viewpoint is unsafe to promote, just as in EXT-02.
+            # Unknown viewpoint is unsafe to promote.
             if c['player_alive'] is not True:
                 vetoes.append(clip)
                 continue
@@ -34,9 +37,10 @@ def rank_merge(candidates, scored, whole):
             clip.update(score=.35 * clip['score'] + .65 * c['hype'] / 10,
                         type='bad' if c['kind'] == 'lowlight' else 'good',
                         label=c['reaction'], suggested_reaction_label=c['reaction'],
-                        source='signals+vlm')
+                        source='signals+vlm', score_provenance='atan_signal+hype')
         pool.append(clip)
-    pool.extend({**c, 'score': c.get('score', .5), 'source': 'whole_video'} for c in whole)
+    pool.extend({**c, 'score': c.get('score', .5), 'score_scale': 'unit',
+                 'score_provenance': 'provider_unit', 'source': 'whole_video'} for c in whole)
     ranked = []
     for clip in sorted(pool, key=lambda c: (-c['score'], c['start_seconds'])):
         if any(overlap(clip, veto) > 0 for veto in vetoes):

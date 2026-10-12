@@ -161,6 +161,7 @@ def planner_plan(pipeline, job):
     plan_edit = pipeline.hook('planner', 'plan_edit', job)
     if not plan_edit:
         return None
+    from render.contracts import ASPECT_PRESETS, STYLE_IDS
     options = job['options']
     clips = []
     for c in job['clips']:
@@ -179,37 +180,24 @@ def planner_plan(pipeline, job):
                           caption=c.get('caption', c.get('description', ''))[:240],
                           signals=signals, game_profile=job.get('game', 'generic')))
     result = plan_edit(clips, mode=options.get('mode', 'nice'),
-                       style=options.get('style', 'hype_montage').replace('_', ' '),
+                       style={v: k for k, v in STYLE_IDS.items()}[options.get('style', 'hype_montage')],
                        target_length=options.get('max_duration', 180),
                        min_clip_length=min(1, min(c['end']-c['start'] for c in clips)),
-                       aspect={'landscape': '16:9', 'vertical': '9:16', 'square': '1:1'}[options.get('preset', 'landscape')])
+                       aspect={v: k for k, v in ASPECT_PRESETS.items()}[options.get('preset', 'landscape')])
     native = candidate_dict(result)
     job['planner_plan'] = native
     if not native['clips']:
         pipeline.warn(job, 'Planner produced no eligible clips; using legacy planner')
         return None
-    segments = []
-    for c in native['clips']:
-        owned = lambda group: [p for p in native[group] if p['clip_id'] == c['id']]
-        segment = dict(source_start=c['source_start'], source_end=c['source_end'], speed=c['speed'],
-                       # EXT-12 annotates slow motion *and* sets speed=.5. The
-                       # legacy renderer multiplies them, so apply it only once.
-                       video_effects=[e['name'] for e in owned('effects')
-                                      if not (e['name'] == 'slow_motion' and c['speed'] == .5)],
-                       sound_effects=[dict(sfx_key=s['name'], offset_in_segment=s['start']-c['start'])
-                                      for s in owned('sfx')],
-                       transition_in=next((t['name'] for t in owned('transitions') if t['name'] != 'fade_out'), 'cut'))
-        text = owned('text')
-        if text:
-            segment['title'] = text[0]['content'][:200]
-        segments.append(segment)
+    from planner.adapter import to_render_plan
+    adapted = to_render_plan(native)
     if options.get('fx'):
         catalog = pipeline.hook('fx', 'metadata', job)
         if catalog and 'zoom_punch' in catalog():
-            for s in segments:
-                length = (s['source_end'] - s['source_start']) / s['speed']
-                s['fx'] = [dict(name='zoom_punch', start=length*.4, end=length*.6, params={})]
-    return dict(segments=segments)
+            for segment in adapted['segments']:
+                length = (segment['source_end']-segment['source_start']) / segment['speed']
+                segment['fx'] = [dict(name='zoom_punch', start=length*.4, end=length*.6, params={})]
+    return adapted
 
 
 def private_source(pipeline, job, source, scratch, suffix=''):
@@ -253,7 +241,8 @@ def finish_output(pipeline, job, output, plan, scratch):
                 export = scratch / 'export'
                 export.mkdir(exist_ok=True)
                 shutil.copyfile(output, export / 'final_edit.mp4')
-                kit = build(export, job.get('clips') or [], plan, job.get('game', 'generic'))
+                share_plan = {**plan, 'captions': job.get('subtitle_events', [])}
+                kit = build(export, job.get('clips') or [], share_plan, job.get('game', 'generic'))
                 target = Path(job['dir']) / 'share'
                 if target.exists():
                     shutil.rmtree(target)

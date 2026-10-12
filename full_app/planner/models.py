@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from models.effects import SOUND_EFFECTS, VIDEO_EFFECTS
 
 Mode = Literal["nice", "mean"]
-Style = Literal["hype montage", "clean edit", "meme edit", "cinematic"]
+from render.contracts import Style, Aspect
 ReactionLabel = Literal["sick_kill", "clutch", "bruh", "fail", "funny", "wholesome", "hype", "roast"]
 
 
@@ -51,7 +51,7 @@ class PlannerOptions(Model):
     mode: Mode = "nice"
     style: Style = "hype montage"
     target_length: float = Field(default=30, gt=0)
-    aspect: Literal["16:9", "9:16", "1:1"] = "16:9"
+    aspect: Aspect = "16:9"
     min_clip_length: float = Field(default=1, gt=0)
     max_clip_length: float = Field(default=6, gt=0)
 
@@ -127,7 +127,7 @@ class RenderPlan(Model):
     version: Literal[2] = 2
     mode: Mode
     style: Style
-    aspect: Literal["16:9", "9:16", "1:1"]
+    aspect: Aspect
     target_length: float = Field(gt=0)
     min_clip_length: float = Field(gt=0)
     max_clip_length: float = Field(gt=0)

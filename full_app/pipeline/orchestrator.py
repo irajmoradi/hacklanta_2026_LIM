@@ -63,18 +63,11 @@ class Pipeline:
             return None
 
     def client(self, job, key):
-        provider = job['options'].get('provider', 'gemini')
+        from services.provider_config import validate_provider
+        provider = validate_provider(job['options'].get('provider', 'gemini'))
         if provider in ('local', 'local_vlm'):
-            factory = self.hook('pipeline.providers', 'LocalClient', job)
-            if factory:
-                return factory(api_key=key)
-        if provider != 'gemini':
-            factory = self.hook('services.providers', 'get_provider', job)
-            if factory:
-                return factory(provider, api_key=key)
-        key = key or os.getenv('GEMINI_API_KEY')
-        if not key:
-            raise ValueError('Set GEMINI_API_KEY or supply X-API-Key')
+            from .providers import LocalClient
+            return LocalClient(api_key=key)
         return GeminiVideoClient(api_key=key, model=os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview'))
 
     def analyze(self, job, key):
@@ -148,9 +141,10 @@ class Pipeline:
     def plan(self, job, key):
         with self.stage(job, 'edit_plan'):
             job['edit_plan'] = self.plan_edit(job, key)
+            job['planning_settings'] = {k: job['options'].get(k) for k in ('style', 'planner', 'max_duration')}
 
     def plan_edit(self, job, key):
-        """EXT-12 replacement hook: selected/ranked clips in, validated plan out."""
+        """Selected/ranked clips in, validated plan out."""
         options = job['options']
         if not any(c.get('keep', True) for c in job['clips'] or []):
             raise ValueError('No selected clips to plan')
@@ -170,7 +164,14 @@ class Pipeline:
             edit_style=style['label'], style_instructions=style['instructions'], user_prompt=options.get('prompt', ''))
         client = self.client(job, key)
         try:
-            return plan_valid(client.plan_edit(prompt), job['meta']['duration'])
+            planned = plan_valid(client.plan_edit(prompt), job['meta']['duration'])
+            for segment in planned['segments']:
+                clip = next((c for c in job['clips'] if c.get('keep', True) and 'caption' in c
+                             and c['start_seconds'] < segment['source_end']
+                             and c['end_seconds'] > segment['source_start']), None)
+                if clip:
+                    segment['title'] = clip['caption']
+            return planned
         finally:
             close = getattr(client, 'close', None)
             if callable(close):
