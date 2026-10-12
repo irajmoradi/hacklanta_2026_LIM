@@ -54,6 +54,7 @@ export default function App() {
   const [preset, setPreset] = useState<Preset>("landscape");
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [needsAnalysis, setNeedsAnalysis] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const rangeEnd = useRef<number>();
   const lastPlan = useRef<Job["plan"]>();
@@ -111,6 +112,7 @@ export default function App() {
   function acceptJob(next: Job, label: string, file?: File) {
     dirtyRef.current = false;
     setDirty(false); setSaved(false); setClips([]); setJob(next);
+    setNeedsAnalysis(false);
     lastPlan.current = undefined; rangeEnd.current = undefined;
     setSource(file ? URL.createObjectURL(file) : ""); setFilename(label);
     setOptions(o => ({ ...o, music_asset_id: "", chat_asset_id: "" }));
@@ -139,6 +141,7 @@ export default function App() {
         throw new Error("Choose an audio track.");
       const assetId = await api.uploadAsset(job.id, kind, file);
       setOptions(o => ({ ...o, [`${kind}_asset_id`]: assetId }));
+      if (kind === "chat" && clips.length) setNeedsAnalysis(true);
     });
   }
   function validateSettings() {
@@ -176,8 +179,10 @@ export default function App() {
           ),
         );
   };
-  const option = <K extends keyof Options>(key: K, value: Options[K]) =>
+  const option = <K extends keyof Options>(key: K, value: Options[K]) => {
     setOptions((o) => ({ ...o, [key]: value }));
+    if (clips.length && ["game", "profile", "mode", "style", "provider", "use_signals", "audio_ai", "planner_v2", "window_scoring", "chat", "chat_offset", "twitch_vod_id", "fx_intensity"].includes(key)) setNeedsAnalysis(true);
+  };
   const kept = clips.filter((c) => c.keep);
   const media = source || job?.source_url;
   return (
@@ -257,6 +262,7 @@ export default function App() {
                     setDirty(false);
                     setSaved(false);
                     await api.analyze(job!.id, options);
+                    setNeedsAnalysis(false);
                     await refresh();
                   })
                 }
@@ -265,6 +271,7 @@ export default function App() {
               </button>
             </fieldset>
             <p className="hint">Review every cut before you export.</p>
+            {needsAnalysis && <p className="notice">Settings changed. Analyze again to update your moments and plan before rendering.</p>}
           </aside>
           <section className="review panel">
             <div className="section-title">
@@ -380,7 +387,7 @@ export default function App() {
           </button>
           <button
             className="primary"
-            disabled={!job || !kept.length || working}
+            disabled={!job || !kept.length || working || needsAnalysis}
             onClick={() =>
               void run(async () => {
                 validateSettings();

@@ -308,6 +308,7 @@ export class EditorApi {
     }
     await request(`/api/jobs/${encodeURIComponent(id)}/render`, "POST", {
       preset,
+      captions: options.captions, reactions: options.reactions, sam: options.sam,
       ...this.extended(options),
       ...(reviewed
         ? {

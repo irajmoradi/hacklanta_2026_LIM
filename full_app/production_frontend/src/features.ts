@@ -52,8 +52,8 @@ export function signalChips(raw: Record<string, any>): string[] {
   const signals = raw.signals ?? {};
   const groups: [string, string[]][] = [
     ["Kill-feed", ["kill_feed", "killfeed", "ocr", "kills"]],
-    ["Audio spike", ["audio_spike", "audio", "audio_rms", "audio_peak"]],
-    ["Laughter", ["laughter", "laugh"]],
+    ["Audio spike", ["audio_spike", "audio", "audio_rms", "audio_peak", "rms", "onset", "audio_shout"]],
+    ["Laughter", ["laughter", "laugh", "audio_laugh"]],
     ["Chat spike", ["chat_spike", "chat_emote_spike", "chat_clip_it"]],
   ];
   const chips = groups.filter(([, keys]) => keys.some(k =>
