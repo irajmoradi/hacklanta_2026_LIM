@@ -1,0 +1,262 @@
+{
+  "environment": {
+    "platform": "Linux-6.8.0-146-generic-x86_64-with-glibc2.39",
+    "cores": 12,
+    "encoder": "libx264",
+    "threads": 4,
+    "seconds": 2,
+    "ffmpeg": "ffmpeg version 6.1.1-3ubuntu5 Copyright (c) 2000-2023 the FFmpeg developers"
+  },
+  "rows": [
+    {
+      "stage": "extraction",
+      "baseline": 1.0167292439998619,
+      "optimized": 1.4532188740001857
+    },
+    {
+      "stage": "keyframe cut",
+      "baseline": 1.0825235529998736,
+      "optimized": 0.5306480320000446
+    },
+    {
+      "stage": "effect slow_motion",
+      "baseline": 0.9517262899998968,
+      "optimized": 1.2842869020000762
+    },
+    {
+      "stage": "effect speed_2x",
+      "baseline": 1.1079558220001218,
+      "optimized": 1.5701991910000288
+    },
+    {
+      "stage": "effect fade_in",
+      "baseline": 1.3526247750000948,
+      "optimized": 2.2965977710000516
+    },
+    {
+      "stage": "effect fade_out",
+      "baseline": 0.9481346439999925,
+      "optimized": 1.4714442429999508
+    },
+    {
+      "stage": "effect flash_white",
+      "baseline": 1.686866074999898,
+      "optimized": 1.954777599999943
+    },
+    {
+      "stage": "effect shake",
+      "baseline": 1.381328231999987,
+      "optimized": 2.640379105999955
+    },
+    {
+      "stage": "effect zoom_in_center",
+      "baseline": 1.3160084850001112,
+      "optimized": 1.5477353190001395
+    },
+    {
+      "stage": "effect chromatic_aberration",
+      "baseline": 4.145502311999962,
+      "optimized": 4.281282825999824
+    },
+    {
+      "stage": "effect light_blur",
+      "baseline": 2.0126765219999925,
+      "optimized": 2.0348747539999295
+    },
+    {
+      "stage": "effect moderate_blur",
+      "baseline": 2.0438633080000272,
+      "optimized": 1.9693332430001647
+    },
+    {
+      "stage": "effect heavy_blur",
+      "baseline": 1.8400320019998162,
+      "optimized": 1.8339205180000135
+    },
+    {
+      "stage": "effect light_sharpen",
+      "baseline": 1.7534384190000765,
+      "optimized": 2.1408254200000556
+    },
+    {
+      "stage": "effect moderate_sharpen",
+      "baseline": 1.7229620140001316,
+      "optimized": 2.2077106579999963
+    },
+    {
+      "stage": "effect heavy_sharpen",
+      "baseline": 1.7483050109999567,
+      "optimized": 2.4590360309998687
+    },
+    {
+      "stage": "effect saturation_boost",
+      "baseline": 1.33560406100014,
+      "optimized": 1.706216748000088
+    },
+    {
+      "stage": "effect heavy_saturation",
+      "baseline": 1.2179167029999007,
+      "optimized": 1.5440991410000606
+    },
+    {
+      "stage": "effect desaturate",
+      "baseline": 1.4564183410000169,
+      "optimized": 1.4855566290000297
+    },
+    {
+      "stage": "effect black_and_white",
+      "baseline": 0.9987285239999437,
+      "optimized": 1.565770061999956
+    },
+    {
+      "stage": "effect contrast_pop",
+      "baseline": 1.0311460140001145,
+      "optimized": 1.5894641269999283
+    },
+    {
+      "stage": "effect warm_tint",
+      "baseline": 3.056343520999917,
+      "optimized": 4.36257532500008
+    },
+    {
+      "stage": "effect cold_tint",
+      "baseline": 3.0387446580000415,
+      "optimized": 4.391921326999864
+    },
+    {
+      "stage": "effect vignette",
+      "baseline": 2.400387765000005,
+      "optimized": 2.7226405240000986
+    },
+    {
+      "stage": "effect bright_boost",
+      "baseline": 1.2450919469999917,
+      "optimized": 1.675692028999947
+    },
+    {
+      "stage": "effect dark_mood",
+      "baseline": 1.1239634219998607,
+      "optimized": 1.7342594369999915
+    },
+    {
+      "stage": "effect invert_colors",
+      "baseline": 1.0406877959999292,
+      "optimized": 1.480244576999894
+    },
+    {
+      "stage": "effect text_highlight",
+      "baseline": 1.0721873190000224,
+      "optimized": 1.4794082139999318
+    },
+    {
+      "stage": "effect text_fail",
+      "baseline": 0.9619244289999642,
+      "optimized": 1.5726718660000643
+    },
+    {
+      "stage": "effect text_clutch",
+      "baseline": 1.0382370770000762,
+      "optimized": 1.500397735999968
+    },
+    {
+      "stage": "effect text_rip",
+      "baseline": 1.025660261999974,
+      "optimized": 1.5129825439998967
+    },
+    {
+      "stage": "effect text_nice",
+      "baseline": 0.9909930070000428,
+      "optimized": 1.5126708930001769
+    },
+    {
+      "stage": "effect text_bruh",
+      "baseline": 0.9569153930001448,
+      "optimized": 1.4487288000000262
+    },
+    {
+      "stage": "effect text_gg",
+      "baseline": 0.9525826590001998,
+      "optimized": 1.5002268770001592
+    },
+    {
+      "stage": "effect text_lol",
+      "baseline": 0.9726292939999439,
+      "optimized": 1.6219186359999185
+    },
+    {
+      "stage": "effect text_oof",
+      "baseline": 0.9915219629999683,
+      "optimized": 1.4879205189999993
+    },
+    {
+      "stage": "effect light_grain",
+      "baseline": 1.1666161489999922,
+      "optimized": 3.107952320999857
+    },
+    {
+      "stage": "effect moderate_grain",
+      "baseline": 1.3360497919998124,
+      "optimized": 3.757672063999962
+    },
+    {
+      "stage": "effect heavy_grain",
+      "baseline": 1.6728473679997933,
+      "optimized": 4.9370405720001145
+    },
+    {
+      "stage": "effect glitch",
+      "baseline": 2.640816371000028,
+      "optimized": 5.734019195999963
+    },
+    {
+      "stage": "blur approximation",
+      "baseline": 1.9001541000000088,
+      "optimized": 1.463062963999846
+    },
+    {
+      "stage": "SFX decode cold/warm",
+      "baseline": 0.13373319199990874,
+      "optimized": 0.00029768099989269103
+    },
+    {
+      "stage": "proxy cold/warm",
+      "baseline": 0.9600439670000469,
+      "optimized": 0.0003498490000310994
+    },
+    {
+      "stage": "SFX mix",
+      "baseline": 0.22748870099985652,
+      "optimized": 1.4722886239999298
+    },
+    {
+      "stage": "transition",
+      "baseline": 1.0559166470000036,
+      "optimized": 2.1565539700000045
+    },
+    {
+      "stage": "concat (no final encode)",
+      "baseline": 0.21846912900014104,
+      "optimized": 0.4988497899998947
+    },
+    {
+      "stage": "intro/outro sequential/parallel",
+      "baseline": 1.2725751340001352,
+      "optimized": 0.8628906440001174
+    },
+    {
+      "stage": "encoder legacy/preview",
+      "baseline": 0.864735249999967,
+      "optimized": 1.3126690720000624
+    },
+    {
+      "stage": "encoder legacy/final",
+      "baseline": 0.8421589699999004,
+      "optimized": 1.8514246219999677
+    },
+    {
+      "stage": "end to end (2 clips)",
+      "baseline": 6.362311054999964,
+      "optimized": 2.914794185999881
+    }
+  ]
+}
