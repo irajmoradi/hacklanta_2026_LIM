@@ -185,3 +185,76 @@ not run on GitHub, and optional ML image variants have not been built. npm repor
 an existing damaged-lockfile warning and eight dependency vulnerabilities (one low,
 one moderate, five high, one critical); install and build still succeeded. Frontend
 dependency updates are outside EXT-08's allowed paths and remain for integration.
+
+## EVAL-02: eight-video split benchmark
+
+This experiment exercises real `signals.detect_candidates`, the real `audio_ai`
+heuristic fallback (`speech=off`, `vad=energy`, `events=heuristic`), and real
+`ingest.chat.chat_signal`. Only the VLM is a deterministic stand-in. No model
+weights, network requests, credentials, or paid calls are required.
+
+```sh
+bash tools/remote_run.sh "cd full_app && python -m eval.benchmark_data /tmp/lim-eval02-benchmark && python -m eval.benchmark /tmp/lim-eval02-benchmark/labels.json --output /tmp/lim-eval02-results"
+bash tools/remote_run.sh "cd full_app && python -m pytest -q eval"
+# Repeat without retuning; the benchmark adapter loads this JSON directly:
+bash tools/remote_run.sh "cd full_app && python -m eval.benchmark /tmp/lim-eval02-benchmark/labels.json --weights eval/tuned_weights.json --output /tmp/lim-eval02-frozen"
+```
+
+The generator reuses `demo.make_demo_gameplay.generate` with an authored event
+schedule. Eight original 640x360, 15 FPS videos cover Valorant, OW2, Deadlock, and
+League-style announcements. Each split has one video of each style, of durations
+120, 135, 150, and 165 seconds. Each video has four positive beats, two deaths,
+two spectator events, and two distractors. The gunfire-like audio is supplemented
+with voice-band tones; chat includes missing positive reactions and misleading
+spectator reactions. These are procedural HUD/audio patterns, not game captures
+or human speech. Media stays outside the checkout.
+
+A visible colored HUD barcode supplies synthetic semantic evidence to the mock;
+it decodes the actual video at 2 FPS and never opens annotations. Thus the mock
+has privileged, artificial semantic observability. SHA-256-derived noise depends
+on video ID, timestamp, channel, and seed, with score amplitude 0.30 by default.
+Death/spectator recognition misses approximately 20% of events by construction.
+The whole-video mock sees all decoded events, adds +/-3 seconds of timestamp
+jitter and one second of padding, and uses a 0.5 selection threshold. Window
+scoring preserves the real signal detector's proposed boundaries. These designed
+error models are assumptions to test fusion, not measured VLM behavior.
+
+Signals use the ffmpeg scene backend with OCR disabled, 1-second pre-roll,
+5-second post-roll, no merge gap, and a 12-second maximum window. Signal confidence
+is clipped `candidate.score / 4`; the baseline selects confidence >=0.35. Fusion
+uses `signals*w_s + vlm*w_v + audio*w_a + chat*w_c - dead*death_penalty` and the
+selected threshold. Audio evidence is max heuristic shout/laugh within the window;
+chat is clip-it count divided by five, capped at one. No ASR or learned audio
+classifier is evaluated. Fusion cannot recover events the detector never proposes.
+
+Grid search sees only the four training videos. Signal weights are {0.2,0.4,0.6};
+audio/chat weights are zero for basic fusion and independently {0.1,0.2} for full
+fusion; VLM takes the remaining mass (at least 0.1). Death penalties are
+{0.2,0.5,0.8}, thresholds {0.35,0.45,0.55}. The objective is the mean of micro F1 at
+IoU 0.3 and 0.5; exact ties keep the first grid entry. Test labels are used only
+for the final report. `--seed` and `--noise` support controlled reruns; the
+published defaults must not be retuned against test outcomes.
+
+`report.json` preserves held-out predictions, metrics, component accounting,
+train/test IDs, tuning objective and trial counts. `features.json` preserves the
+extracted evidence and backend names. `tuned_weights.json` is accepted by
+`eval.benchmark.load_weights` / `--weights`; these are benchmark fusion weights,
+not `signals.Config.weights` (a different schema). App-wide default integration
+requires an adapter outside this task's allowed paths.
+
+A false death/spectating pick means **any positive-duration overlap** with a
+forbidden interval; touching boundaries does not count. Counts and a combined
+fraction of all selected clips supplement conventional IoU metrics. AP is ranked
+AP over the selected clips, per the existing harness, not classification AP over
+all unselected proposals.
+
+Timing is measured local component wall time, charged to each pipeline using
+that component, plus cached scoring overhead. It excludes generation and tuning.
+The mock scans the full video even for window scoring. Timing is not a forecast
+of actual VLM/network latency. Actual API spend is zero. The separate illustrative
+cost model assumes 100 input tokens/video-second, 200 input tokens/request,
+100 output tokens/request, $0.30/million input tokens and $2.50/million output
+tokens. Whole-video uses one request; fusion uses one per proposed window,
+including rejected windows. These are explicit hypothetical constants, not a
+provider price quote; audio/chat remain local. See [results.md](results.md) for
+measured held-out numbers and limitations.

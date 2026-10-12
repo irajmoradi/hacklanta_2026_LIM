@@ -1,0 +1,389 @@
+{
+  "version": 1,
+  "videos": [
+    {
+      "id": "train-valorant",
+      "path": "train-valorant/benchmark.mp4",
+      "duration_seconds": 120,
+      "split": "train",
+      "game": "valorant",
+      "seed": 731,
+      "highlights": [
+        {
+          "start": 29.52,
+          "end": 33.56
+        },
+        {
+          "start": 57.8,
+          "end": 62.59
+        },
+        {
+          "start": 68.0,
+          "end": 72.93
+        },
+        {
+          "start": 96.39,
+          "end": 101.05
+        }
+      ],
+      "forbidden": [
+        {
+          "start": 8.34,
+          "end": 13.92,
+          "kind": "death"
+        },
+        {
+          "start": 18.2,
+          "end": 23.03,
+          "kind": "spectating"
+        },
+        {
+          "start": 37.84,
+          "end": 44.51,
+          "kind": "spectating"
+        },
+        {
+          "start": 46.85,
+          "end": 53.33,
+          "kind": "death"
+        }
+      ]
+    },
+    {
+      "id": "train-ow2",
+      "path": "train-ow2/benchmark.mp4",
+      "duration_seconds": 135,
+      "split": "train",
+      "game": "ow2",
+      "seed": 732,
+      "highlights": [
+        {
+          "start": 19.98,
+          "end": 25.33
+        },
+        {
+          "start": 76.65,
+          "end": 82.11
+        },
+        {
+          "start": 90.05,
+          "end": 95.47
+        },
+        {
+          "start": 111.1,
+          "end": 116.05
+        }
+      ],
+      "forbidden": [
+        {
+          "start": 29.01,
+          "end": 35.82,
+          "kind": "death"
+        },
+        {
+          "start": 40.59,
+          "end": 46.66,
+          "kind": "spectating"
+        },
+        {
+          "start": 64.99,
+          "end": 69.95,
+          "kind": "death"
+        },
+        {
+          "start": 101.6,
+          "end": 107.05,
+          "kind": "spectating"
+        }
+      ]
+    },
+    {
+      "id": "train-deadlock",
+      "path": "train-deadlock/benchmark.mp4",
+      "duration_seconds": 150,
+      "split": "train",
+      "game": "deadlock",
+      "seed": 733,
+      "highlights": [
+        {
+          "start": 35.1,
+          "end": 40.9
+        },
+        {
+          "start": 46.12,
+          "end": 50.15
+        },
+        {
+          "start": 61.56,
+          "end": 66.33
+        },
+        {
+          "start": 98.57,
+          "end": 103.7
+        }
+      ],
+      "forbidden": [
+        {
+          "start": 7.2,
+          "end": 11.84,
+          "kind": "death"
+        },
+        {
+          "start": 71.97,
+          "end": 75.98,
+          "kind": "death"
+        },
+        {
+          "start": 111.51,
+          "end": 118.12,
+          "kind": "spectating"
+        },
+        {
+          "start": 126.84,
+          "end": 132.73,
+          "kind": "spectating"
+        }
+      ]
+    },
+    {
+      "id": "train-league",
+      "path": "train-league/benchmark.mp4",
+      "duration_seconds": 165,
+      "split": "train",
+      "game": "league",
+      "seed": 734,
+      "highlights": [
+        {
+          "start": 8.89,
+          "end": 15.69
+        },
+        {
+          "start": 37.08,
+          "end": 43.26
+        },
+        {
+          "start": 51.38,
+          "end": 56.76
+        },
+        {
+          "start": 67.06,
+          "end": 72.07
+        }
+      ],
+      "forbidden": [
+        {
+          "start": 21.24,
+          "end": 28.22,
+          "kind": "spectating"
+        },
+        {
+          "start": 79.71,
+          "end": 84.52,
+          "kind": "spectating"
+        },
+        {
+          "start": 125.75,
+          "end": 131.03,
+          "kind": "death"
+        },
+        {
+          "start": 136.52,
+          "end": 143.08,
+          "kind": "death"
+        }
+      ]
+    },
+    {
+      "id": "test-valorant",
+      "path": "test-valorant/benchmark.mp4",
+      "duration_seconds": 120,
+      "split": "test",
+      "game": "valorant",
+      "seed": 831,
+      "highlights": [
+        {
+          "start": 8.61,
+          "end": 13.86
+        },
+        {
+          "start": 46.37,
+          "end": 51.96
+        },
+        {
+          "start": 58.8,
+          "end": 65.46
+        },
+        {
+          "start": 97.75,
+          "end": 103.29
+        }
+      ],
+      "forbidden": [
+        {
+          "start": 28.31,
+          "end": 33.99,
+          "kind": "death"
+        },
+        {
+          "start": 36.38,
+          "end": 42.33,
+          "kind": "spectating"
+        },
+        {
+          "start": 77.06,
+          "end": 81.19,
+          "kind": "spectating"
+        },
+        {
+          "start": 87.57,
+          "end": 92.5,
+          "kind": "death"
+        }
+      ]
+    },
+    {
+      "id": "test-ow2",
+      "path": "test-ow2/benchmark.mp4",
+      "duration_seconds": 135,
+      "split": "test",
+      "game": "ow2",
+      "seed": 832,
+      "highlights": [
+        {
+          "start": 8.39,
+          "end": 14.9
+        },
+        {
+          "start": 21.38,
+          "end": 26.35
+        },
+        {
+          "start": 43.77,
+          "end": 49.63
+        },
+        {
+          "start": 86.69,
+          "end": 90.82
+        }
+      ],
+      "forbidden": [
+        {
+          "start": 54.23,
+          "end": 60.73,
+          "kind": "spectating"
+        },
+        {
+          "start": 67.03,
+          "end": 73.78,
+          "kind": "death"
+        },
+        {
+          "start": 76.43,
+          "end": 83.38,
+          "kind": "spectating"
+        },
+        {
+          "start": 98.87,
+          "end": 105.82,
+          "kind": "death"
+        }
+      ]
+    },
+    {
+      "id": "test-deadlock",
+      "path": "test-deadlock/benchmark.mp4",
+      "duration_seconds": 150,
+      "split": "test",
+      "game": "deadlock",
+      "seed": 833,
+      "highlights": [
+        {
+          "start": 20.96,
+          "end": 25.76
+        },
+        {
+          "start": 46.54,
+          "end": 52.36
+        },
+        {
+          "start": 61.78,
+          "end": 68.36
+        },
+        {
+          "start": 74.42,
+          "end": 80.88
+        }
+      ],
+      "forbidden": [
+        {
+          "start": 6.57,
+          "end": 13.51,
+          "kind": "spectating"
+        },
+        {
+          "start": 32.14,
+          "end": 38.56,
+          "kind": "spectating"
+        },
+        {
+          "start": 100.22,
+          "end": 106.34,
+          "kind": "death"
+        },
+        {
+          "start": 113.72,
+          "end": 119.2,
+          "kind": "death"
+        }
+      ]
+    },
+    {
+      "id": "test-league",
+      "path": "test-league/benchmark.mp4",
+      "duration_seconds": 165,
+      "split": "test",
+      "game": "league",
+      "seed": 834,
+      "highlights": [
+        {
+          "start": 36.97,
+          "end": 42.78
+        },
+        {
+          "start": 51.11,
+          "end": 56.6
+        },
+        {
+          "start": 80.42,
+          "end": 86.2
+        },
+        {
+          "start": 125.75,
+          "end": 131.55
+        }
+      ],
+      "forbidden": [
+        {
+          "start": 9.28,
+          "end": 15.6,
+          "kind": "spectating"
+        },
+        {
+          "start": 23.92,
+          "end": 29.95,
+          "kind": "death"
+        },
+        {
+          "start": 66.75,
+          "end": 71.64,
+          "kind": "spectating"
+        },
+        {
+          "start": 136.94,
+          "end": 142.46,
+          "kind": "death"
+        }
+      ]
+    }
+  ]
+}
