@@ -1,6 +1,7 @@
 """Streaming, downscaled video signals and FFmpeg audio statistics."""
 
 from concurrent.futures import ThreadPoolExecutor
+import inspect
 import json
 import math
 from pathlib import Path
@@ -13,7 +14,7 @@ import cv2
 import numpy as np
 
 from .fusion import fuse
-from .models import Config
+from .models import Candidate, Config
 from .ocr import HUDReader, regions_for
 
 
@@ -56,6 +57,11 @@ def _video(path, duration, stream, cfg, regions):
     width = cfg.ocr_width if reader and reader.executable else cfg.width
     height = max(2, round(stream["height"] * width / stream["width"] / 2) * 2)
     detector = _scene_detector(cfg)
+    # 0.7 switched process_frame from integer indices to FrameTimecode.
+    timecode_type = None
+    if detector and "timecode" in inspect.signature(detector.process_frame).parameters:
+        from scenedetect import FrameTimecode
+        timecode_type = FrameTimecode
     # Computing FFmpeg's scene score on the same sampled frames avoids another
     # full decode; gte(scene,0) retains all frames for motion/OCR.
     filters = (f"setpts=PTS-STARTPTS,fps={cfg.sample_fps},scale={width}:{height},"
@@ -85,8 +91,9 @@ def _video(path, duration, stream, cfg, regions):
                     samples[second] += 1
                 previous = gray
                 if detector:
-                    for cut in detector.process_frame(index, frame):
-                        t = float(cut) / cfg.sample_fps
+                    position = timecode_type(index, cfg.sample_fps) if timecode_type else index
+                    for cut in detector.process_frame(position, frame):
+                        t = float(cut.seconds) if hasattr(cut, "seconds") else float(cut) / cfg.sample_fps
                         scene[min(count - 1, int(t))] += 1
                         events.append({"time": round(t, 3), "type": "scene_cut"})
                 if reader:
@@ -172,7 +179,7 @@ def _audio(path, duration, present, cfg):
     return rms, onset, sustained, events
 
 
-def detect_candidates(video_path, profile="auto", **cfg):
+def detect_candidates(video_path: str | Path, profile: str = "auto", **cfg) -> list[Candidate]:
     """Return score-ranked Candidate objects; timestamps are seconds from start.
 
     See Config and docs/signals.md for tunables. Missing optional OCR/scene

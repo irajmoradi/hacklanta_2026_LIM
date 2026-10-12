@@ -14,7 +14,8 @@ from signals import detect_candidates
 
 @pytest.mark.skipif(os.environ.get("RUN_SIGNALS_BENCHMARK") != "1",
                     reason="opt-in ten-minute 1080p benchmark")
-def test_ten_minute_1080p(tmp_path):
+@pytest.mark.parametrize("backend", ["ffmpeg", "auto"])
+def test_ten_minute_1080p(tmp_path, backend):
     # Limit the process and its decoder children to at most 12 available cores.
     affinity = os.sched_getaffinity(0)
     os.sched_setaffinity(0, set(sorted(affinity)[:12]))
@@ -32,9 +33,9 @@ def test_ten_minute_1080p(tmp_path):
                         str(segment), "-t", "600", "-c", "copy", str(video)],
                        check=True, capture_output=True)
         start = time.perf_counter()
-        candidates = detect_candidates(video, scene_backend="ffmpeg")
+        candidates = detect_candidates(video, scene_backend=backend)
         elapsed = time.perf_counter() - start
-        print(f"1080p30 H.264: duration=600s cores={len(os.sched_getaffinity(0))} "
+        print(f"1080p30 H.264: backend={backend} duration=600s cores={len(os.sched_getaffinity(0))} "
               f"elapsed={elapsed:.3f}s candidates={len(candidates)}")
         assert candidates
         assert elapsed < 60, f"detection took {elapsed:.3f}s (target <60s)"

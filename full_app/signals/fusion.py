@@ -57,12 +57,13 @@ def fuse(raw, events, duration, cfg):
     candidates = []
     for start, end in bounded:
         lo, hi = int(start), min(len(curve), math.ceil(end))
-        if hi <= lo or not any(start <= p + .5 < end for p in peaks):
+        if hi <= lo or not any(start <= min(duration - 1e-9, p + .5) < end for p in peaks):
             continue
         candidates.append(Candidate(
             round(start, 3), round(end, 3), round(float(curve[lo:hi].max()), 6),
             {key: round(float(value[lo:hi].max()), 6) for key, value in normalized.items()},
-            [event for event in events if start <= event["time"] < end],
+            [event for event in events if event["time"] < end
+             and (event["time"] >= start or event.get("end", event["time"]) > start)],
         ))
     ranked = []
     for candidate in sorted(candidates, key=lambda c: (-c.score, c.start)):

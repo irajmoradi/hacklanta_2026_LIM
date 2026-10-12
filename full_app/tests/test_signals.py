@@ -62,12 +62,33 @@ def test_silent_static_and_missing_audio(tmp_path):
     assert all(not np.any(x) for x in zeros[:3])
 
 
+def test_motion_without_audio(tmp_path):
+    path = make_video(tmp_path / "motion.mp4",
+                      "testsrc2=s=320x180:r=12,drawbox=color=black:t=fill:enable='not(between(t,4,7))'")
+    candidates = detect_candidates(path, scene_backend="ffmpeg")
+    assert candidates
+    assert any(c.start <= 5 < c.end and c.signals["motion"] > 0 for c in candidates)
+    assert all(c.signals["rms"] == 0 for c in candidates)
+
+
 def test_scene_cut(tmp_path):
     path = make_video(tmp_path / "cut.mp4",
                       "color=c=black:s=320x180:r=12,drawbox=color=white:t=fill:enable='gte(t,5)'",
                       duration=10)
     duration, stream, _ = _probe(path)
     _, scene, events = _video(path, duration, stream, Config(scene_backend="ffmpeg"), {})
+    assert scene[5] == 1
+    assert events == [{"time": 5., "type": "scene_cut"}]
+
+
+@pytest.mark.parametrize("backend", ["content", "adaptive"])
+def test_optional_scene_detectors(tmp_path, backend):
+    pytest.importorskip("scenedetect")
+    path = make_video(tmp_path / "optional-cut.mp4",
+                      "color=c=black:s=320x180:r=12,drawbox=color=white:t=fill:enable='gte(t,5)'",
+                      duration=10)
+    duration, stream, _ = _probe(path)
+    _, scene, events = _video(path, duration, stream, Config(scene_backend=backend), {})
     assert scene[5] == 1
     assert events == [{"time": 5., "type": "scene_cut"}]
 
@@ -139,6 +160,27 @@ def test_short_clip_and_edge_peaks():
     result = fuse(raw, [{"time": 0., "type": "kill"}], 1.5, Config())
     assert len(result) == 1
     assert result[0].start == 0 and result[0].end == 1.5
+
+
+def test_fractional_last_second_and_spanning_events():
+    raw = raw_signals(11)
+    raw["ocr"][10] = 1
+    event = {"time": 2., "end": 10.1, "type": "sustained_audio"}
+    result = fuse(raw, [event], 10.1, Config())
+    assert result
+    assert result[0].end == 10.1
+    assert event in result[0].events
+
+
+def test_ocr_failure_is_optional(monkeypatch):
+    monkeypatch.setattr(shutil, "which", lambda name: "/fake/tesseract")
+    reader = HUDReader({"banner": (0, 0, 1, 1)}, 3)
+    def fail(*args, **kwargs):
+        raise subprocess.TimeoutExpired("tesseract", 10)
+    monkeypatch.setattr(subprocess, "run", fail)
+    with pytest.warns(RuntimeWarning, match="disabling OCR"):
+        assert reader.read(np.zeros((100, 100, 3), np.uint8), 0) == []
+    assert reader.executable is None
 
 
 @pytest.mark.parametrize("cfg", [{"sample_fps": 0}, {"weights": {"bad": 2}},

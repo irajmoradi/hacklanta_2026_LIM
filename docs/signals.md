@@ -114,6 +114,22 @@ tools/remote_run.sh "cd full_app && RUN_SIGNALS_BENCHMARK=1 python -m pytest tes
 Tests synthesize `testsrc2`, sine spikes, hard cuts and `drawtext` banners in pytest
 temporary directories. OCR tests skip only if Tesseract is unavailable. The opt-in
 benchmark generates a 600 s 1080p30 H.264 recording, limits affinity to at most 12
-cores, and asserts detection <60 s (generation excluded). The speed target covers
+cores, and asserts detection <60 s for both `ffmpeg` and `auto` (generation excluded). The speed target covers
 the default cheap signals; OCR is slower and is excluded. Actual speed depends on
 codec, frame rate, CPU and scene complexity. No paid live tests are necessary.
+
+### EXT-01 validation record
+
+Linux runner, 2026-10-12, using `bash tools/remote_run.sh` from the worktree root:
+
+| Remote command | Result | Exit |
+| --- | --- | ---: |
+| `cd full_app && python -m pytest -q` (initial implementation) | 19 passed, including real Tesseract OCR | 0 |
+| `cd full_app && RUN_SIGNALS_BENCHMARK=1 python -m pytest -q -s` (initial benchmark) | 20 passed; 600 s 1080p30 in 27.483 s, 12 cores | 0 |
+| `cd full_app && pip install -q scenedetect==0.7.1 && python -m pytest -q` (compatibility probe) | 1 failed, 20 passed, 1 skipped; revealed 0.7 FrameTimecode API change, subsequently fixed | 1 |
+| `cd full_app && pip install -q scenedetect==0.6.7 && python -m pytest -q && pip install -q scenedetect==0.7.1 && RUN_SIGNALS_BENCHMARK=1 python -m pytest -q -s` | 0.6.7: 24 passed, 1 benchmark skipped; 0.7.1: 25 passed including benchmark, FFmpeg detection 25.425 s on 12 cores | 0 |
+| `cd full_app && RUN_SIGNALS_BENCHMARK=1 python -m pytest tests/test_signals_benchmark.py -k auto -s -q` | 1 passed, 1 deselected; automatic PySceneDetect 0.7.1 detection 26.746 s on 12 cores | 0 |
+
+The optional packages were installed only in the runner's task venv. No application
+API calls were made and no secret was read. The performance numbers describe the
+synthetic H.264 benchmark, not a guarantee for every gameplay codec or OCR workload.
