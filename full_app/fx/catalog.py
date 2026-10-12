@@ -28,10 +28,15 @@ def catalog():
             if name.startswith('text_') or name in ('vignette', 'slow_motion', 'speed_2x'):
                 length = 1.5
             if name == 'flash_white':
-                length = .12
+                length = .35
             result[f'{kind}:{name}'] = dict(name=name, kind=kind, description=entry['description'],
                 events=list(SPECIAL.get(name, FAIL if roast else HYPE)), mood='roast' if roast else 'hype',
                 intensity=.9 if intense else .45, length=length,
+                min_visible_duration=.35 if kind == 'vfx' else 0,
+                bold=False, phase='hit', word=name.startswith('text_'),
                 timing=('segment-speed' if name in ('slow_motion', 'speed_2x') else
                         'transition' if name in ('fade_in', 'fade_out') else 'event'))
+            for key in ('events', 'mood', 'intensity', 'length', 'min_visible_duration', 'bold', 'phase', 'word'):
+                if key in entry:
+                    result[f'{kind}:{name}'][key] = entry[key]
     return result

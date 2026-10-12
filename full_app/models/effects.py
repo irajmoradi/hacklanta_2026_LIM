@@ -562,6 +562,10 @@ VIDEO_EFFECTS.update({
 })
 
 
+from fx.bold import register as _register_bold
+_register_bold(VIDEO_EFFECTS)
+
+
 def effects_for_prompt() -> str:
     """Format video effects list for the Gemini prompt."""
     lines = []

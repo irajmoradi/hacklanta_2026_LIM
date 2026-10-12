@@ -85,16 +85,23 @@ def _gate(t: Timing, chain: list[str]) -> str:
     return ",".join(f"{f}:enable='{t.enable}'" for f in chain)
 
 
-def _freeze(t: Timing) -> str:
+def _freeze(t: Timing, annotate=True) -> str:
     # Keep the first hit frame, drop subsequent frames in the hold, retain timestamps.
     # round=up makes the fps filter hold the previous frame until the next timestamp.
-    return (f"select='not(gt(t,{t.start})*lt(t,{t.end}))',fps={t.fps}:round=up,"
-            f"tpad=stop_mode=clone:stop_duration={t.duration},trim=duration={t.duration}")
+    chain = (f"select='not(gt(t,{t.start})*lt(t,{t.end}))',fps={t.fps}:round=up,"
+             f"tpad=stop_mode=clone:stop_duration={t.duration},trim=duration={t.duration}")
+    if annotate:
+        # Center/crosshair cue only: this is not a claim of detected enemy location.
+        chain += ',' + _gate(t, [
+            "drawbox=x=iw*.38:y=ih*.34:w=iw*.24:h=ih*.32:c=white:t=6",
+            "drawtext=text='<<<':fontsize=min(w\\,h)*.13:fontcolor=yellow:borderw=4:"
+            "bordercolor=black:x=w*.64:y=(h-th)/2"])
+    return chain
 
 
 def impact_frame(t, brightness=0.65):
     flash_end = min(t.end, t.start + 2 / t.fps)
-    return _freeze(t) + f",eq=brightness={brightness}:enable='gte(t,{t.start})*lt(t,{flash_end})'"
+    return _freeze(t, annotate=False) + f",eq=brightness={brightness}:enable='gte(t,{t.start})*lt(t,{flash_end})'"
 
 
 def speed_ramp(t, fast=2.0, slow=0.5, interpolation="none"):
@@ -164,7 +171,7 @@ def kill_counter(t, count=1):
 
 
 def freeze_name_tag(t, name="PLAYER"):
-    return _freeze(t) + "," + _gate(t, [f"drawtext=text='{_text(name)}':expansion=none:fontsize=28:fontcolor=white:box=1:boxcolor=black@0.6:x=(w-tw)/2:y=h-th-20"])
+    return _freeze(t, annotate=False) + "," + _gate(t, [f"drawtext=text='{_text(name)}':expansion=none:fontsize=28:fontcolor=white:box=1:boxcolor=black@0.6:x=(w-tw)/2:y=h-th-20"])
 
 
 REGISTRY = {
