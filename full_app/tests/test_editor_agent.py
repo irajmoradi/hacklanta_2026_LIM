@@ -178,3 +178,18 @@ def test_critique_cache_survives_chat_requests(job):
     result = run_agent(job, 'review again', second, preview=lambda *_: artifact)
     assert not result['fallback'] and first.watches == 1 and second.watches == 0
     assert result['calls_remaining'] == 5
+
+
+def test_speed_adjusted_duration_limit_and_current_preset(job):
+    job['options'].update(max_duration=10, preset='vertical')
+    job['edit_plan'] = dict(render_version=2, preset='landscape',
+        segments=[dict(source_start=0, source_end=5, speed=.5)])
+    tools = EditorTools(job, job['edit_plan'])
+    tools.validate()
+    before = tools.snapshot()
+    with pytest.raises(ValueError, match='max_duration'):
+        tools.execute('add_clip', dict(t0=10, t1=11))
+    assert tools.snapshot() == before
+    result = run_agent(job, 'review', ScriptedModel(call('finish', summary='Keep this cut')))
+    assert not result['fallback'] and result['plan']['preset'] == 'vertical'
+    assert job['edit_plan']['preset'] == 'landscape'

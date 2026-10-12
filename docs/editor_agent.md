@@ -105,4 +105,15 @@ Output duration: **60 → 56 seconds**. Music and reaction-pack overlays were di
 
 ## Validation
 
-Commands and final results are recorded below after the runner suite completes.
+All automated tests mock model calls and use the repository's network-blocking fixture. The live entrypoint is separate and explicitly gated.
+
+| Command | Result |
+|---|---|
+| `tools/remote_run.sh "cd full_app && python -m pytest -q"` | 1,018 passed, 21 skipped; exit 0; 555.60 seconds. |
+| `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_editor_agent.py tests/test_editor_agent_api.py tests/test_jobs.py tests/test_pipeline_settings.py tests/test_render_v2.py tests/test_server_limits.py"` | Final affected-code regression: 97 passed, 1 skipped; exit 0; 65.24 seconds. |
+| `EDITOR_AGENT_LIVE=1 ../.venv/bin/python -m editor_agent.smoke` on runner 1, env-only key via SSH stdin | Exit 0; 10 paid calls; two reviewed proxies; 60 → 56 seconds. |
+| `git diff --check` | Exit 0. |
+
+The full suite started before the final refinements. The final affected-code rerun includes all 15 new agent tests plus job lifecycle, pipeline settings, v2 rendering and server-limit coverage. It verifies the final speed-adjusted duration admission fix and current-preset handling. An early focused run failed only because the API test fixture used an undersized bearer token; the corrected fixture and all subsequent runs passed. No live tests were triggered by the full suite.
+
+Changed files: `full_app/editor_agent/{__init__,tools,loop,model,preview,smoke}.py`, its `.gitignore`, `full_app/server/{api,editor,queue,store,validation}.py`, `full_app/tests/test_editor_agent.py`, `full_app/tests/test_editor_agent_api.py`, and this document. All changes stay within AGENT-01 allowed paths. The shared validation fix now measures v2 duration and local placement bounds after applying playback speed, preventing slow-motion edits from bypassing the duration ceiling.

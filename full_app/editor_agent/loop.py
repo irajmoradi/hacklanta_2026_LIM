@@ -43,6 +43,8 @@ def run_agent(job, instruction, model=None, *, max_steps=16, call_limit=None,
     reason = None
     try:
         draft = starting_plan(job)
+        if 'preset' in job.get('options', {}):
+            draft['preset'] = job['options']['preset']
         if model is None:
             from .model import GeminiEditor
             model = GeminiEditor()
