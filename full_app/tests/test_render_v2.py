@@ -187,16 +187,19 @@ def test_dense_track_and_auto_beats(media, tmp_path):
     assert_media(info, plan.size, 2)
 
 
-def test_nvenc_retry(tmp_path, monkeypatch):
+@pytest.mark.parametrize('perf', [False, True])
+def test_nvenc_retry(tmp_path, monkeypatch, perf):
     from render.engine import Renderer
+    from perf.encoders import Encoder
     monkeypatch.setattr("services.ffmpeg_runner.HAS_NVENC", True)
+    monkeypatch.setattr('perf.encoders.best', lambda **kwargs: Encoder('h264_nvenc'))
     calls = []
     def execute(command, **kwargs):
         calls.append(command)
         return subprocess.CompletedProcess(command, 1 if "h264_nvenc" in command else 0,
                                            stderr="No GPU")
     monkeypatch.setattr("render.engine.subprocess.run", execute)
-    renderer = Renderer(FFmpegRunner(tmp_path, tmp_path / "source", 320, 180, 20))
+    renderer = Renderer(FFmpegRunner(tmp_path, tmp_path / "source", 320, 180, 20, perf=perf))
     renderer.encode([], tmp_path / "out.mp4", tmp_path)
     assert len(calls) == 2
     assert "h264_nvenc" in calls[0] and "libx264" in calls[1]

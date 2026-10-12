@@ -43,11 +43,20 @@ class Segment(Model):
     title: str | None = Field(default=None, max_length=200)
     sam: SubjectMetadata | None = None
     words: list[Word] = Field(default_factory=list)
+    fx: list[dict] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def ordered(self):
         if self.source_end <= self.source_start:
             raise ValueError("Segment end must follow start")
+        if self.fx:
+            from fx import REGISTRY, Timing
+            for entry in self.fx:
+                effect = REGISTRY[entry['name']]
+                timing = Timing(self.duration, entry['start'], entry['end'])
+                effect.values(entry.get('params', {}))
+                if effect.changes_duration:
+                    raise ValueError('Time-changing FX require a prepared source timeline')
         if self.sam:
             times = [p.time for p in self.sam.subject_track]
             if any(b <= a for a, b in zip(times, times[1:])):
