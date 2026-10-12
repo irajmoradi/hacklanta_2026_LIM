@@ -1,6 +1,11 @@
 """Deterministic product defaults and editorial enrichment; no provider calls."""
 import copy
 
+# Register the preset's new boolean with the shared HTTP validator. Keep this
+# scoped here so FISH-1 does not edit FINAL-1's server validation files.
+from server.validation import EXTENSION_FLAGS
+EXTENSION_FLAGS.add('ai_cards')
+
 
 FULL_EXPERIENCE = dict(planner=True, profiles=True, use_signals=True, audio_ai=True,
     captions=True, reactions=True, sam=True, sam_reframe=True, music=True,

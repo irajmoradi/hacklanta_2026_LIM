@@ -83,7 +83,7 @@ def generate_cards(job, source, segments, client_factory, warn, *, top_index=0):
                 warn(f'AI {name} card unavailable; using cached local fish/car card')
             assets[name] = output
             continue
-        fallback = False
+        fallback, reason = False, None
         prompt = prompt_for(name, title, options.get('mode', 'nice'), random.Random(f'{job.get("id", directory)}:{name}'))
         try:
             subprocess.run(['ffmpeg', '-v', 'error', '-y', '-ss',
@@ -97,12 +97,14 @@ def generate_cards(job, source, segments, client_factory, warn, *, top_index=0):
                 client.generate_thumbnail(frame, prompt, output, image_budget=budget)
             with Image.open(output) as image:
                 image.verify()
-        except Exception:
+        except Exception as error:
             # Provider exceptions may contain credentials; only a safe warning escapes.
+            from services.provider_errors import classify
+            reason = classify(error).code
             fallback = True
             local_card(frame, output, title, name, options.get('mode', 'nice'))
-            warn(f'AI {name} card unavailable; using local fish/car card')
-        manifest.write_text(json.dumps(dict(fallback=fallback, prompt=prompt, title=title)), encoding='utf-8')
+            warn(f'AI {name} card unavailable ({reason}); using local fish/car card')
+        manifest.write_text(json.dumps(dict(fallback=fallback, reason=reason, prompt=prompt, title=title)), encoding='utf-8')
         assets[name] = output
     job['ai_cards'] = {name: str(path) for name, path in assets.items()}
     return assets

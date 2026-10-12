@@ -11,6 +11,9 @@ the gameplay. Every generated outro requests THANKS FOR WATCHING, a car and fish
 `GEMINI_IMAGE_MODEL` selects the image model (client default:
 `gemini-3.1-flash-image`). Existing provider credentials apply, including
 `GOOGLE_API_KEY` for Vertex express. No extra title-generation call is made.
+Set `GOOGLE_GENAI_USE_VERTEXAI=true` for that backend. HTTP callers should send
+`full_experience: true` alongside `ai_cards`; the preset registers the new boolean
+with the existing shared option validator without editing server files.
 There are at most two image transport attempts per job, also charged to its
 shared Gemini budget. SDK retries are disabled by the existing thumbnail client.
 The persistent `cards/` directory contains frames, stills, prompt metadata,
@@ -36,3 +39,7 @@ Offline verification: `tools/remote_run.sh "cd full_app && python -m pytest -q t
 The explicitly live demo script is `demo_video/fish/live_smoke.py`; it makes two
 image calls per input montage, reads credentials only from the environment, and
 writes ignored stills and previews to `demo_video/fish/out/`.
+`launch_live.py` reads the authorized local environment file at runtime and
+passes only the key over SSH stdin. `diagnose_live.py` is an explicitly live
+two-attempt diagnostic sharing a six-call run ceiling. `render_saved.py` builds
+a preview from saved diagnostic stills with zero API calls.

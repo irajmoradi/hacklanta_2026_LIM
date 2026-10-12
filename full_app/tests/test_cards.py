@@ -1,14 +1,12 @@
 """FISH-1 synthetic-media tests; image generation is always fake."""
-from contextlib import contextmanager
 import json
-from pathlib import Path
 import shutil
 import subprocess
 
 import pytest
 from PIL import Image
 
-from cards import generate_cards, install_cards
+from cards import generate_cards
 from cards.generation import prompt_for
 from pipeline import Pipeline
 from services.probe import probe_video
@@ -78,6 +76,32 @@ def test_missing_client_and_interrupted_attempt(video, tmp_path):
     assert not client.calls
 
 
+def test_merged_client_transport_and_model(video, tmp_path, monkeypatch):
+    import io
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from services.gemini_client import GeminiProvider
+    from services.call_budget import CallBudget
+    monkeypatch.setenv('GEMINI_IMAGE_MODEL', 'fake-configured-model')
+    data = io.BytesIO()
+    Image.new('RGB', (160, 90), 'orange').save(data, format='PNG')
+    sdk = Mock()
+    sdk.models.generate_content.return_value = SimpleNamespace(candidates=[SimpleNamespace(
+        content=SimpleNamespace(parts=[SimpleNamespace(inline_data=SimpleNamespace(
+            mime_type='image/png', data=data.getvalue()))]))])
+    job = job_for(video, tmp_path)
+    def factory():
+        provider = GeminiProvider(client=sdk, vertexai=True)
+        provider.budget = CallBudget(tmp_path / 'shared.sqlite3', limit=2)
+        return provider
+    generate_cards(job, video, job['edit_plan']['segments'], factory, job['warnings'].append)
+    assert not job['warnings']
+    assert sdk.models.generate_content.call_count == sdk.close.call_count == 2
+    assert all(call.kwargs['model'] == 'fake-configured-model' for call in sdk.models.generate_content.call_args_list)
+    assert CallBudget(tmp_path / 'cards/image-budget.sqlite3', limit=2).remaining == 0
+    assert CallBudget(tmp_path / 'shared.sqlite3', limit=2).remaining == 0
+
+
 def test_pipeline_timeline_music_and_top_frame(video, tmp_path, monkeypatch):
     pipeline, client = Pipeline(), FakeImageClient()
     monkeypatch.setattr(pipeline, 'client', lambda *args: client)
@@ -113,3 +137,12 @@ def test_full_default_and_prompt_variety():
     prompts = {prompt_for('outro', 'TITLE', 'nice', random.Random(i)) for i in range(15)}
     assert len(prompts) > 3
     assert all('fish' in p and 'THANKS FOR WATCHING' in p for p in prompts)
+
+
+def test_full_experience_http_validation():
+    from server.validation import options_valid
+    options = options_valid(dict(full_experience=True), {'hype_montage': ''})
+    assert options['ai_cards'] is True
+    assert options_valid(dict(full_experience=True, ai_cards=False), {'hype_montage': ''})['ai_cards'] is False
+    with pytest.raises(ValueError, match='ai_cards must be boolean'):
+        options_valid(dict(full_experience=True, ai_cards='false'), {'hype_montage': ''})
