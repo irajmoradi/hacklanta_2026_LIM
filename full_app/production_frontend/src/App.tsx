@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  EditorApi,
+  EditorApi, clipsFromPlan, type AgentStep, type AgentResult,
   type ApiMode,
   type Job,
   type Options,
   type Preset,
   type ReviewClip,
 } from "./api";
+import { Director } from "./components/Director";
 import { ClipEditor, Timeline } from "./components/ReviewTimeline";
 import "./styles/editor.css";
 import { baseCapabilities, demoCapabilities, extensionDefaults, type Capabilities } from "./features";
@@ -48,6 +49,15 @@ export default function App() {
   const [clips, setClips] = useState<ReviewClip[]>([]);
   const [source, setSource] = useState("");
   const [filename, setFilename] = useState("");
+  const [directorBusy, setDirectorBusy] = useState(false);
+  const [affectedClip, setAffectedClip] = useState<string>();
+  const directorRollback = useRef<{clips: ReviewClip[]; plan: Job['plan']; dirty: boolean}>();
+  const directorPlan = useRef<Job['plan']>();
+  const stepListener = useRef<(step: AgentStep) => void>();
+  const subscribeDirector = useCallback((listener: (step: AgentStep) => void) => {
+    stepListener.current = listener;
+    return () => { stepListener.current = undefined; };
+  }, []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [connection, setConnection] = useState("Ready");
@@ -60,7 +70,7 @@ export default function App() {
   const lastPlan = useRef<Job["plan"]>();
   const dirtyRef = useRef(false);
   const working =
-    busy ||
+    busy || directorBusy ||
     (!!job &&
       [
         "queued",
@@ -85,11 +95,12 @@ export default function App() {
       job.id,
       (next) => {
         setJob(next);
-        if (next.plan) lastPlan.current = next.plan;
+        if (next.plan && !directorPlan.current) lastPlan.current = next.plan;
         if (!dirtyRef.current) setClips(next.clips);
       },
       setConnection,
       setError,
+      step => stepListener.current?.(step),
     );
   }, [api, job?.id]);
   async function run(action: () => Promise<void>) {
@@ -113,6 +124,7 @@ export default function App() {
     dirtyRef.current = false;
     setDirty(false); setSaved(false); setClips([]); setJob(next);
     setNeedsAnalysis(false);
+    directorPlan.current = undefined; setAffectedClip(undefined);
     lastPlan.current = undefined; rangeEnd.current = undefined;
     setSource(file ? URL.createObjectURL(file) : ""); setFilename(label);
     setOptions(o => ({ ...o, music_asset_id: "", chat_asset_id: "" }));
@@ -151,7 +163,7 @@ export default function App() {
   const refresh = async () => {
     const next = await api.get(job!.id);
     setJob(next);
-    if (next.plan) lastPlan.current = next.plan;
+    if (next.plan && !directorPlan.current) lastPlan.current = next.plan;
     if (!dirtyRef.current) setClips(next.clips);
   };
   const edit = (next: ReviewClip[]) => {
@@ -261,6 +273,7 @@ export default function App() {
                     dirtyRef.current = false;
                     setDirty(false);
                     setSaved(false);
+                    directorPlan.current = undefined;
                     await api.analyze(job!.id, options);
                     setNeedsAnalysis(false);
                     await refresh();
@@ -323,8 +336,45 @@ export default function App() {
               )}
             </div>
             {job && (
-              <Timeline job={{ ...job, clips }} onSeek={(time) => seek(time)} />
+              <Timeline affectedClip={affectedClip} job={{ ...job, clips }} onSeek={(time) => seek(time)} />
             )}
+            {job && clips.length > 0 && mode === 'jobs' && <Director key={job.id} api={api} jobId={job.id}
+              disabled={busy || needsAnalysis || (!directorBusy && working)} subscribe={subscribeDirector}
+              onBusy={value => { setDirectorBusy(value); if (value) {
+                directorRollback.current = {clips, plan: directorPlan.current, dirty: dirtyRef.current};
+                dirtyRef.current = true;
+              } }}
+              onFailure={() => {
+                const prior = directorRollback.current;
+                if (prior) { setClips(prior.clips); directorPlan.current = prior.plan; dirtyRef.current = prior.dirty; }
+                setAffectedClip(undefined);
+              }}
+              onStep={step => {
+                const index = step.args?.segment_index !== undefined || step.args?.clip_index !== undefined
+                  ? Number(step.args?.segment_index ?? step.args?.clip_index)
+                  : clips.findIndex(c => c.id === String(step.args?.clip_id ?? step.diff?.clip_id));
+                setAffectedClip(String(step.args?.clip_id ?? step.diff?.clip_id ?? clips[index]?.id ?? ''));
+                const after = step.diff?.after as Job['plan'];
+                if (after && Array.isArray(after.segments)) {
+                  setClips(old => clipsFromPlan(after, old));
+                } else if (Number.isInteger(index) && step.diff?.after && typeof step.diff.after === 'object') {
+                  const patch = step.diff.after as Record<string, unknown>;
+                  setClips(old => old.map((c, i) => i === index ? {...c,
+                    start: typeof patch.source_start === 'number' ? patch.source_start : c.start,
+                    end: typeof patch.source_end === 'number' ? patch.source_end : c.end,
+                    caption: typeof patch.title === 'string' ? patch.title : c.caption} : c));
+                }
+              }}
+              onPlan={(result: AgentResult) => {
+                directorPlan.current = result.plan; lastPlan.current = result.plan;
+                setClips(old => clipsFromPlan(result.plan, old));
+                dirtyRef.current = true; setDirty(true); setSaved(false);
+              }}
+              onRender={() => void run(async () => {
+                validateSettings();
+                await api.render(job.id, preset, options, clips, directorPlan.current ?? job.plan, !!directorPlan.current);
+                await refresh();
+              })} />}
             <div className="section-title">
               <h3>
                 Selected moments{" "}
@@ -397,7 +447,8 @@ export default function App() {
                   preset,
                   options,
                   clips,
-                  job?.plan ?? lastPlan.current,
+                  directorPlan.current ?? job?.plan ?? lastPlan.current,
+                  !!directorPlan.current,
                 );
                 await refresh();
               })

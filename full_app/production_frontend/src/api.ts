@@ -41,6 +41,31 @@ export interface Job {
   planningStyle?: string;
   planningMode?: string;
 }
+export interface AgentStep {
+  step: number;
+  tool: string;
+  args: Record<string, unknown>;
+  rationale: string;
+  diff: Record<string, unknown>;
+}
+export interface AgentResult { plan: legacy.EditPlan; plan_version: number; trace?: AgentStep[] }
+export class ApiError extends Error {
+  constructor(message: string, public code?: string, public status?: number) { super(message); }
+}
+export function clipsFromPlan(plan: legacy.EditPlan, previous: ReviewClip[]): ReviewClip[] {
+  return plan.segments.map((s, i) => {
+    const original = previous.find(c => c.id === String(s.clip_id ?? s.id))
+      ?? previous.find(c => c.start < s.source_end && c.end > s.source_start);
+    return { ...original, id: String(s.clip_id ?? s.id ?? original?.id ?? `segment-${i}`),
+      start: s.source_start, end: s.source_end, caption: String(s.title ?? original?.caption ?? 'Edited moment'),
+      score: original?.score ?? 0, reaction: original?.reaction ?? 'None', keep: true };
+  });
+}
+function agentResult(raw: Wire): AgentResult {
+  const plan = editPlan(raw.plan);
+  if (!plan || !Number.isInteger(raw.plan_version)) throw new Error('Invalid Director plan response');
+  return {plan, plan_version: raw.plan_version as number, trace: list(raw.trace) as AgentStep[]};
+}
 export type ApiMode = "jobs" | "mock" | "legacy";
 type Wire = Record<string, unknown>;
 const object = (value: unknown): Wire => value !== null && typeof value === "object" && !Array.isArray(value) ? value as Wire : {};
@@ -119,11 +144,12 @@ async function request(
   });
   const data = object(await res.json().catch(() => ({})));
   if (!res.ok)
-    throw new Error(
+    throw new ApiError(
       text(object(data.error).message) ??
         text(data.error) ??
         text(data.message) ??
         `Request failed (${res.status})`,
+      text(object(data.error).code) ?? text(data.code), res.status,
     );
   return data;
 }
@@ -301,6 +327,7 @@ export class EditorApi {
     options: Options,
     reviewed?: ReviewClip[],
     plan?: legacy.EditPlan,
+    authoritative = false,
   ): Promise<void> {
     if (this.mode === "mock") {
       this.cached = { ...this.cached!, status: "done", progress: 100,
@@ -346,14 +373,14 @@ export class EditorApi {
       preset, mode: options.mode, style: options.style,
       captions: options.captions, reactions: options.reactions, sam: options.sam,
       ...this.extended(options),
-      ...(reviewed && (!this.planningModes.has(id) || this.planningModes.get(id) === options.mode) && (!this.planningStyles.has(id) || this.planningStyles.get(id) === options.style)
+      ...(reviewed && (authoritative || (!this.planningModes.has(id) || this.planningModes.get(id) === options.mode) && (!this.planningStyles.has(id) || this.planningStyles.get(id) === options.style))
         ? {
             edit_plan: {
               ...plan,
               segments: reviewed
                 .filter((c) => c.keep)
-                .map((c) => {
-                  const original = plan?.segments.find(
+                .map((c, index) => {
+                  const original = (authoritative ? plan?.segments[index] : undefined) ?? plan?.segments.find(
                     (s) => s.source_start < c.end && s.source_end > c.start,
                   );
                   return {
@@ -368,6 +395,13 @@ export class EditorApi {
         : {}),
     });
   }
+  async agent(id: string, instruction: string): Promise<AgentResult> {
+    if (this.mode !== 'jobs') throw new Error('Director requires the jobs backend.');
+    return agentResult(await request(`/api/jobs/${encodeURIComponent(id)}/agent`, 'POST', {instruction}));
+  }
+  async undoAgent(id: string): Promise<AgentResult> {
+    return agentResult(await request(`/api/jobs/${encodeURIComponent(id)}/agent/undo`, 'POST', {}));
+  }
   download(id: string) {
     return this.mode === "legacy"
       ? legacy.getDownloadUrl(id)
@@ -378,6 +412,7 @@ export class EditorApi {
     update: (job: Job) => void,
     connection: (state: string) => void,
     fail: (message: string) => void,
+    agentStep?: (step: AgentStep) => void,
   ): () => void {
     let stopped = false,
       timer: ReturnType<typeof setTimeout> | undefined,
@@ -417,6 +452,13 @@ export class EditorApi {
           void refresh();
         };
         // Events can be partial stage updates: fetch the authoritative snapshot.
+        stream.addEventListener('agent_step', (event) => {
+          if (stopped) return;
+          try {
+            const step = JSON.parse((event as MessageEvent).data) as AgentStep;
+            if (typeof step.step === 'number' && typeof step.tool === 'string') agentStep?.(step);
+          } catch { /* Ignore malformed events; the final response remains authoritative. */ }
+        });
         stream.onmessage = () => void refresh();
         for (const name of ["progress", "status", "job", "complete", "done"])
           stream.addEventListener(name, () => void refresh());
