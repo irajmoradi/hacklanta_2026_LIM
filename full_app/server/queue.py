@@ -57,12 +57,6 @@ class JobQueue:
                 raise Conflict('Job is busy')
             if len(self.active) >= self.capacity and not recover:
                 raise Conflict('Queue is full; retry later')
-            candidate = custom_plan if custom_plan is not None else job['edit_plan'] if target == 'render' else None
-            if candidate is not None:
-                plan_valid(candidate, job['meta']['duration'],
-                           options.get('max_duration', job['options'].get('max_duration', 180)))
-            if key:
-                self.keys[job_id] = key
             changed = {k for k, v in options.items() if job['options'].get(k) != v}
             analysis_keys = {'provider', 'use_signals', 'window_scoring', 'splits',
                              'profiles', 'game', 'audio_ai', 'vjepa', 'ingest', 'chat', 'multipov'}
@@ -76,11 +70,22 @@ class JobQueue:
                 invalidate = 'plan'
             elif changed:
                 invalidate = 'render'
+            # A cached plan that will be discarded must not be admitted against
+            # the new budget. Explicit plans and reused plans still validate
+            # before any persisted state (or credentials) are changed.
+            candidate = custom_plan
+            if candidate is None and target == 'render' and invalidate not in ('analyze', 'plan'):
+                candidate = job['edit_plan']
+            if candidate is not None:
+                plan_valid(candidate, job['meta']['duration'],
+                           options.get('max_duration', job['options'].get('max_duration', 180)))
+            if key:
+                self.keys[job_id] = key
             if invalidate:
                 self.invalidate(job, invalidate)
             if target != 'render' and 'analyze' not in job['completed'] and 'plan' in job['completed']:
                 self.invalidate(job, 'analyze')
-            if 'mode' in changed and invalidate != 'analyze' and job.get('clips'):
+            if changed & {'mode', 'max_duration'} and invalidate != 'analyze' and job.get('clips'):
                 job['_local_replan'] = True
             job['options'].update(options)
             if job['options'].get('editor_agent'):
