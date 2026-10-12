@@ -163,14 +163,15 @@ class Pipeline:
         with self.stage(job, 'render'):
             render_job(self, job, key)
 
-    def legacy_render(self, job, key):
+    def legacy_render(self, job, key, plan=None):
         # Only this disposable directory contains intermediate render assets.
         scratch = Path(job['dir']) / 'render_tmp'
         scratch.mkdir(exist_ok=True)
-        plan = job['edit_plan']
+        plan = job['edit_plan'] if plan is None else plan
         plan = plan_valid(plan, job['meta']['duration'])
         try:
-            preset = job['options'].get('preset')
+            preset = (None if job['options'].get('legacy_dimensions') else
+                      job['options'].get('preset', 'landscape'))
             width, height = {'landscape': (1920, 1080),
                              'vertical': (1080, 1920), 'square': (1080, 1080),
                              None: (job['meta']['width'], job['meta']['height'])}[preset]

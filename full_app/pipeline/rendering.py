@@ -35,7 +35,12 @@ def render_job(pipeline, job, key):
     options = job['options']
     renderer = pipeline.hook('render.engine', 'Renderer', job)
     # Legacy source-size output and thumbnail generation retain their old contract.
-    if renderer is None or options.get('generate_thumbnails') or options.get('legacy_dimensions'):
+    if renderer is None:
+        fallback = copy.deepcopy(job['edit_plan'])
+        fallback.pop('render_version', None)
+        pipeline.legacy_render(job, key, fallback)
+        return
+    if options.get('generate_thumbnails') or options.get('legacy_dimensions'):
         pipeline.legacy_render(job, key)
         return
     from render.plan import RenderPlan
@@ -85,8 +90,10 @@ def render_job(pipeline, job, key):
         spotlight = pipeline.hook('sam', 'render_effect', job) if options.get('sam') else None
         clips = job.get('clips') or []
         def metadata(segment):
-            return max(clips, key=lambda c: max(0, min(c['end_seconds'], segment.source_end) -
-                       max(c['start_seconds'], segment.source_start)), default={})
+            def overlap(c):
+                return max(0, min(c['end_seconds'], segment.source_end) -
+                           max(c['start_seconds'], segment.source_start))
+            return max((c for c in clips if overlap(c)), key=overlap, default={})
         from types import SimpleNamespace
         clip_metadata = [metadata(SimpleNamespace(**s)) for s in original_segments]
         top = sorted(range(len(validated.segments)),

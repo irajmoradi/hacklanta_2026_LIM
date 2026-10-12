@@ -287,6 +287,20 @@ def test_changed_analysis_prompt_invalidates_checkpoints(setup, video):
     assert pipeline.calls == ['analyze', 'plan', 'analyze', 'plan']
 
 
+def test_scoring_and_render_flags_invalidate_correct_stages(setup, video):
+    app, client, pipeline = setup
+    job = upload(client, video)
+    url = '/api/jobs/' + job
+    client.post(url + '/render', json={})
+    assert wait(app, job)['status'] == 'done'
+    client.post(url + '/render', json={'sam_reframe': True})
+    assert wait(app, job)['status'] == 'done'
+    assert pipeline.calls == ['analyze', 'plan', 'render', 'render']
+    client.post(url + '/render', json={'window_scoring': False})
+    assert wait(app, job)['status'] == 'done'
+    assert pipeline.calls[-3:] == ['analyze', 'plan', 'render']
+
+
 def test_custom_plan_skips_provider_and_queue_capacity(setup, video):
     app, client, pipeline = setup
     job = upload(client, video)

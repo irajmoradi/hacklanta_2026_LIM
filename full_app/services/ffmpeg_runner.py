@@ -54,8 +54,10 @@ class FFmpegRunner:
         """Extract a clip from source with optional effects and speed change."""
         output = self.workspace / f"seg_{index:03d}.mp4"
 
-        cmd = ["ffmpeg", "-y", "-i", str(self.source)]
-        cmd += ["-ss", f"{start:.3f}", "-to", f"{end:.3f}"]
+        # Trim the input timeline before applying speed filters. Output-side
+        # -to otherwise truncates slowed clips back to their original duration.
+        cmd = ["ffmpeg", "-y", "-ss", f"{start:.3f}",
+               "-t", f"{end - start:.3f}", "-i", str(self.source)]
 
         # Normalize to list
         if isinstance(video_effects, str):
