@@ -2,6 +2,7 @@ import array
 import io
 import math
 import subprocess
+from types import SimpleNamespace
 import wave
 
 import pytest
@@ -62,6 +63,40 @@ def test_provider_failures(monkeypatch, tmp_path):
     assert len(track.warnings) == 2
     assert "secret" not in repr(track)
     assert track.segments[0].text.startswith("What a play")
+
+
+@pytest.mark.parametrize("vertex", [False, True])
+def test_gemini_request_and_validation(monkeypatch, vertex):
+    from google import genai
+    calls = []
+    payload = ['["A clean win"]']
+    class Client:
+        def __init__(self, **kwargs):
+            calls.append(kwargs)
+            self.models = self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def generate_content(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(text=payload[0])
+
+    monkeypatch.setattr(genai, "Client", Client)
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", str(vertex).lower())
+    monkeypatch.setenv("GOOGLE_API_KEY" if vertex else "GEMINI_API_KEY", "fake")
+    context = [{"caption": "A win", "max_words": 5}]
+    assert providers.gemini_script(context, "hype_caster") == ["A clean win"]
+    assert calls[0]["vertexai"] is vertex
+    assert calls[0]["api_key"] == "fake"
+    assert "A win" in calls[1]["contents"]
+    for invalid in ('{}', '[]', '[null]', '[""]', 'not json'):
+        payload[0] = invalid
+        with pytest.raises(ValueError):
+            providers.gemini_script(context, "hype_caster")
 
 
 def test_tts_cache_and_voice_consent(monkeypatch, tmp_path):

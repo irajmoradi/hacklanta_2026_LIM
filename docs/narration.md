@@ -91,3 +91,15 @@ Gemini calls per task run. No live test was run for EXT-19.
 Integration remains opt-in: an integrator can call this hook after montage
 rendering and supply the actual reaction intervals. The task's allowed paths do
 not include app routes, UI controls or the existing renderer.
+
+### EXT-19 run results
+
+- `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_narration.py"`:
+  exit 0, 14 passed (final run; initial run before provider-adapter tests: 12 passed).
+- `tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live'"`:
+  exit 1, 172 passed, 4 skipped, 1 deselected, 4 failed. This run used the initial
+  12-test narration suite. `eval/test_app_smoke.py::test_app_pipeline` expects a
+  missing `app.WORKSPACE`; three `tests/test_jobs.py` default-pipeline cases expect
+  five warnings but receive four. None of these failures exercises narration;
+  app/server/eval files were not changed in this task.
+- `git diff --check`: exit 0. Live Gemini/ElevenLabs calls: zero.
