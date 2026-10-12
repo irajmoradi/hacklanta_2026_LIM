@@ -13,7 +13,7 @@ SSH=(ssh -i "$KEY" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=20
 rsync -az --delete -e "ssh -i $KEY -o StrictHostKeyChecking=accept-new" \
   --exclude .git --exclude node_modules --exclude .venv --exclude 'full_app/workspace' --exclude '__pycache__' \
   "$ROOT/" "root@$RUNNER_IP:/srv/lim/$NAME/"
-"${SSH[@]}" bash -s -- "$NAME" "$*" <<'REMOTE'
+"${SSH[@]}" "bash -s -- $(printf %q "$NAME") $(printf %q "$*")" <<'REMOTE'
 set -e
 NAME="$1"; CMD="$2"; cd "/srv/lim/$NAME"
 REQ=$(cat full_app/requirements*.txt 2>/dev/null | sha256sum | cut -c1-16)
