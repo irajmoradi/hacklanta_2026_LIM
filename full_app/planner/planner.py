@@ -13,6 +13,9 @@ def _peak(clip: RankedClip) -> float:
     for value in (s.action_time, s.fail_time if clip.label == "lowlight" else s.kill_time):
         if value is not None:
             return value
+    if s.events:
+        preferred = [e for e in s.events if (e.kind in ('death', 'whiff')) == (clip.label == 'lowlight')]
+        return min(preferred or s.events, key=lambda e: (abs(e.time-(clip.start+clip.end)/2), e.time)).time
     return (clip.start + clip.end) / 2
 
 
@@ -104,7 +107,7 @@ def plan_edit(
     """Plan a montage; a higher score means a stronger moment of either label.
 
     The hook repeats a teaser of the climax. All other source IDs occur once.
-    An optional refiner receives a prompt and returns caption-only JSON patches.
+    An optional refiner receives a prompt and returns caption and tagged-effect JSON patches.
     """
     options = PlannerOptions(mode=mode, style=style, target_length=target_length,
         aspect=aspect, min_clip_length=min_clip_length, max_clip_length=max_clip_length,

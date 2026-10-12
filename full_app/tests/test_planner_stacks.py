@@ -69,3 +69,16 @@ def test_valid_effect_refinement():
 def test_invalid_chaos(chaos):
     with pytest.raises(ValueError):
         plan_edit(clips(), chaos=chaos)
+
+
+def test_saved_analysis_restack_preserves_cuts_and_uses_events():
+    from services.fx_planning import restack_saved_job
+    original = plan_edit(clips(), target_length=20, fill_target=True)
+    job = dict(planner_plan=original.model_dump(), clips=[dict(id=c['id'], start_seconds=c['start'],
+        end_seconds=c['end'], signals=c['signals'], events=[dict(type='headshot',time=c['start']+6)],
+        description='Saved window headshot') for c in clips()])
+    result = restack_saved_job(job, chaos=.9, seed=17)
+    assert result['planner_plan']['clips'] == original.model_dump()['clips']
+    assert result['edit_plan']['chaos'] == .9 and result['edit_plan']['seed'] == 17
+    assert any(k=='headshot' for events in result['events'].values() for k,t in events)
+    assert result == restack_saved_job(job, chaos=.9, seed=17)

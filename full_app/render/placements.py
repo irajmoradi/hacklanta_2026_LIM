@@ -22,7 +22,7 @@ def effects_graph(effects, size, fps, duration=None):
             from fx import Timing, zoom_punch, screen_shake, chromatic_aberration, _freeze
             builder = dict(zoom_punch=zoom_punch, shake=screen_shake,
                            chromatic_aberration=chromatic_aberration, freeze=_freeze)[effect.name]
-            vf = builder(Timing(duration or start+length, start, start+length, fps))
+            vf = builder(Timing(max(duration or 0, start+length), start, start+length, fps))
         elif effect.name in ('fade_in', 'fade_out', 'flash_white'):
             direction = 'out' if effect.name == 'fade_out' else 'in'
             color = ':color=white' if effect.name == 'flash_white' else ''

@@ -13,6 +13,8 @@ def test_every_registered_timed_effect_runs(name):
     # Late placement catches legacy text gates; rendering catches unsupported filters.
     graph = '[0:v]null[placement_input]'+effects_graph(
         [TimedEffect(name=name, start=2.1, duration=.3)], (160,90), 20, 2.5)
+    if name.startswith('text_'):
+        assert "between(t,0,2)" not in graph
     subprocess.run(['ffmpeg','-v','error','-filter_complex_threads','1','-f','lavfi','-i',
                     'testsrc2=s=160x90:r=20:d=2.5','-filter_complex',graph,
                     '-map','[v]','-t','2.5','-f','null','-'], check=True, capture_output=True)

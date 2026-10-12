@@ -18,6 +18,9 @@ def events_for(clip, source):
     kind = 'clutch' if s.clutch else 'multikill' if s.multikill else s.kind
     kind = kind if kind in ('kill', 'headshot', 'multikill', 'clutch', 'death', 'whiff', 'ability') else ('fail' if source.label == 'lowlight' else 'play')
     events.append((kind, s.action_time if s.action_time is not None else (source.start+source.end)/2))
+    for active, tag in ((s.clutch, 'clutch'), (s.multikill, 'multikill')):
+        if active:
+            events.append((tag, clip.source_start+(clip.peak-clip.start)*clip.speed))
     # Window descriptions can classify an existing anchor, never invent a kill time.
     description = source.caption.casefold()
     for pattern, tag in [(r'headshot', 'headshot'), (r'multi.kill|double kill|triple kill', 'multikill'),
@@ -61,6 +64,12 @@ def decorate_stacks(plan, sources):
                     surprises -= 1
                 else:
                     candidates = relevant or candidates
+                if group == 'vfx' and layer == 0:
+                    core = {'hitmarker', 'zoom_punch', 'flash_white', 'shake', 'freeze', 'deep_fry'}
+                    if plan.mode == 'mean' and sources[c.source_id].label == 'lowlight':
+                        core = {'text_bruh', 'text_fail', 'text_rip', 'text_lol', 'text_oof'}
+                    focused = [e for e in candidates if e['name'] in core]
+                    candidates = focused or candidates
                 if not candidates:
                     break
                 target = (.8 if plan.mode == 'mean' else .45) + rng.uniform(-.15,.15)*plan.chaos
@@ -72,7 +81,7 @@ def decorate_stacks(plan, sources):
                     chosen = candidates[max(range(len(weights)), key=lambda i: weights[i])]
                 anchors = [t for k,t in events if k in chosen['events']] or [c.peak]
                 anchor = anchors[layer % len(anchors)]
-                start = min(c.start+c.duration-.04, max(c.start, anchor+rng.uniform(-.12,.12)*plan.chaos))
+                start = min(c.start+c.duration-min(.04,c.duration/2), max(c.start, anchor+rng.uniform(-.12,.12)*plan.chaos))
                 duration = min(chosen['length'], c.start+c.duration-start)
                 common = dict(clip_id=c.id, name=chosen['name'], start=start, duration=duration)
                 if group == 'vfx':
