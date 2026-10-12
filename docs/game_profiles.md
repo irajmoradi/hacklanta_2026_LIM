@@ -39,7 +39,8 @@ HUDs can also be visible while spectating or watching a kill cam.
 
 The existing clip-finder rules informed the Valorant, OW2, and Deadlock state
 descriptions. Regions are conservative search areas, not verified pixel-perfect
-contracts for every game patch. No real gameplay footage was used for calibration.
+contracts for every game patch. FIX-5 calibrates the Valorant layout against the
+owner-provided demo VOD; other profiles retain synthetic-only calibration.
 
 ## Region and OCR contracts
 
@@ -77,9 +78,9 @@ must map these keys to its own fusion signals and normalize weights as appropria
 
 ## Offline detection and optional hooks
 
-`detect_game(path, sample_count=5, ocr=None, vlm_fallback=None, language='eng')`
+`detect_game(path, sample_count=16, ocr=None, vlm_fallback=None, language='eng')`
 uses ffprobe duration and samples midpoint positions of equal timeline bins, up to
-eight frames. ffmpeg emits PNGs downscaled to at most 1280 pixels wide. Each process
+32 frames. ffmpeg emits PNGs downscaled to at most 1280 pixels wide. Each process
 has a timeout (20 seconds for probe/OCR, 30 for decoding each frame). Sampling is
 bounded; this does not guarantee a distinctive banner is present.
 
@@ -92,11 +93,23 @@ counts raise errors. Nothing installs dependencies or downloads weights at runti
 The detector matches profile-specific phrases in expected regions, gives weak
 support to numeric health/score text, and adds bounded support for repeat evidence
 across frames. This is a simple OCR-derived HUD-layout heuristic, not a trained
-visual detector. Generic words or layout alone cannot identify a game. Confidence
+visual detector. Generic words alone cannot identify a game. Confidence
 is a heuristic ranking score, **not a calibrated probability**. Multiple games in
 one recording, edited overlays, menus, unknown languages, resized HUDs and very
 small text can produce generic or wrong results. Explicit user game selection
 should take precedence.
+
+FIX-5 adds an optional `detection_layout` profile field. Valorant's fallback
+requires a readable round timer and health number plus bright ability slots and
+minimap edges together in at least three frames (and at least 18% of decoded
+samples). Tight crops, upscaling and a low-chroma white-glyph mask recover HUD
+numbers lost by full-frame sparse OCR. Paired red/teal rows corroborate the
+upper-right kill-feed position; an empty feed is normal between eliminations.
+The fallback only resolves otherwise generic results. A single matching frame,
+blank screen, or partial HUD cannot activate it. Other profiles keep keyword
+detection. Injected OCR readers retain their original full-frame-only contract.
+The visual helper lazily uses the app's existing OpenCV/NumPy dependencies;
+Tesseract remains optional, and no weights or model downloads are introduced.
 
 Custom OCR adapters accept PNG `bytes` and return `Sequence[OCRToken]`, each with
 text, a normalized `Box`, and confidence in `[0,1]`. Preserve reading order for

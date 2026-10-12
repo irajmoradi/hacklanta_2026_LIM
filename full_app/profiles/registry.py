@@ -1,5 +1,5 @@
 """Profile schema, aspect-ratio transforms, and Unicode-aware OCR matching."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 import json
 import math
@@ -63,6 +63,7 @@ class GameProfile:
     lowlights: tuple[str, ...]
     signal_weights: dict[str, float]
     aspect_notes: str
+    detection_layout: dict = field(default_factory=dict)
 
     def prompt_fragment(self) -> str:
         return (Path(__file__).resolve().parents[1] / "prompts" / "games" / f"{self.name}.txt").read_text(encoding="utf-8")

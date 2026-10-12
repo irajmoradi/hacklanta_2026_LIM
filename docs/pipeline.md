@@ -439,3 +439,27 @@ legacy planning. Retries for scoring, whole-video analysis and planning are incl
 Oversized Vertex inline videos are encoded to bounded-bitrate analysis proxies
 inside the stock provider; original uploaded media is retained for rendering.
 Compression can reduce HUD detail. Review semantic accuracy before exporting.
+
+## FIX-5: shorter renders and stream lifetime
+
+A direct `/api/jobs/<id>/render` request with a smaller `max_duration` now
+invalidates the old plan before deciding which plan needs admission validation.
+For example, a cached 60-second plan accepts `{ "max_duration": 30 }` and
+replans locally from retained analysis within the new budget. The local planner
+trims selected ranges and accounts for playback speed; it may return less than
+the requested duration when evidence is scarce. This is a maximum, not a minimum.
+There is no need to call `/plan` first and no new provider call for this change.
+If the local planner cannot run, the request fails rather than using a paid
+fallback. A render that also changes analysis settings still reruns analysis.
+
+Explicit `edit_plan` payloads remain strict: an oversized or malformed submitted
+plan is rejected before job state changes. Reused and newly generated plans are
+also validated at the render boundary. The new regressions exercise stock local
+planning for 60-to-30, 60-to-20 and 60-to-1-second budgets.
+
+The SSE capacity/lifetime regression now supplies a clock scoped to the API
+module. Time advances only when the stream sleeps, so eight stream registrations
+cannot accidentally consume the 50 ms lifetime under suite load. It still
+checks capacity rejection, responsive health/status routes, heartbeats, deadline
+closure and slot release on explicit close. The real Gunicorn responsiveness
+test remains in place.
