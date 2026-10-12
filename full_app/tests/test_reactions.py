@@ -136,6 +136,6 @@ def test_short_segment_and_existing_output(pack, tmp_path):
     output = render_overlay(short, pack[0], peak_time=4)
     assert abs(float(probe(output)['format']['duration']) - .4) < .1
     prior = output.read_bytes()
-    with pytest.raises(RuntimeError):
+    with pytest.raises(FileExistsError):
         render_overlay(short, pack[0], output_path=output)
     assert output.read_bytes() == prior

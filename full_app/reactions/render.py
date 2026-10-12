@@ -34,6 +34,8 @@ def render_overlay(base_clip, reaction, preset='landscape', *, peak_time=None,
         f'{base_clip.stem}_reaction_{uuid.uuid4().hex[:10]}.mp4')
     if output in (base_clip, Path(reaction.file).resolve()):
         raise ValueError('Output must differ from both inputs')
+    if output.exists():
+        raise FileExistsError(f'Reaction output already exists: {output}')
     if not math.isfinite(duck_gain) or not 0 <= duck_gain <= 1:
         raise ValueError('duck_gain must be between 0 and 1')
     info, head_info = probe(base_clip), probe(reaction.file)
