@@ -1,4 +1,4 @@
-# Audio intelligence (EXT-11)
+# Audio analysis
 
 `audio_ai.analyze(video_path) -> AudioSignals` extracts audio evidence without
 changing the existing upload/analyze/plan/render flow. It accepts audio files too.
@@ -35,7 +35,7 @@ at the beginning; audio that ends before the video is treated as silence afterwa
 The first audio stream is selected by default; `audio_track` is a zero-based
 **audio** index, not an absolute container stream index.
 
-Each second uses EXT-01's documented Candidate envelope:
+Each second uses the candidate envelope:
 
 ```json
 {
@@ -49,9 +49,8 @@ Each second uses EXT-01's documented Candidate envelope:
 
 The example abbreviates the columns and events. `score` is the maximum of laugh,
 shout, cheer, gunfire, and lexical hype evidence; it is not a calibrated probability
-or a replacement for EXT-01 fusion. Prefixes avoid collisions with existing audio
-loudness signals. EXT-01's implementation is not present in this task's starting
-worktree, so this module has no dependency on its Python classes.
+or a replacement for signal fusion. Prefixes avoid collisions with existing audio
+loudness signals. This module does not depend on the candidate Python classes.
 
 For a fusion table on the same second grid, merge each row's `signals` into the
 corresponding fusion row. For a longer candidate, aggregate overlapping rows
