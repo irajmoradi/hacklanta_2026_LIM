@@ -26,6 +26,12 @@ class Renderer:
 
     def encode(self, arguments, output, directory):
         from services.ffmpeg_runner import HAS_NVENC
+        arguments = list(arguments)
+        if "-filter_complex" in arguments:
+            index = arguments.index("-filter_complex")
+            graph_path = directory / f"{output.stem}.filters"
+            graph_path.write_text(arguments[index + 1], encoding="utf-8")
+            arguments[index:index + 2] = ["-filter_complex_script", str(graph_path)]
         encoders = [["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "22"]] if HAS_NVENC else []
         encoders.append(["-c:v", "libx264", "-preset", "veryfast", "-crf", "22", "-threads", "2"])
         for encoder in encoders:
@@ -50,7 +56,7 @@ class Renderer:
         durations = [s.duration for s in plan.segments]
         # Quantize to whole frames, and use one overlap for the entire timeline.
         durations = [max(1, round(d * plan.fps)) / plan.fps for d in durations]
-        cards = [c.duration for c in (plan.intro, plan.outro) if c]
+        cards = [round(c.duration * plan.fps) / plan.fps for c in (plan.intro, plan.outro) if c]
         overlap = (max(1, round(min(plan.transition_duration, min(durations + cards) / 3) * plan.fps))
                    / plan.fps) if plan.transition != "cut" else 0
         if overlap and min(durations + cards) <= 2 * overlap:
@@ -63,7 +69,7 @@ class Renderer:
             if beats is None:
                 beats = detect_beats(music_path, sum(durations + cards))
             durations = snap_durations(durations, beats, plan.music.snap_tolerance, overlap,
-                                       plan.intro.duration - overlap if plan.intro else 0,
+                                       cards[0] - overlap if plan.intro else 0,
                                        max(1 / plan.fps, 2 * overlap + 1 / plan.fps))
             durations = [round(d * plan.fps) / plan.fps for d in durations]
         self.workspace.mkdir(parents=True, exist_ok=True)
@@ -85,7 +91,7 @@ class Renderer:
                 if not has_audio:
                     args += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
                 graph = reframe_graph(plan.size, plan.reframe, points)
-                vf, af = build_vf_chain(segment.video_effects, *plan.size, plan.fps)
+                vf, _ = build_vf_chain(segment.video_effects, *plan.size, plan.fps)
                 graph += f";[v]{vf + ',' if vf else ''}fps={plan.fps},setpts=PTS-STARTPTS[outv]"
                 audio_input = "0:a:0" if has_audio else "1:a:0"
                 graph += f";[{audio_input}]asetpts=PTS-STARTPTS,aresample=48000,apad[outa]"
@@ -121,10 +127,22 @@ class Renderer:
                      "-map", "[outv]", "-map", "[outa]", "-t", str(total)]
             joined = self.encode(args, directory / "joined.mp4", directory)
             if plan.music:
-                args = ["-i", str(joined), "-stream_loop", "-1", "-i", str(music_path),
-                        "-filter_complex", music_graph(plan.music.volume, plan.music.duck),
-                        "-map", "0:v:0", "-map", "[outa]", "-t", str(total)]
-                joined = self.encode(args, directory / "music.mp4", directory)
+                # Mix audio separately: old FFmpeg schedulers can stop amix early
+                # when an independently encoded video stream reaches output -t.
+                mixed = directory / "mixed.wav"
+                self.runner._run([
+                    "ffmpeg", "-v", "error", "-y", "-i", str(joined),
+                    "-stream_loop", "-1", "-i", str(music_path),
+                    "-filter_complex", music_graph(plan.music.volume, plan.music.duck),
+                    "-map", "[outa]", "-t", str(total), "-c:a", "pcm_s16le",
+                    "-ar", "48000", "-ac", "2", str(mixed)], "v2 music mix")
+                muxed = directory / "music.mp4"
+                self.runner._run([
+                    "ffmpeg", "-v", "error", "-y", "-i", str(joined), "-i", str(mixed),
+                    "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac",
+                    "-b:a", "192k", "-t", str(total), "-movflags", "+faststart", str(muxed)],
+                    "v2 music mux")
+                joined = muxed
             output = self.workspace / "final_edit.mp4"
             joined.replace(output)
             return output
@@ -133,7 +151,8 @@ class Renderer:
         duration = round(card.duration * plan.fps) / plan.fps
         width, height = plan.size
         ass = directory / f"{name}.ass"
-        write_ass(ass, [], plan.size, plan.preset, plan.captions, duration, card.text)
+        write_ass(ass, [], plan.size, plan.preset, plan.captions, duration, card.text,
+                  title_duration=duration)
         args = ["-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:r={plan.fps}",
                 "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
                 "-vf", f"ass={ass.name}", "-t", str(duration)]

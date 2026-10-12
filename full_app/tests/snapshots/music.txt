@@ -1,1 +1,1 @@
-[1:a]aresample=48000,volume=0.18[bed];[0:a]asplit=2[voice][key];[bed][key]sidechaincompress=threshold=0.025:ratio=8:attack=15:release=250[quiet];[voice][quiet]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[outa]
+[1:a]aresample=48000,aformat=channel_layouts=stereo,asetnsamples=n=1024,asetpts=N/SR/TB,volume=0.18[bed];[0:a]asplit=2[voice][key];[bed][key]sidechaincompress=threshold=0.025:ratio=8:attack=15:release=250[quiet];[voice][quiet]amix=inputs=2:duration=first:normalize=0,alimiter=limit=0.95[outa]

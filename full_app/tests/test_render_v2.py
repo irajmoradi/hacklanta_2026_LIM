@@ -169,3 +169,72 @@ def test_out_of_range_preserves_output(media, tmp_path):
     with pytest.raises(ValueError, match="past source"):
         run_plan(media[0], tmp_path, segments=[dict(source_start=0, source_end=100)])
     assert final.read_bytes() == b"previous output"
+
+
+def test_long_card_text(tmp_path):
+    path = tmp_path / "card.ass"
+    write_ass(path, [], (720, 720), "square", Captions(), 5, "Still here", title_duration=5)
+    assert "0:00:05.00,Title" in path.read_text()
+
+
+def test_dense_track_and_auto_beats(media, tmp_path):
+    points = [dict(time=i / 500, x=0.2 + i / 1000) for i in range(500)]
+    plan, info, _ = run_plan(media[0], tmp_path, preset="vertical",
+                            segments=[dict(source_start=0, source_end=1,
+                                           sam={"subject_track": points}),
+                                      dict(source_start=1, source_end=2)],
+                            music=dict(path=str(media[2]), beat_sync=True, duck=False))
+    assert_media(info, plan.size, 2)
+
+
+def test_nvenc_retry(tmp_path, monkeypatch):
+    from render.engine import Renderer
+    monkeypatch.setattr("services.ffmpeg_runner.HAS_NVENC", True)
+    calls = []
+    def execute(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 1 if "h264_nvenc" in command else 0,
+                                           stderr="No GPU")
+    monkeypatch.setattr("render.engine.subprocess.run", execute)
+    renderer = Renderer(FFmpegRunner(tmp_path, tmp_path / "source", 320, 180, 20))
+    renderer.encode([], tmp_path / "out.mp4", tmp_path)
+    assert len(calls) == 2
+    assert "h264_nvenc" in calls[0] and "libx264" in calls[1]
+
+
+def test_transcription_adapter(monkeypatch):
+    import sys
+    from types import SimpleNamespace
+    seen = {}
+    class FakeWhisper:
+        def __init__(self, name, **kwargs):
+            seen.update(kwargs)
+        def transcribe(self, path, **kwargs):
+            seen.update(kwargs)
+            return iter([SimpleNamespace(words=[SimpleNamespace(start=0.1, end=0.4, word=" Nice ")])]), None
+    monkeypatch.setitem(sys.modules, "faster_whisper", SimpleNamespace(WhisperModel=FakeWhisper))
+    assert transcribe("unused.wav", "tiny") == [Word(start=0.1, end=0.4, text="Nice")]
+    assert seen["local_files_only"] and seen["word_timestamps"] and seen["vad_filter"]
+
+
+def test_ducking_reduces_music(tmp_path):
+    from array import array
+    import math
+    import sys
+    # Key is a 2 kHz voice stand-in active in the middle second. Bed is 100 Hz.
+    voice = "aevalsrc=if(between(t\\,1\\,2)\\,0.6*sin(2*PI*2000*t)\\,0):s=48000:d=3"
+    bed = "sine=frequency=100:sample_rate=48000:duration=3"
+    levels = []
+    for duck in (False, True):
+        graph = music_graph(0.5, duck).replace("[outa]", "[mixed]")
+        graph += ";[mixed]lowpass=f=200:p=2,lowpass=f=200:p=2[outa]"
+        result = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", voice,
+                                 "-f", "lavfi", "-i", bed, "-filter_complex", graph,
+                                 "-map", "[outa]", "-ac", "1", "-f", "f32le", "-"],
+                                capture_output=True, check=True)
+        samples = array("f", result.stdout)
+        if sys.byteorder != "little":
+            samples.byteswap()
+        middle = samples[int(1.4 * 48000):int(1.8 * 48000)]
+        levels.append(math.sqrt(sum(s * s for s in middle) / len(middle)))
+    assert levels[1] < levels[0] * 0.6

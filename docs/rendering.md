@@ -51,7 +51,10 @@ Outputs are constant-frame-rate H.264, yuv420p, square pixels, AAC stereo at
 48 kHz, and MP4 faststart. FPS defaults to 30. The existing hardware probe selects
 NVENC; each v2 encode retries with libx264 if NVENC fails. Silent sources get
 silent stereo audio. Scratch files are isolated and cleaned on success/failure;
-the previous final output is replaced only after successful rendering.
+the previous final output is replaced only after successful rendering. Complex
+graphs are passed through temporary scripts to avoid Windows command-line
+length limits. Music is mixed separately and muxed with copied video to avoid
+early audio termination from multi-input scheduling on older FFmpeg releases.
 
 Source intervals are validated against ffprobe duration. Times must be finite,
 nonnegative, and ordered. Durations and overlaps are rounded to output frames.
@@ -97,7 +100,7 @@ It is a small configurable list, not comprehensive moderation.
 For optional automatic transcription, install `faster-whisper` separately:
 
 ```bash
-python -m pip install faster-whisper
+python -m pip install -r render/requirements-captions.txt
 ```
 
 Pre-cache a compatible model or give `captions.model` a local model directory,
@@ -162,5 +165,7 @@ Gemini calls. They check every preset/resolution, transitions, silent sources,
 reframe modes, combined captions/SFX/music/cards, schema failures, optional
 dependency fallback, legacy dispatch, and fixed filtergraph snapshots. ffprobe
 asserts resolution, codecs, pixel format, sample aspect ratio, duration and A/V
-agreement. CPU encoding is forced for reproducible CI; hardware NVENC and real
+agreement. Additional tests verify dense external tracks, mocked local Whisper,
+NVENC retry behavior, and measurable music attenuation under a synthetic voice
+signal. CPU encoding is forced for reproducible CI; hardware NVENC and real
 Whisper inference require an equipped host and are separate smoke checks.

@@ -10,12 +10,12 @@ def number(value):
 def track_expression(points, axis):
     if not points:
         return "0.5"
-    expression = number(getattr(points[-1], axis))
-    for a, b in reversed(list(zip(points, points[1:]))):
+    # A sum of clamped ramps avoids deeply nested if() expressions on long tracks.
+    terms = [number(getattr(points[0], axis))]
+    for a, b in zip(points, points[1:]):
         av, bv = getattr(a, axis), getattr(b, axis)
-        ramp = f"{number(av)}+({number(bv-av)})*clip((t-{number(a.time)})/{number(b.time-a.time)},0,1)"
-        expression = f"if(lt(t,{number(b.time)}),{ramp},{expression})"
-    return expression
+        terms.append(f"({number(bv-av)})*clip((t-{number(a.time)})/{number(b.time-a.time)},0,1)")
+    return "+".join(terms)
 
 
 def reframe_graph(size, mode="crosshair", points=()):
@@ -56,7 +56,7 @@ def join_graph(durations, transition, overlap, fps):
 
 
 def music_graph(volume, duck):
-    bed = f"[1:a]aresample=48000,volume={number(volume)}[bed]"
+    bed = f"[1:a]aresample=48000,aformat=channel_layouts=stereo,asetnsamples=n=1024,asetpts=N/SR/TB,volume={number(volume)}[bed]"
     if duck:
         return (bed + ";[0:a]asplit=2[voice][key];[bed][key]"
                 "sidechaincompress=threshold=0.025:ratio=8:attack=15:release=250[quiet];"
