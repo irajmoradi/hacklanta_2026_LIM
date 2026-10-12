@@ -43,15 +43,19 @@ def select_source(root, wait_minutes=40):
     """Check now, then every five minutes, for at most forty minutes."""
     start = time.monotonic()
     deadline = start + wait_minutes * 60
+    required = ("montage_landscape.mp4", "montage_vertical.mp4")
     while True:
         latest = root / "demo02"
-        if (latest / "montage_landscape.mp4").exists():
+        if all((latest / name).exists() for name in required):
             # Fail visibly if upstream delivered an incomplete MP4, never silently mislabel.
-            probe(latest / "montage_landscape.mp4")
+            for name in required:
+                probe(latest / name)
             return latest
         if time.monotonic() >= deadline:
+            if (latest / "montage_landscape.mp4").exists():
+                raise RuntimeError("DEMO-02 landscape arrived but vertical exports are incomplete; resume when ready")
             return root / "demo01"
-        print("DEMO-02 montage pending; next check in five minutes", flush=True)
+        print("DEMO-02 export set pending; next check in five minutes", flush=True)
         # Short sleeps allow graceful interruption; asset checks remain five minutes apart.
         next_check = min(time.monotonic() + 300, deadline)
         while time.monotonic() < next_check:
@@ -97,7 +101,7 @@ def captions(alignment, speaker, offset):
     return groups
 
 
-def timeline(cache):
+def timeline(cache, reactions=None):
     blocks, subs, cursor = [], [], 0.5
     for i, cache_id in enumerate(PLAYBACK):
         meta = read(cache / f"voice_{cache_id}.json")
@@ -111,6 +115,13 @@ def timeline(cache):
         blocks.append(block)
         subs.extend(captions(meta["alignment"], meta["speaker"], cursor))
         cursor += length + (0.55 if i in (1, 4, 6) else 0.35)
+        for reaction in reactions or []:
+            if reaction["after_block"] == i:
+                reaction["start"] = cursor
+                reaction["end"] = cursor + reaction["duration"]
+                subs.append({"speaker": reaction["speaker"], "text": reaction["text"],
+                             "start": cursor, "end": reaction["end"]})
+                cursor = reaction["end"] + .35
     total = max(60, math.ceil(cursor + 3))
     if total > 90:
         raise ValueError("Narration exceeds 90 seconds; no silent truncation")
@@ -185,6 +196,9 @@ class Footage:
         for key, path in self.paths.items():
             if not path.exists() and key == "ui":
                 path = fallback / "ui_raw.webm"
+                self.paths[key] = path
+            if not path.exists() and key == "mean":
+                path = fallback / "montage_mean_vertical.mp4"
                 self.paths[key] = path
             if not path.exists() and key in ("phone", "mean"):
                 raise FileNotFoundError(f"Required framed export missing: {path}")
@@ -290,6 +304,8 @@ def frame(t, beat, subs, data, footage, total):
             d.rounded_rectangle((x+115,y-8,x+227,y+10), radius=8, fill=BG)
             d.rounded_rectangle((x+115,y+ph+9,x+227,y+ph+14), radius=3, fill=FG)
             text(d, (1500, 825), "9:16 / SHORT", 24, PURPLE)
+            if key == "mean" and footage.paths[key].parent != footage.paths["land"].parent:
+                text(d, (1460, 868), "ROAST / DEMO-01", 20, MUTED)
         elif kind == "wipe":
             x,y,vw,vh = 666,180,1160,652
             old = footage.get("old", t, (vw,vh))
@@ -373,13 +389,18 @@ def write_srt(subs, target):
     target.write_text("\n\n".join(f"{i+1}\n{stamp(s['start'])} --> {stamp(s['end'])}\n{s['speaker']}: {s['text']}" for i,s in enumerate(subs))+"\n", encoding="utf-8")
 
 
-def make_audio(cache, out, blocks, total, source):
+def make_audio(cache, out, blocks, total, source, reactions=None):
     inputs, filters, labels = [], [], []
     for i, block in enumerate(blocks):
         inputs += ["-i", cache/f"voice_{block['cache_id']}.mp3"]
         filters.append(f"[{i}:a]aresample=48000,loudnorm=I=-16:TP=-2:LRA=8,asetpts=PTS-STARTPTS,adelay={round(block['start']*1000)}:all=1[v{i}]")
         labels.append(f"[v{i}]")
-    filters.append("".join(labels)+f"amix=inputs=8:normalize=0,apad,atrim=0:{total}[voice]")
+    for reaction in reactions or []:
+        i = len(labels)
+        inputs += ["-i", reaction["path"]]
+        filters.append(f"[{i}:a]aresample=48000,loudnorm=I=-16:TP=-2:LRA=8,atrim=0:{reaction['duration']},asetpts=PTS-STARTPTS,adelay={round(reaction['start']*1000)}:all=1[v{i}]")
+        labels.append(f"[v{i}]")
+    filters.append("".join(labels)+f"amix=inputs={len(labels)}:normalize=0,apad,atrim=0:{total}[voice]")
     run([*inputs,"-filter_complex", ";".join(filters), "-map","[voice]","-c:a","pcm_s16le",out/"narration.wav"])
     # Original synthesized beat bed: no downloaded or third-party music.
     rate=48000
@@ -401,31 +422,91 @@ def make_audio(cache, out, blocks, total, source):
          "-filter_complex",graph,"-map","[a]","-t",total,"-c:a","pcm_s16le",out/"mix.wav"])
 
 
-def render(source, cache, out, preview=False):
+def load_reactions(pack):
+    """Re-read the delivered pack before every render; require all four people."""
+    clips = read(pack / "pack.json")["clips"]
+    selected = []
+    for speaker, label, block in (("Iraj", "clutch", 1), ("Lance", "hype", 3),
+                                   ("Stefanny", "bruh", 4), ("Mario", "funny", 6)):
+        clip = next((c for c in clips if c["speaker"] == speaker and c["label"] == label), None)
+        if clip is None:
+            raise ValueError(f"Reaction pack pending: {speaker}/{label}")
+        path = (pack / clip["file"]).resolve()
+        if not path.is_relative_to(pack.resolve()):
+            raise ValueError("Reaction path escapes pack")
+        metadata = probe(path)
+        if not any(s["codec_type"] == "audio" for s in metadata["streams"]):
+            raise ValueError(f"Reaction has no audio: {speaker}")
+        selected.append({**clip, "path": str(path), "after_block": block,
+                         "duration": float(metadata["format"]["duration"])})
+    return selected
+
+
+def reaction_frame(image, t, reactions, captures):
+    reaction = next((r for r in reactions if r["start"] <= t < r["end"]), None)
+    if reaction is None:
+        return image
+    local = t - reaction["start"]
+    cap = captures[reaction["speaker"]]
+    cap.set(cv2.CAP_PROP_POS_MSEC, local * 1000)
+    ok, bgr = cap.read()
+    if not ok:
+        raise ValueError(f"Cannot decode reaction: {reaction['speaker']}")
+    # Corner PIP stays above the protected caption strip; damped bounce-in.
+    scale = min(1.08, max(.15, 1 - math.exp(-local*15)*math.cos(local*23)))
+    width, height = int(320*scale), int(350*scale)
+    x, y = 1830-width, 880-height
+    tile = Image.new("RGB", (width,height), "#202b37")
+    portrait = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+    portrait.thumbnail((width-12,height-55))
+    tile.paste(portrait, ((width-portrait.width)//2, 5))
+    td = ImageDraw.Draw(tile)
+    fit(td, (12,height-43), reaction["speaker"].upper(), 25, width-24, LIME)
+    image.paste(tile,(x,y))
+    d = ImageDraw.Draw(image)
+    d.rounded_rectangle((72,125,1190,211),radius=12,fill="#202b37")
+    text(d,(92,133),"TEAM REACTIONS",24,LIME)
+    text(d,(92,166),"Gaussian-splat talking head from one selfie",30)
+    return image
+
+
+def render(source, cache, out, preview=False, pack=Path("/srv/packs/team")):
     out.mkdir(parents=True,exist_ok=True)
     data=evidence(source)
-    blocks, subs, total=timeline(cache)
+    reactions=load_reactions(pack)
+    blocks, subs, total=timeline(cache, reactions)
     beats=beats_for(blocks,total)
     manifest={"evidence":data,"blocks":blocks,"captions":subs,"beats":beats,"duration":total,
-              "source":str(source),"synthesis":read(cache/"synthesis_ledger.json")}
+              "source":str(source),"synthesis":read(cache/"synthesis_ledger.json"), "reactions": reactions}
     (out/"manifest.json").write_text(json.dumps(manifest,indent=2))
     write_srt(subs,out/"captions.srt")
     footage=Footage(source,source.parent/"demo01")
     manifest["media"]={k:str(v) for k,v in footage.paths.items()}
     (out/"manifest.json").write_text(json.dumps(manifest,indent=2))
     sheets=[]
+    captures={r["speaker"]: cv2.VideoCapture(r["path"]) for r in reactions}
+    def picture(t, b):
+        if any(r["start"] <= t < r["end"] for r in reactions):
+            b = {**b, "kind": "monitor", "a": "THE TEAM.", "b": "THE REACTION."}
+        return reaction_frame(frame(t,b,subs,data,footage,total),t,reactions,captures)
     try:
         for b in beats:
-            still=frame((b["start"]+b["end"])/2,b,subs,data,footage,total)
+            still=picture((b["start"]+b["end"])/2,b)
             thumb=still.resize((480,270))
             sheets.append(thumb)
+        for reaction in reactions:
+            t=reaction["start"]+reaction["duration"]*.5
+            b=next(b for b in beats if b["start"]<=t<b["end"])
+            still=picture(t,b)
+            still.save(out/f"reaction_{reaction['speaker'].lower()}.jpg",quality=95)
+            sheets.append(still.resize((480,270)))
         sheet=Image.new("RGB",(1920,270*math.ceil(len(sheets)/4)),BG)
         for i,thumb in enumerate(sheets):
             sheet.paste(thumb,((i%4)*480,(i//4)*270))
         sheet.save(out/"contact_sheet.jpg",quality=90)
         if preview:
             return
-        make_audio(cache,out,blocks,total,source)
+        make_audio(cache,out,blocks,total,source,reactions)
         cmd=["ffmpeg","-hide_banner","-loglevel","error","-y","-f","rawvideo","-pix_fmt","rgb24","-s",f"{W}x{H}",
              "-r",str(FPS),"-i","pipe:0","-i",str(out/"mix.wav"),"-c:v","libx264","-threads","4","-preset","fast","-crf","19",
              "-pix_fmt","yuv420p","-c:a","aac","-b:a","160k","-movflags","+faststart","-t",str(total),str(out/"extension_demo_v3.mp4")]
@@ -434,7 +515,7 @@ def render(source, cache, out, preview=False):
             for f in range(total*FPS):
                 t=f/FPS
                 b=next(b for b in beats if b["start"]<=t<b["end"])
-                encoder.stdin.write(frame(t,b,subs,data,footage,total).tobytes())
+                encoder.stdin.write(picture(t,b).tobytes())
                 if f%300==0:
                     print(f"Rendered {t:.0f}/{total}s",flush=True)
         finally:
@@ -449,6 +530,8 @@ def render(source, cache, out, preview=False):
         run([*common,"-pass","2","-c:a","aac","-b:a","96k","-movflags","+faststart",out/"extension_demo_v3_discord.mp4"])
     finally:
         footage.close()
+        for cap in captures.values():
+            cap.release()
 
 
 def main():
@@ -457,11 +540,12 @@ def main():
     p.add_argument("--root",type=Path,default=Path("/srv/demo_out"))
     p.add_argument("--wait-minutes",type=float,default=40)
     p.add_argument("--preview",action="store_true")
+    p.add_argument("--pack",type=Path,default=Path("/srv/packs/team"))
     p.add_argument("--out",type=Path,default=HERE/"out")
     args=p.parse_args()
     source=args.source or select_source(args.root,args.wait_minutes)
     print("Using",source,flush=True)
-    render(source,HERE/"cache",args.out,args.preview)
+    render(source,HERE/"cache",args.out,args.preview,args.pack)
 
 
 if __name__ == "__main__":

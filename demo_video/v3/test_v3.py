@@ -100,9 +100,17 @@ def test_source_selection_waits_in_five_minute_checks(tmp_path, monkeypatch):
     assert r.select_source(tmp_path) == tmp_path / "demo01"
     assert now[0] == 2400
     (tmp_path / "demo02").mkdir()
-    (tmp_path / "demo02/montage_landscape.mp4").touch()
+    for name in ("montage_landscape.mp4", "montage_vertical.mp4", "montage_mean_vertical.mp4"):
+        (tmp_path / "demo02" / name).touch()
     monkeypatch.setattr(r, "probe", lambda path: {})
     assert r.select_source(tmp_path) == tmp_path / "demo02"
+
+
+def test_partial_demo02_is_not_silently_replaced(tmp_path):
+    (tmp_path / "demo02").mkdir()
+    (tmp_path / "demo02/montage_landscape.mp4").touch()
+    with pytest.raises(RuntimeError, match="vertical exports are incomplete"):
+        r.select_source(tmp_path, wait_minutes=0)
 
 
 def test_synthetic_media_timeline_frames_and_mix(tmp_path):
@@ -141,3 +149,28 @@ def test_synthetic_media_timeline_frames_and_mix(tmp_path):
     assert abs(r.duration(tmp_path / "mix.wav") - total) < .1
     r.write_srt(subs, tmp_path / "captions.srt")
     assert "Mario:" in (tmp_path / "captions.srt").read_text()
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    clips = []
+    for speaker, label in (("Iraj", "clutch"), ("Lance", "hype"), ("Stefanny", "bruh"), ("Mario", "funny")):
+        name = speaker + ".mp4"
+        (pack / name).write_bytes((source / "montage_landscape.mp4").read_bytes())
+        clips.append({"speaker": speaker, "label": label, "file": name, "text": "Synthetic reaction!"})
+    (pack / "pack.json").write_text(json.dumps({"clips": clips}))
+    reactions = r.load_reactions(pack)
+    blocks, subs, total = r.timeline(cache, reactions)
+    assert 60 <= total <= 90
+    assert all(all(x["end"] <= b["start"] or x["start"] >= b["end"] for b in blocks) for x in reactions)
+    caps = {x["speaker"]: r.cv2.VideoCapture(x["path"]) for x in reactions}
+    try:
+        for x in reactions:
+            image = r.Image.new("RGB", (1920,1080))
+            assert r.reaction_frame(image, x["start"]+.3, reactions, caps).getbbox()
+    finally:
+        for cap in caps.values():
+            cap.release()
+    r.make_audio(cache, tmp_path, blocks, total, source, reactions)
+    assert abs(r.duration(tmp_path / "mix.wav") - total) < .1
+    (pack / "pack.json").write_text(json.dumps({"clips": clips[:-1]}))
+    with pytest.raises(ValueError, match="Mario"):
+        r.load_reactions(pack)

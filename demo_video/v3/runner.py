@@ -18,7 +18,8 @@ def main():
         bash = "C:/Program Files/Git/bin/bash.exe" if Path("C:/Program Files/Git/bin/bash.exe").exists() else "bash"
         result = subprocess.run([bash, "tools/remote_run.sh", args.command], cwd=ROOT)
     elif args.mode == "ssh":
-        result = subprocess.run(["ssh", "-i", key, f"root@{ip}", args.command])
+        result = subprocess.run(["ssh", "-i", key, f"root@{ip}", "bash", "-s"],
+                                input=(args.command + "\n").encode())
     else:
         dest = ROOT / "demo_video/v3/out"
         dest.mkdir(parents=True, exist_ok=True)
