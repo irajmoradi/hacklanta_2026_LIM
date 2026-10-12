@@ -7,12 +7,16 @@ services:
         INSTALL_OCR: ${INSTALL_OCR:-false}
         INSTALL_SAM2: ${INSTALL_SAM2:-false}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
+      LIM_API_TOKEN: ${LIM_API_TOKEN:-}
+      LIM_API_TOKENS: ${LIM_API_TOKENS:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite-preview}
       GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       GOOGLE_GENAI_USE_VERTEXAI: ${GOOGLE_GENAI_USE_VERTEXAI:-false}
+    mem_limit: 12g
+    pids_limit: 256
     volumes:
       - workspace:/app/full_app/workspace
     restart: unless-stopped

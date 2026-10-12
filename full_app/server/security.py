@@ -174,14 +174,8 @@ def install_api_security(app, *, token=None, limiter=None):
 
 
 def create_secure_app(config=None, pipeline=None):
-    """Runnable opt-in factory: flask --app server.security:create_secure_app run.
-
-    Uses existing routes without mutating the default factory. See security.md
-    for outstanding upload-handler integration and deployment restrictions.
-    """
+    """Compatibility alias for the default factory, which now installs auth itself."""
     from .api import create_app
     # Validate before the ordinary factory allocates workers/workspace locks.
     api_headers('https://localhost')
-    app = create_app(config, pipeline)
-    install_api_security(app)
-    return app
+    return create_app(config, pipeline)

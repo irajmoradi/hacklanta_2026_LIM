@@ -12,4 +12,4 @@ app = create_app()
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     # One process owns the durable queue; disable the development reloader.
-    app.run(port=8000, host="0.0.0.0", threaded=True, use_reloader=False)
+    app.run(port=8000, host="127.0.0.1", threaded=True, use_reloader=False)

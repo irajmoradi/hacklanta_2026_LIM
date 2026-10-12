@@ -17,9 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg libgomp1
 WORKDIR /app/full_app
 COPY full_app/requirements*.txt ./
 RUN for req in requirements*.txt; do pip install -r "$req"; done \
-    && pip install gunicorn \
+    && pip install gunicorn==23.0.0 \
     && if [ "$INSTALL_WHISPER" = "true" ]; then pip install faster-whisper; fi \
-    && if [ "$INSTALL_OCR" = "true" ]; then pip install pytesseract rapidocr-onnxruntime; fi \
+    && if [ "$INSTALL_OCR" = "true" ]; then pip install rapidocr-onnxruntime; fi \
     && if [ "$INSTALL_SAM2" = "true" ]; then SAM2_BUILD_CUDA=0 pip install sam2; fi
 COPY full_app/ ./
 # Existing Flask routes serve frontend/; replace its index and assets in the image.
@@ -29,6 +29,6 @@ RUN useradd --create-home --uid 10001 appuser \
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/info', timeout=4)"
-# One process preserves the legacy in-memory job store; threads permit status polling.
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "--timeout", "1800", "app:app"]
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4)"
+# One queue owner; at most eight SSE streams leave eight request threads available.
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "16", "--timeout", "1800", "app:app"]

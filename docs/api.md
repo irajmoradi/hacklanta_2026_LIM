@@ -1,7 +1,21 @@
 # Job API (EXT-03)
 
 Run `cd full_app && python app.py`; the API and simple frontend are on port 8000.
-This is a local, trusted-user service with no authentication or tenant isolation.
+The development server binds `127.0.0.1`. Without application tokens, only literal
+loopback peers can call the API; forwarded headers are not trusted. Configure
+`LIM_API_TOKEN` (one identity named `default`) or `LIM_API_TOKENS` (a JSON object
+mapping stable owner names to distinct tokens) for shared use. Tokens must have
+32?4096 visible ASCII characters and come from the runtime environment. Send
+`Authorization: Bearer <token>` on every API request except `/api/health`.
+Each job belongs to its uploader; other identities receive 404 on every job,
+media, SSE and action route, including legacy aliases. Existing ownerless jobs
+remain local-only. Provider keys do not authenticate application users.
+
+Compose publishes `127.0.0.1:8000:8000`. Container bridge peers are not loopback,
+so Compose clients must use an application token. The browser UI does not yet
+supply bearer headers for fetch/video/EventSource/download; use authenticated
+API clients or an authenticated proxy until frontend transport support lands.
+See [security.md](security.md) for deployment and resource limits.
 Deploy one process per workspace, with multiple request threads. An OS file lock
 rejects a second process sharing that workspace; do not use a Flask reloader,
 multiple Gunicorn workers, or preload the app before forking.
@@ -80,8 +94,9 @@ plan can render without analyzing or calling a provider. Plans require 1–500
 segments. There must be at least one selected clip for automatic planning.
 
 New render routes default to `landscape` (1920×1080); `vertical` is 1080×1920 and
-`square` is 1080×1080. The default renderer fits and pads to preserve source aspect
-ratio. `generate_thumbnails` defaults to false for the new API and true for the
+`square` is 1080×1080. The v2 renderer defaults to crosshair-centered reframing (cropping to the output
+aspect ratio); select `reframe: "blur"` in an explicit v2 plan for a fitted foreground.
+The legacy renderer fits and pads. `generate_thumbnails` defaults to false for the new API and true for the
 legacy render route, preserving the old checkbox behavior. Thumbnails make extra
 provider calls; disable them in offline tests. The legacy route retains source
 dimensions unless a preset is provided.
@@ -102,13 +117,13 @@ is atomically published to a fixed job path. Failed jobs keep completed
 checkpoints; resubmit the appropriate endpoint to retry. Cancelled jobs stay
 cancelled across restarts; explicitly resubmitting an endpoint resumes them.
 
-Cancellation is cooperative at stage boundaries: an already running provider or
+Injected-pipeline cancellation is cooperative at stage boundaries: an already running provider or
 FFmpeg operation can finish, but its result is discarded and no following stage
 starts. A cancelled render's new output is removed. Wait until the worker exits
 before retrying/deleting (otherwise 409). Sources and finished outputs remain
-until explicit deletion. Intermediate render files, split files and failed
+until deletion or inactive-job retention expiry. Intermediate render files, split files and failed
 uploads are cleaned; startup also removes abandoned upload directories and
-intermediate files owned by the backend. No automatic source expiry is enabled.
+intermediate files owned by the backend. Inactive jobs expire after seven days.
 
 ## Server-Sent Events
 
@@ -120,10 +135,10 @@ data: {"id":"...","status":"planning","stage":"plan","progress":0.33333333333333
 ```
 
 Events use database sequence IDs. Reconnect with `Last-Event-ID: 12` to receive
-only later events for that job. The stream sends heartbeat comments when idle
-and stays open at completed stages so the same connection can observe subsequent
-edits/renders. Disconnect it when leaving the UI. Deleting a job closes its stream.
-Reverse proxies should disable buffering and allow long-lived connections.
+only later events for that job. Active streams heartbeat once per second and
+close after 30 seconds; inactive and terminal streams close after replay. Reopen
+on actions and use snapshot polling while disconnected. Proxies should disable
+buffering; they must permit the bounded connection lifetime.
 
 ## Optional module contracts
 
@@ -133,19 +148,19 @@ Exceptions from an installed callable fail the stage with a sanitized error;
 they are not silently ignored. Modules must return JSON-serializable metadata
 and must not store credentials in the job.
 
-| Flag / option | Import contract |
+| Flag / option | Current application contract |
 | --- | --- |
-| `use_signals: true` | `signals.detect_candidates(source_path)` → candidate list, added to the analysis prompt |
-| `provider` other than `gemini` | `services.providers.get_provider(name, api_key=key)` → client implementing `upload_video`, `find_clips`, `plan_edit`; optional `generate_thumbnail` |
-| `captions: true` | `captions.apply(job=job, plan=plan, workspace=path)` → updated plan |
-| `reactions: true` | `reactions.apply(job=job, plan=plan, workspace=path)` → updated plan |
-| `sam: true` | `sam.apply(job=job, plan=plan, workspace=path)` → updated plan |
-| Environment `ENABLE_RENDER_HOOK=1` | `render.render_job(job=job, plan=plan, workspace=path)` → path to rendered MP4 |
+| `use_signals: true` | `signals.detect_candidates` proposes windows; optional VLM scoring contributes to ranking |
+| `provider: local` or `local_vlm` | `pipeline.providers.LocalClient`; planning still uses Gemini |
+| `captions: true` | v2 `render.captions` transcribes/renders clip-local words |
+| `reactions: true` | `REACTION_PACK`, `ReactionSelector`, `apply_reaction` |
+| `sam: true` / `sam_reframe: true` | `sam.render_effect` / `sam.subject_track` |
+| Default rendering | `render.engine.Renderer`, with legacy preparation when needed |
 
-Missing custom providers fall back to the default Gemini client and record a
-warning. Missing signals/effect hooks leave that feature inactive. No heavy ML
-dependencies are added to the base installation. Hook adapters may be needed when
-integrating other sprint branches with different function signatures.
+There is no installed `services.providers` factory. Unknown provider names still
+fall back to Gemini in the current pipeline; fixing that provider-resolution
+contract belongs to P1-09 outside this server task. Do not advertise a custom
+provider extension API. Heavy ML dependencies remain optional.
 
 ## Legacy compatibility and errors
 
@@ -171,3 +186,64 @@ Tests (Linux runner, synthetic media, no paid calls):
 ```bash
 tools/remote_run.sh "cd full_app && python -m pytest -q"
 ```
+
+
+## Admission, streaming and resource bounds (FIX-1)
+
+`edit_plan` accepts legacy `segments` (optional `render_version: 1`) or an explicit
+`render_version: 2` renderer plan. The boundary rejects unknown fields, invalid
+nested types/effects/SFX names/offsets, source overruns and excessive collections
+before the queue or checkpoints change. Per segment: at most 16 unique video
+effects, 32 sounds, 1000 words, 500 track points and 20 advanced FX. Titles and
+individual words are at most 200 characters. Legacy speed effects are validated
+through their prepared v2 metadata representation. Both schemas use at most 100
+segments. The separate planner `version`/`clips` schema is not an HTTP schema.
+
+The effective `max_duration` defaults to 180 seconds and accepts 1?3600. Admission
+accounts for speed effects, frame quantization and v2 card/transition duration;
+generated plans pass the same boundary before their checkpoint/render. Production
+also measures the final output (0.1-second codec tolerance) and rejects optional
+processing that exceeds the cap. Client music filesystem paths are rejected;
+`music: true` at the **request options** level uses the server's generator. There
+is no authorized music asset-upload/ID API yet.
+
+SSE drains replay then closes inactive/terminal jobs. Active streams send heartbeats
+every second and close after 30 seconds. At most eight streams are admitted;
+excess subscribers receive 429/Retry-After. Clients should reopen when actions
+start, resume using Last-Event-ID, and poll snapshots after disconnects. Events
+are limited to the newest 1000 per job, so clients must fetch a snapshot when
+resuming an old cursor. Docker uses one Gunicorn queue owner and 16 request
+threads; keep request threads strictly above the configured SSE limit.
+
+Uploads require Content-Length, reserve the full multipart length before parsing,
+and allow two concurrent uploads. All team recordings pass bounded probing,
+container signature, duration, pixel, FPS, pixel-rate and frame-count checks.
+JSON action bodies are limited to 2 MiB. Default limits (override through
+`LIM_<NAME>` integer environment variables or factory config):
+
+| Config name | Default |
+| --- | --- |
+| MAX_CONTENT_LENGTH | 2 GiB (`MAX_UPLOAD_BYTES` also supported) |
+| MAX_MEDIA_DURATION / MAX_MEDIA_FRAMES | 43200 seconds / 3000000 frames |
+| MAX_MEDIA_PIXELS / MAX_MEDIA_FPS / MAX_MEDIA_PIXEL_RATE | 3840?2160 / 120 / 3840?2160?60 |
+| MAX_JOBS / MAX_UPLOADS | 200 / 2 |
+| WORKSPACE_BYTES / OWNER_BYTES / JOB_BYTES | 20 / 10 / 4 GiB |
+| DISK_HEADROOM_BYTES | 512 MiB |
+| JOB_TTL_SECONDS / RETENTION_INTERVAL | 7 days / 60 seconds |
+| PROBE_TIMEOUT_SECONDS / PROBE_MEMORY_BYTES | 20 seconds / 1 GiB |
+| STAGE_TIMEOUT_SECONDS / STAGE_MEMORY_BYTES | 1800 seconds / 8 GiB |
+| SSE_MAX_SECONDS / SSE_MAX_SUBSCRIBERS / SSE_INTERVAL | 30 / 8 / 1 |
+
+Retention removes inactive jobs, artifacts and events; active workers are excluded.
+Production stages execute in isolated child process groups. Deadline, cancellation
+or monitored storage exhaustion kills the group, including FFmpeg descendants;
+scratch/partial published output is removed. Linux applies per-process address-space
+and per-file limits; Compose additionally caps aggregate memory at 12 GiB and PIDs
+at 256. Quota monitoring can overshoot between 0.2-second polls; provision a volume
+hard quota for strict aggregate storage guarantees. Windows lacks the Linux memory
+limits and its taskkill tree cleanup has not been verified on the Linux runner.
+Injected pipelines keep cooperative cancellation; `TESTING=True` preserves offline
+mocks in-process unless `ISOLATE_STAGES=True` is explicitly selected. Isolated
+progress reports contain only stage, timings and warnings; keys travel over stdin,
+never through the progress file or command line. A forced stop may prevent a
+provider's remote-file cleanup; configure provider-side retention separately.

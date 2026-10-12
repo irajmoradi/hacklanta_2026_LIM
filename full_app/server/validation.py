@@ -1,6 +1,24 @@
 """Validation shared by HTTP inputs and provider outputs."""
 import math
 
+from typing import Literal
+from pydantic import Field, model_validator
+from render.plan import RenderPlan, Segment
+
+class LegacySegment(Segment):
+    speed: float = Field(default=1, ge=.1, le=8)
+    transition_in: Literal['cut', 'none', 'fade_in', 'flash_white'] = 'cut'
+
+    # Legacy effects are prepared first; validate the converted metadata below.
+    @model_validator(mode='after')
+    def ordered(self):
+        return self
+
+class LegacyPlan(RenderPlan):
+    render_version: Literal[1] = 1
+    segments: list[LegacySegment] = Field(min_length=1, max_length=100)
+
+
 EXTENSION_FLAGS = {'profiles', 'audio_ai', 'planner', 'vjepa', 'social', 'ingest',
                    'fx', 'narration', 'privacy', 'multipov', 'music', 'perf'}
 
@@ -31,19 +49,74 @@ def clips_valid(clips, duration):
     return clips
 
 
-def plan_valid(plan, duration):
+def plan_valid(plan, duration, max_duration=3600):
+    """One legacy/v2 boundary for HTTP admission and generated plans.
+
+    Validate the exact v2 representation, or the legacy representation plus the
+    metadata that survives preparation. Preserve the caller's wire shape.
+    """
+    import copy
+    from models.effects import VIDEO_EFFECTS, SOUND_EFFECTS
+
     if isinstance(plan, list):
         plan = {'segments': plan}
-    if not isinstance(plan, dict) or not isinstance(plan.get('segments'), list) or not 1 <= len(plan['segments']) <= 500:
-        raise ValueError('plan must contain 1 to 500 segments')
-    for seg in plan['segments']:
-        if not isinstance(seg, dict):
-            raise ValueError('segments must be objects')
-        start = number(seg.get('source_start'), 'source_start', high=duration)
-        end = number(seg.get('source_end'), 'source_end', high=duration)
-        if end <= start:
-            raise ValueError('segment end must be after start')
-        number(seg.get('speed', 1), 'speed', .1, 8)
+    plan = copy.deepcopy(plan)
+    if not isinstance(plan, dict) or type(plan.get('render_version', 1)) is not int or plan.get('render_version', 1) not in (1, 2):
+        raise ValueError('render_version must be 1 or 2')
+    version = plan.get('render_version', 1)
+    # No client-controlled server filesystem reads. An asset API is not exposed.
+    if plan.get('music') is not None:
+        raise ValueError('HTTP music paths are unsupported; use the music option')
+    try:
+        parsed = (RenderPlan if version == 2 else LegacyPlan).model_validate(plan, strict=True)
+        if len(parsed.captions.profanity) > 100 or any(len(w) > 200 for w in parsed.captions.profanity):
+            raise ValueError('Too many or oversized caption terms')
+        if parsed.captions.model not in ('tiny', 'base', 'small'):
+            raise ValueError('Unsupported transcription model')
+        durations = []
+        for raw, seg in zip(plan['segments'], parsed.segments):
+            start = number(raw.get('source_start'), 'source_start', high=duration)
+            end = number(raw.get('source_end'), 'source_end', high=duration)
+            if end <= start:
+                raise ValueError('segment end must be after start')
+            for entry in seg.fx:
+                if set(entry) - {'name', 'start', 'end', 'params'}:
+                    raise ValueError('Unknown FX fields')
+                if any(isinstance(v, str) and len(v) > 200 for v in entry.get('params', {}).values()):
+                    raise ValueError('Oversized FX parameter')
+            effects = seg.video_effects
+            if len(effects) > 16 or len(set(effects)) != len(effects) or any(e not in VIDEO_EFFECTS for e in effects):
+                raise ValueError('Invalid or excessive video effects')
+            length = end - start
+            if version == 1:
+                length /= number(raw.get('speed', 1), 'speed', .1, 8)
+                length *= (2 if 'slow_motion' in effects else 1) * (.5 if 'speed_2x' in effects else 1)
+                converted = seg.model_dump(exclude={'speed', 'transition_in'})
+                converted['video_effects'] = [e for e in effects if e not in {'slow_motion', 'speed_2x', 'chromatic_aberration', 'fade_out'}]
+                Segment.model_validate(converted)
+            if len(seg.sound_effects) > 32 or len(seg.words) > 1000:
+                raise ValueError('Too many sounds or words')
+            for sound in seg.sound_effects:
+                if sound.sfx_key not in SOUND_EFFECTS or sound.offset_in_segment > length:
+                    raise ValueError('Invalid sound name or offset')
+            if any(w.end > length for w in seg.words) or seg.sam and any(p.time > length for p in seg.sam.subject_track):
+                raise ValueError('Clip-local text/track exceeds segment')
+            durations.append(max(1, round(length * parsed.fps)) / parsed.fps)
+        if version == 2:
+            durations += [round(c.duration * parsed.fps) / parsed.fps for c in (parsed.intro, parsed.outro) if c]
+            overlap = (max(1, round(min(parsed.transition_duration, min(durations) / 3) * parsed.fps)) / parsed.fps
+                       if parsed.transition != 'cut' else 0)
+            if overlap and min(durations) <= 2 * overlap:
+                raise ValueError('Clips too short for transition')
+        else:
+            # Legacy top-level cards/transitions are not consumed by its adapter.
+            if set(plan) - {'segments', 'render_version', 'resolution'}:
+                raise ValueError('Use render_version 2 for top-level render settings')
+            overlap = 0
+        if sum(durations) - overlap * (len(durations) - 1) > max_duration + 1e-6:
+            raise ValueError('Plan exceeds max_duration')
+    except (KeyError, TypeError, AttributeError) as exc:
+        raise ValueError('Malformed nested render plan') from exc
     return plan
 
 

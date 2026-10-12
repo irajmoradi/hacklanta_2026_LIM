@@ -47,6 +47,9 @@ class JobStore:
             db.execute('INSERT OR REPLACE INTO jobs VALUES (?, ?)', (job['id'], data))
             event = {k: job.get(k) for k in ('id', 'status', 'stage', 'progress', 'error', 'updated_at', 'pipeline_stage', 'timings')}
             db.execute('INSERT INTO events(job_id,data) VALUES (?,?)', (job['id'], json.dumps(event)))
+            db.execute('DELETE FROM events WHERE job_id=? AND seq NOT IN '
+                       '(SELECT seq FROM events WHERE job_id=? ORDER BY seq DESC LIMIT 1000)',
+                       (job['id'], job['id']))
         logging.getLogger('jobs').info(json.dumps(event))
 
     def events(self, job_id, after):

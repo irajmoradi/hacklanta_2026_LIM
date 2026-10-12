@@ -180,7 +180,8 @@ def test_sse_replay_and_heartbeat(setup, video):
     client.post('/api/jobs/' + job + '/cancel')
     response = client.get('/api/jobs/' + job + '/events', headers={'Last-Event-ID': seq}, buffered=False)
     assert 'cancelled' in next(response.response).decode()
-    assert 'heartbeat' in next(response.response).decode()
+    with pytest.raises(StopIteration):
+        next(response.response)  # Terminal streams release the request thread.
     response.close()
 
 
