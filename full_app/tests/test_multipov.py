@@ -137,3 +137,32 @@ def test_render_without_audio_with_manual_alignment(tmp_path):
     result = render_montage([path], [TeamCandidate(0, 1, (Angle(0, 0, 1, 1, "Silent"),))],
                             tmp_path / "result.mp4", offsets=[Alignment(0)], width=320, height=180)
     ffmpeg("-i", result, "-f", "null", "-")
+
+
+def test_split_replay_corrects_visual_event_timing(tmp_path):
+    videos, offsets = [], [Alignment(0), Alignment(-1, 1.01)]
+    for index, clock in enumerate(offsets):
+        path = tmp_path / f"clock{index}.mp4"
+        start, end = clock.to_local(20), clock.to_local(20.3)
+        ffmpeg("-f", "lavfi", "-i", "color=c=black:s=320x180:r=30:d=24",
+               "-vf", f"drawbox=color=white:t=fill:enable='between(t,{start},{end})'",
+               "-c:v", "libx264", "-threads", "2", path)
+        videos.append(path)
+    candidate = TeamCandidate(18, 22, (Angle(0, 18, 22, 1, "A"), Angle(1, 18, 22, 1, "B")))
+    output = render_montage(videos, [candidate], tmp_path / "timed.mp4", offsets=offsets,
+                            mode="split", width=640, height=360)
+    for timestamp, expected_white in (("1.8", False), ("2.15", True), ("2.5", False)):
+        frame = np.frombuffer(ffmpeg("-ss", timestamp, "-i", output, "-frames:v", "1", "-f", "rawvideo",
+                                    "-pix_fmt", "rgb24", "pipe:1"), dtype=np.uint8).reshape(360, 640, 3)
+        for x in (160, 480):
+            assert bool(np.all(frame[180, x] > 200)) == expected_white
+
+
+def test_unrelated_recordings_rejected(recordings, tmp_path):
+    path = tmp_path / "different_match.mp4"
+    ffmpeg("-f", "lavfi", "-i", "testsrc2=s=160x120:r=30:d=10", "-f", "lavfi", "-i",
+           "anoisesrc=r=8000:d=10:seed=999", "-af",
+           "aeval=val(0)*(0.1+abs(sin(0.9*t*t))*abs(cos(8.3*t)))",
+           "-t", "10", "-c:v", "libx264", "-threads", "2", "-c:a", "aac", "-ac", "1", path)
+    with pytest.raises(SyncError):
+        sync([recordings[0], path])
