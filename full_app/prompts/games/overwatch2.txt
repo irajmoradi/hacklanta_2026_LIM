@@ -1,0 +1,17 @@
+GAME: Overwatch 2
+
+Use these game-specific rules instead of generic FPS-only HUD requirements.
+
+ALIVE: Player crosshair, hero health, ability cooldowns and direct aim control support alive state; ammo is hero dependent.
+
+DEAD: Top-left ELIMINATED BY or KILLED BY, top-right respawn timer, or death tint with other death evidence.
+
+SPECTATING: Bottom-center KILL CAM / CÂMERA DE ABATES, change-hero prompt, or following a teammate after death.
+
+HIGHLIGHTS: Team kills, ultimate combos, environmental eliminations, clutch point contests or payload pushes.
+
+LOWLIGHTS / ROASTS: Wasted ultimate, stagger death, missed saves, or abandoning a contested objective.
+
+ATTRIBUTION: Verify the recorder is alive and in control during the action. Reject uncertain POV, spectator footage and kill cams. Global announcements or feed text alone do not prove the player earned a kill. A lowlight may end at the recorder death; exclude the subsequent spectator interval. Confirm eliminations visually and retain enough lead-in to explain the outcome.
+
+REACTION HINTS: hype for confirmed multikills/clutches; awe for low-health outplays or steals; playful roast for clear mistakes; sympathy for unlucky failures. These are semantic hints, not required output enum values. Do not invent events or insult protected traits.

@@ -1,0 +1,146 @@
+{
+  "name": "valorant",
+  "display_name": "Valorant",
+  "regions": {
+    "kill_feed": [
+      0.7,
+      0.04,
+      1,
+      0.32,
+      "right"
+    ],
+    "death_banner": [
+      0.72,
+      0.3,
+      1,
+      0.82,
+      "right"
+    ],
+    "spectating": [
+      0,
+      0.7,
+      0.32,
+      1,
+      "left"
+    ],
+    "round_score": [
+      0.3,
+      0,
+      0.7,
+      0.16,
+      "center"
+    ],
+    "announcements": [
+      0.25,
+      0.15,
+      0.75,
+      0.4,
+      "center"
+    ],
+    "health": [
+      0.25,
+      0.86,
+      0.42,
+      1,
+      "center"
+    ]
+  },
+  "keywords": {
+    "kill": [
+      "kill",
+      "elimination",
+      "abate",
+      "eliminación"
+    ],
+    "death": [
+      "killed by",
+      "eliminated by",
+      "eliminado por",
+      "respawn",
+      "ressurgir",
+      "reaparecer",
+      "combat report"
+    ],
+    "assist": [
+      "assist",
+      "assistance",
+      "assistência",
+      "asistencia"
+    ],
+    "multikill": [
+      "double kill",
+      "triple kill",
+      "quadra kill",
+      "abate duplo",
+      "asesinato doble"
+    ],
+    "teamwipe": [
+      "team kill",
+      "ace",
+      "pentakill",
+      "ace",
+      "ás"
+    ],
+    "round_won": [
+      "victory",
+      "round won",
+      "vitória",
+      "victoria",
+      "clutch",
+      "thrifty",
+      "flawless"
+    ],
+    "round_lost": [
+      "defeat",
+      "round lost",
+      "derrota"
+    ],
+    "objective_taken": [
+      "objective captured",
+      "objetivo capturado",
+      "spike planted",
+      "spike defused",
+      "spike plantada",
+      "spike desarmada"
+    ]
+  },
+  "detection_keywords": {
+    "announcements": [
+      "ace",
+      "clutch",
+      "thrifty",
+      "flawless"
+    ],
+    "death_banner": [
+      "combat report",
+      "killed by"
+    ],
+    "round_score": [
+      "spike planted",
+      "spike defused"
+    ]
+  },
+  "signal_weights": {
+    "ocr": 1.3,
+    "announcements": 1.2,
+    "motion": 1,
+    "audio": 1,
+    "objective": 1.4
+  },
+  "aspect_notes": "Approximate 16:9 search regions, not pixel-exact UI contracts. Native 16:10/ultrawide retains height-relative HUD size with left/right/center anchors; stretched or customized HUDs need calibration. For pillarbox/letterbox footage use pixels(..., letterboxed=True) or crop to the content first. UI scale, patches and spectator overlays can shift regions.",
+  "alive_rules": [
+    "Crosshair, ability bar, positive health and ammo, and direct mouse-look control together support alive state."
+  ],
+  "dead_rules": [
+    "Right-side COMBAT REPORT or KILLED BY panel; a teammate first-person view does not prove the recorder is alive."
+  ],
+  "spectating_rules": [
+    "GHOST PLAYER label, teammate cycling panel, or another player name with a combat report."
+  ],
+  "highlights": [
+    "Clutches, aces, confirmed rapid multikills, spike plants/defuses under pressure."
+  ],
+  "lowlights": [
+    "Whiffed shots, failed utility, exposed positioning, or a failed defuse causing a loss."
+  ]
+}

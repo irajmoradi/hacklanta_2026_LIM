@@ -1,0 +1,121 @@
+{
+  "name": "generic",
+  "display_name": "Generic",
+  "regions": {
+    "kill_feed": [
+      0.7,
+      0.04,
+      1,
+      0.32,
+      "right"
+    ],
+    "death_banner": [
+      0.25,
+      0.15,
+      0.75,
+      0.4,
+      "center"
+    ],
+    "spectating": [
+      0.25,
+      0.78,
+      0.75,
+      0.98,
+      "center"
+    ],
+    "round_score": [
+      0.3,
+      0,
+      0.7,
+      0.16,
+      "center"
+    ],
+    "announcements": [
+      0.25,
+      0.15,
+      0.75,
+      0.4,
+      "center"
+    ],
+    "health": [
+      0.02,
+      0.78,
+      0.3,
+      0.98,
+      "left"
+    ]
+  },
+  "keywords": {
+    "kill": [
+      "kill",
+      "elimination",
+      "abate",
+      "eliminación"
+    ],
+    "death": [
+      "killed by",
+      "eliminated by",
+      "eliminado por",
+      "respawn",
+      "ressurgir",
+      "reaparecer"
+    ],
+    "assist": [
+      "assist",
+      "assistance",
+      "assistência",
+      "asistencia"
+    ],
+    "multikill": [
+      "double kill",
+      "triple kill",
+      "quadra kill",
+      "abate duplo",
+      "asesinato doble"
+    ],
+    "teamwipe": [
+      "team kill",
+      "ace",
+      "pentakill"
+    ],
+    "round_won": [
+      "victory",
+      "round won",
+      "vitória",
+      "victoria"
+    ],
+    "round_lost": [
+      "defeat",
+      "round lost",
+      "derrota"
+    ],
+    "objective_taken": [
+      "objective captured",
+      "objetivo capturado"
+    ]
+  },
+  "detection_keywords": {},
+  "signal_weights": {
+    "ocr": 1,
+    "announcements": 1,
+    "motion": 1,
+    "audio": 1,
+    "objective": 1
+  },
+  "aspect_notes": "Approximate 16:9 search regions, not pixel-exact UI contracts. Native 16:10/ultrawide retains height-relative HUD size with left/right/center anchors; stretched or customized HUDs need calibration. For pillarbox/letterbox footage use pixels(..., letterboxed=True) or crop to the content first. UI scale, patches and spectator overlays can shift regions.",
+  "alive_rules": [
+    "Require a visible player health HUD and direct control appropriate to the game; never require a crosshair in top-down games."
+  ],
+  "dead_rules": [
+    "Death overlay, respawn timer, or an explicit personal death banner."
+  ],
+  "spectating_rules": [
+    "Spectator label, kill cam, replay, or camera following someone else."
+  ],
+  "highlights": [
+    "Confirmed player multikills, objective wins, and low-health outplays."
+  ],
+  "lowlights": [
+    "Avoidable deaths or failed abilities with visible consequences."
+  ]
+}

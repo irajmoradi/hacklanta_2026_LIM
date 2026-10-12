@@ -1,0 +1,17 @@
+GAME: Valorant
+
+Use these game-specific rules instead of generic FPS-only HUD requirements.
+
+ALIVE: Crosshair, ability bar, positive health and ammo, and direct mouse-look control together support alive state.
+
+DEAD: Right-side COMBAT REPORT or KILLED BY panel; a teammate first-person view does not prove the recorder is alive.
+
+SPECTATING: GHOST PLAYER label, teammate cycling panel, or another player name with a combat report.
+
+HIGHLIGHTS: Clutches, aces, confirmed rapid multikills, spike plants/defuses under pressure.
+
+LOWLIGHTS / ROASTS: Whiffed shots, failed utility, exposed positioning, or a failed defuse causing a loss.
+
+ATTRIBUTION: Verify the recorder is alive and in control during the action. Reject uncertain POV, spectator footage and kill cams. Global announcements or feed text alone do not prove the player earned a kill. A lowlight may end at the recorder death; exclude the subsequent spectator interval. Confirm eliminations visually and retain enough lead-in to explain the outcome.
+
+REACTION HINTS: hype for confirmed multikills/clutches; awe for low-health outplays or steals; playful roast for clear mistakes; sympathy for unlucky failures. These are semantic hints, not required output enum values. Do not invent events or insult protected traits.

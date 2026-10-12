@@ -1,0 +1,17 @@
+GAME: Deadlock
+
+Use these game-specific rules instead of generic FPS-only HUD requirements.
+
+ALIVE: Third-person hero control, positive health, active abilities and reticle support alive state.
+
+DEAD: Bottom-center Respawn in banner with Shop & Upgrade; right-side INCOMING DAMAGE (LAST DEATH) or Killing Blow; grayscale plus respawn evidence.
+
+SPECTATING: Camera following another hero after death; the grayed ability bar may remain visible.
+
+HIGHLIGHTS: Confirmed multikills, soul-denial outplays, urn delivery/steals, and decisive Patron or guardian fights.
+
+LOWLIGHTS / ROASTS: Lost urn, overextension, failed ability combo, or avoidable death losing souls/objectives.
+
+ATTRIBUTION: Verify the recorder is alive and in control during the action. Reject uncertain POV, spectator footage and kill cams. Global announcements or feed text alone do not prove the player earned a kill. A lowlight may end at the recorder death; exclude the subsequent spectator interval. Confirm eliminations visually and retain enough lead-in to explain the outcome.
+
+REACTION HINTS: hype for confirmed multikills/clutches; awe for low-health outplays or steals; playful roast for clear mistakes; sympathy for unlucky failures. These are semantic hints, not required output enum values. Do not invent events or insult protected traits.
