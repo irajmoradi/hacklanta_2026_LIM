@@ -3,6 +3,7 @@ import base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import subprocess
+import sys
 import threading
 import time
 
@@ -146,6 +147,22 @@ def test_render_duration_geometry_audio_and_decode(video, tmp_path, effect, vert
         # Freeze is inserted after kill frame: source .25 -> 1.0833 = .8333 s.
         assert np.sqrt(np.mean(audio[int(.95*48000):int(1.2*48000)]**2)) < .005
         assert np.sqrt(np.mean(audio[int(1.5*48000):int(1.7*48000)]**2)) > .02
+        original = cv2.VideoCapture(str(video))
+        rendered = cv2.VideoCapture(str(result))
+        try:
+            original.set(cv2.CAP_PROP_POS_FRAMES, 13)
+            ok_source, expected = original.read()
+            rendered.set(cv2.CAP_PROP_POS_FRAMES, 16)
+            ok_output, resumed = rendered.read()
+            assert ok_source and ok_output
+            assert np.abs(expected.astype(float)-resumed).mean() < 5
+            rendered.set(cv2.CAP_PROP_POS_FRAMES, 12)
+            ok_hold, held = rendered.read()
+            assert ok_hold
+            assert np.abs(held.astype(float)-expected).mean() > 5
+        finally:
+            original.release()
+            rendered.release()
 
 
 def test_silent_video_and_last_frame_freeze(video, tmp_path):
@@ -187,3 +204,31 @@ def test_atomic_output_on_encode_failure(video, tmp_path, monkeypatch):
         render_effect(video, output, 0, 1)
     assert output.read_bytes() == b"existing"
     assert list(tmp_path.iterdir()) == [output]
+
+
+def test_render_survives_remote_failure(video, tmp_path, endpoint):
+    url, state = endpoint
+    state["mode"] = "bad"
+    result = render_effect(video, tmp_path/"fallback.mp4", 0, 1,
+                           config=Config(backend="remote", url=url, timeout=2))
+    run("ffmpeg", "-v", "error", "-i", str(result), "-f", "null", "-")
+    assert len(state["calls"]) == 1
+
+
+def test_remote_total_budget(video, endpoint):
+    url, state = endpoint
+    state["mode"] = "slow"
+    started = time.monotonic()
+    clip = clip_masks(video, 0, 2, config=Config(backend="remote", url=url, timeout=5, budget=.8))
+    assert clip.degraded
+    assert time.monotonic()-started < 2
+    assert len(state["calls"]) <= 1
+
+
+def test_cli(video, tmp_path):
+    output = tmp_path/"cli.mp4"
+    run(sys.executable, "-m", "sam", str(video), str(output), "--end", "1",
+        "--effect", "background_blur", "--vertical")
+    metadata = json.loads(run("ffprobe", "-v", "error", "-show_streams", "-of", "json", str(output)))
+    assert metadata["streams"][0]["width"] == 720
+    assert metadata["streams"][0]["height"] == 1280

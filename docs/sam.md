@@ -145,3 +145,11 @@ decode all effects, verify duration/dimensions/audio (including silence insertio
 and check compositor pixels, silent input, final-frame freezes, and atomic output.
 Real SAM 3 quality and GPU SAM 2 inference require separately provisioned models;
 they are not established by these offline tests.
+
+EXT-07 validation on the Linux runner (2026-10-12):
+
+- `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_sam.py"`:
+  17 passed, exit 0 at the implementation milestone.
+- `tools/remote_run.sh "cd full_app && python -m pytest -q"`:
+  20 passed, exit 0 after adding CLI, post-freeze playback, total-budget, and
+  render-with-failed-provider coverage. No live API calls were made.
