@@ -27,3 +27,6 @@ keeping your planner/render edits to the fields listed below).
 4. Re-render the mean-vertical montage on runner 1 from the saved DEMO-02 analysis with the full-experience preset (at most 3 Gemini calls)
    into `/srv/demo_out/wire1/` + local `demo_video/wire1/out/` (gitignored, add .gitignore) and report what is visible in it.
 Full suite green on the runner. No new paid calls beyond the cap above.
+5. **Privacy blur off by default (owner request: "get rid of privacy blur"):** default `privacy=false` in the API, UI and every preset
+   (including the full-experience preset and the demo/re-render scripts); keep it as an explicit opt-in toggle in the UI settings (off).
+   Your re-render in step 4 must have no privacy blur.
