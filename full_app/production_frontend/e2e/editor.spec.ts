@@ -102,3 +102,31 @@ test("synthetic gameplay review works at laptop and mobile widths", async ({
   expect(apiRequests).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test("VOD demo exposes settings and share assets at mobile width", async ({ page }, info) => {
+  const apiRequests: string[] = [];
+  page.on("request", r => { if (new URL(r.url()).pathname.startsWith("/api/")) apiRequests.push(r.url()); });
+  await page.goto("/?mock=1");
+  await page.getByLabel("Footage source").selectOption("url");
+  await page.getByLabel("VOD URL", { exact: true }).fill("https://www.twitch.tv/videos/123");
+  await expect(page.getByRole("button", { name: "Import VOD" })).toBeDisabled();
+  await page.getByLabel("I own this VOD or have permission").check();
+  await page.getByRole("button", { name: "Import VOD" }).click();
+  await page.getByRole("checkbox", { name: /^AI narration/ }).check();
+  await page.getByLabel("Narration persona").selectOption("deadpan_roast");
+  await page.getByLabel("Music bed").selectOption("chill");
+  await page.getByRole("checkbox", { name: /^Share kit/ }).check();
+  await page.getByRole("button", { name: /Find my moments/ }).click();
+  await expect(page.getByText("Kill-feed", { exact: true })).toBeVisible();
+  await page.getByRole("combobox", { name: /^Style/ }).selectOption("cinematic");
+  await expect(page.getByRole("button", { name: /Render reel/ })).toBeDisabled();
+  await page.getByRole("button", { name: /Analyze again/ }).click();
+  await page.getByRole("button", { name: /Render reel/ }).click();
+  await expect(page.getByRole("button", { name: "Copy title 1" })).toBeVisible();
+  await expect.poll(() => page.getByAltText("Demo landscape cover").evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1280);
+  await page.getByRole("region", { name: "Share kit" }).screenshot({ path: info.outputPath("share-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("region", { name: "Share kit" }).screenshot({ path: info.outputPath("share-mobile.png") });
+  expect(apiRequests).toEqual([]);
+});

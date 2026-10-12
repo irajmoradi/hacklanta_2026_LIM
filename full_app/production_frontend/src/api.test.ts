@@ -59,6 +59,7 @@ describe("jobs API", () => {
     await api.render("abc", "vertical", options);
     expect(JSON.parse(fetcher.mock.calls[3][1].body)).toEqual({
       preset: "vertical",
+      captions: false, reactions: false, sam: false,
     });
     await api.render(
       "abc",

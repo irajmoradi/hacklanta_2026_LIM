@@ -1,7 +1,8 @@
 export * from "./legacyApi";
 import * as legacy from "./legacyApi";
+import { baseCapabilities, demoCapabilities, extensionDefaults, normalizeKit, signalChips, validateVod, type Capabilities, type ExtensionOptions, type ShareKit } from "./features";
 export type Preset = "landscape" | "vertical" | "square";
-export interface Options {
+export interface Options extends Partial<ExtensionOptions> {
   game: string;
   profile: string;
   mode: "nice" | "mean";
@@ -21,6 +22,7 @@ export interface ReviewClip {
   reaction: string;
   keep: boolean;
   thumbnail?: string;
+  why?: string[];
 }
 export interface Job {
   id: string;
@@ -35,6 +37,7 @@ export interface Job {
   error?: string;
   warnings?: string[];
   plan?: legacy.EditPlan;
+  share_kit?: ShareKit;
 }
 export type ApiMode = "jobs" | "mock" | "legacy";
 type Wire = Record<string, any>;
@@ -53,6 +56,7 @@ export function normalizeClip(c: Wire, i: number): ReviewClip {
     reaction: c.reaction_label ?? c.reaction ?? "None",
     keep: c.keep !== false,
     thumbnail: c.thumbnail_url ?? c.thumbnail,
+    why: signalChips(c),
   };
 }
 export function normalizeJob(raw: Wire): Job {
@@ -73,6 +77,7 @@ export function normalizeJob(raw: Wire): Job {
     error: typeof j.error === "string" ? j.error : j.error?.message,
     warnings: j.warnings ?? [],
     plan: j.plan ?? j.edit_plan ?? undefined,
+    share_kit: normalizeKit(j.share_kit),
   };
 }
 async function request(
@@ -110,6 +115,7 @@ export const demoClips: ReviewClip[] = [
     score: 96,
     reaction: "Clutch",
     keep: true,
+    why: ["Kill-feed", "Audio spike", "Gemini hype 9.6/10"],
   },
   {
     id: "whiff",
@@ -119,6 +125,7 @@ export const demoClips: ReviewClip[] = [
     score: 82,
     reaction: "Bruh",
     keep: true,
+    why: ["Laughter", "Chat spike", "Gemini hype 8.2/10"],
   },
   {
     id: "team",
@@ -132,7 +139,51 @@ export const demoClips: ReviewClip[] = [
 ];
 export class EditorApi {
   private cached?: Job;
+  capabilities: Capabilities = baseCapabilities;
   constructor(public mode: ApiMode) {}
+  async discover(): Promise<Capabilities> {
+    if (this.mode === "mock") return (this.capabilities = demoCapabilities);
+    if (this.mode === "legacy") return (this.capabilities = { ...baseCapabilities, options: [] });
+    const info = await request("/api/info");
+    const c = info.frontend_capabilities ?? {};
+    return (this.capabilities = {
+      options: [...baseCapabilities.options, ...(Array.isArray(c.options) ? c.options.filter((s: unknown) => typeof s === "string") : [])],
+      team_upload: c.team_upload === true, url_import: c.url_import === true,
+      music_upload: c.music_upload === true, chat_upload: c.chat_upload === true,
+    });
+  }
+  private extended(options: Options): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
+    for (const key of [...Object.keys(extensionDefaults), "game"])
+      if (this.capabilities.options.includes(key) && options[key as keyof Options] !== undefined)
+        result[key] = options[key as keyof Options];
+    return result;
+  }
+  async createTeam(players: { file: File; name: string }[]): Promise<Job> {
+    if (players.length < 2 || players.some(p => !p.name.trim()) || new Set(players.map(p => p.name.trim().toLowerCase())).size !== players.length)
+      throw new Error("Choose at least two recordings with unique player names.");
+    if (this.mode === "mock") return this.create(players[0].file);
+    if (!this.capabilities.team_upload) throw new Error("Team upload is unavailable on this backend.");
+    const form = new FormData();
+    players.forEach(p => form.append("videos", p.file));
+    form.append("players", JSON.stringify(players.map(p => p.name.trim())));
+    return (this.cached = normalizeJob(await request("/api/jobs/team", "POST", form)));
+  }
+  async importVod(url: string, ownsContent: boolean): Promise<Job> {
+    const validated = validateVod(url);
+    if (!ownsContent) throw new Error("Confirm that you own or have permission to use this VOD.");
+    if (this.mode === "mock") return this.create(new File([], "demo-vod.mp4"));
+    if (!this.capabilities.url_import) throw new Error("VOD import is unavailable on this backend.");
+    return (this.cached = normalizeJob(await request("/api/jobs/import", "POST", { url: validated, owns_content: true })));
+  }
+  async uploadAsset(id: string, kind: "music" | "chat", file: File): Promise<string> {
+    if (this.mode === "mock") return `demo-${kind}`;
+    if (!this.capabilities[`${kind}_upload`]) throw new Error(`${kind} upload is unavailable on this backend.`);
+    const form = new FormData(); form.append(kind, file);
+    const result = await request(`/api/jobs/${encodeURIComponent(id)}/assets/${kind}`, "POST", form);
+    if (typeof result.asset_id !== "string" || !result.asset_id) throw new Error("Upload did not return an asset ID.");
+    return result.asset_id;
+  }
   async create(file: File): Promise<Job> {
     if (this.mode === "mock")
       return (this.cached = {
@@ -187,9 +238,10 @@ export class EditorApi {
       };
       return;
     }
-    const { game, profile, ...flags } = options;
+    const { game, profile, mode, style, provider, use_signals, captions, reactions, sam } = options;
     await request(`/api/jobs/${encodeURIComponent(id)}/analyze`, "POST", {
-      ...flags,
+      mode, style, provider, use_signals, captions, reactions, sam,
+      ...this.extended(options),
       prompt: `Game: ${game}. Profile: ${profile}.`,
     });
   }
@@ -215,7 +267,14 @@ export class EditorApi {
     plan?: legacy.EditPlan,
   ): Promise<void> {
     if (this.mode === "mock") {
-      this.cached = { ...this.cached!, status: "done", progress: 100 };
+      this.cached = { ...this.cached!, status: "done", progress: 100,
+        share_kit: options.share_kit ? {
+          titles: ["One shot. Round saved.", "The squad came to play", "Our best moments"],
+          description: "Demo posting copy. A clutch, a whiff, and a team win. #gameplay",
+          chapters: "00:00 Round saved\n00:09 The crosshair had other plans\n00:16 Team win",
+          thumbnails: [{ url: "/demo-cover.svg", label: "Demo landscape cover" }], downloads: [],
+        } : undefined,
+      };
       return;
     }
     if (this.mode === "legacy") {
@@ -249,9 +308,12 @@ export class EditorApi {
     }
     await request(`/api/jobs/${encodeURIComponent(id)}/render`, "POST", {
       preset,
+      captions: options.captions, reactions: options.reactions, sam: options.sam,
+      ...this.extended(options),
       ...(reviewed
         ? {
             edit_plan: {
+              ...plan,
               segments: reviewed
                 .filter((c) => c.keep)
                 .map((c) => {

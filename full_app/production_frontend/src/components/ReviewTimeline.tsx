@@ -168,6 +168,10 @@ export function ClipEditor({
                 <span>{c.reaction}</span>
                 <span>{(c.end - c.start).toFixed(1)}s</span>
               </div>
+              <div className="why-clips" aria-label={`Why this clip ${i + 1}`}>
+                <small>Why this clip</small>
+                <div className="badges">{c.why?.length ? c.why.map(reason => <span key={reason}>{reason}</span>) : <small>No signal details supplied</small>}</div>
+              </div>
               <label>
                 Caption
                 <input

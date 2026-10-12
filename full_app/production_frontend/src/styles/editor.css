@@ -583,3 +583,25 @@ progress {
     font-size: 14px;
   }
 }
+
+.edit-settings { border-top: 1px solid #303649; margin: 18px 0; padding-top: 16px; }
+.edit-settings summary { cursor: pointer; font-weight: 700; margin-bottom: 16px; }
+.feature-toggles label { padding: 8px 0; border-bottom: 1px solid #252b3a; }
+.feature-toggles small, .edit-settings small, .source-inputs small { display: block; color: #a5aec3; font-weight: 400; margin-top: 4px; }
+.feature-toggles .unavailable { opacity: .65; }
+.source-name, .source-inputs small { overflow-wrap: anywhere; }
+.source-inputs input[type="file"], .edit-settings input[type="file"] { max-width: 100%; font-size: 12px; }
+.why-clips { margin: 10px 0; }
+.why-clips > small { display: block; margin-bottom: 5px; color: #b8c5a2; }
+.why-clips .badges { flex-wrap: wrap; }
+.share-kit { margin-top: 22px; }
+.cover-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 320px)); gap: 16px; }
+.cover-grid figure { margin: 0 0 16px; }
+.cover-grid img { width: 100%; max-height: 320px; object-fit: contain; border-radius: 8px; }
+.share-kit textarea { display: block; width: 100%; color: #edf0f8; background: #1a1e2b; border: 1px solid #363d52; border-radius: 7px; padding: 10px; margin: 8px 0; resize: vertical; }
+.share-kit a { color: #cbff70; }
+.copy-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; }
+.copy-row p { overflow-wrap: anywhere; min-width: 0; }
+.copy-row button { flex-shrink: 0; }
+.asset-downloads { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 16px; }
+@media (max-width: 600px) { .copy-row { align-items: start; flex-direction: column; } }
