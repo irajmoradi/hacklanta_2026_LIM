@@ -32,5 +32,7 @@ def enrich(job, plan):
                 labels = ('bruh', 'fail', 'funny', 'roast') if options.get('mode') == 'mean' else ('sick_kill', 'hype', 'clutch', 'wholesome')
                 label = labels[index % len(labels)]
             # One bounded event per selected clip, rather than a montage-wide cap.
-            segment['reactions'] = [dict(start=length*.65, duration=min(1., length*.35), label=label)]
+            reaction_duration = min(2.8, length*.65)
+            segment['reactions'] = [dict(start=min(length*.65, length-reaction_duration),
+                                         duration=reaction_duration, label=label)]
     return plan

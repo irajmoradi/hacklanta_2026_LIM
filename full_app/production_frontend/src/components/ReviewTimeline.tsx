@@ -24,6 +24,13 @@ export function Timeline({
         <h3>Interest timeline</h3>
         <span>Source - {duration.toFixed(1)}s</span>
       </div>
+      {job.plan && <details open><summary>Planned effects</summary><ul>
+        {job.plan.segments.map((segment, index) => <li key={index}>
+          Clip {index + 1}: {(Array.isArray(segment.timed_effects) ? segment.timed_effects : [])
+            .map((effect: {name: string}) => effect.name).join(', ') || 'No visual effects'}
+          {' · SFX: '}{segment.sound_effects?.map(sound => sound.sfx_key).join(', ') || 'None'}
+        </li>)}
+      </ul></details>}
       <svg
         viewBox="0 0 100 100"
         preserveAspectRatio="none"

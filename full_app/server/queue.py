@@ -66,7 +66,7 @@ class JobQueue:
             invalidate = None
             if changed & analysis_keys:
                 invalidate = 'analyze'
-            elif changed & {'mode', 'style', 'prompt', 'max_duration', 'planner', 'fx', 'editor_agent', 'cards', 'transitions'}:
+            elif changed & {'chaos', 'seed', 'mode', 'style', 'prompt', 'max_duration', 'planner', 'fx', 'editor_agent', 'cards', 'transitions'}:
                 invalidate = 'plan'
             elif changed:
                 invalidate = 'render'
@@ -85,7 +85,7 @@ class JobQueue:
                 self.invalidate(job, invalidate)
             if target != 'render' and 'analyze' not in job['completed'] and 'plan' in job['completed']:
                 self.invalidate(job, 'analyze')
-            if changed & {'mode', 'max_duration'} and invalidate != 'analyze' and job.get('clips'):
+            if changed & {'chaos', 'seed', 'mode', 'max_duration'} and invalidate != 'analyze' and job.get('clips'):
                 job['_local_replan'] = True
             job['options'].update(options)
             if job['options'].get('editor_agent'):
@@ -116,6 +116,7 @@ class JobQueue:
         if index <= 1:
             job['edit_plan'] = None
             job.pop('planner_plan', None)
+            job.pop('seed', None)
             job.pop('_custom_plan', None)
             for field in ('agent_versions', 'agent_result', 'agent_trace'):
                 job.pop(field, None)

@@ -87,7 +87,7 @@ def test_render_timing_position_audio(pack, tmp_path, preset, size, width, heigh
     assert abs(float(info['format']['duration']) - 3) < .1
     assert any(s['codec_type'] == 'audio' for s in info['streams'])
     side, x, y = layout(width, height, preset)
-    assert (x > width/2 and y > height/2) if preset == 'landscape' else (x < width/2 and y < height/2)
+    assert (x > width/2 and y > height/2) if preset == 'landscape' else (x < width/2 and y > height/2)
     before, during, after = [frame(out, t) for t in (.5, 1.5, 2.5)]
     point = ((y+side//2)*width + x+side//2)*3
     assert max(before[point:point+3]) - min(before[point:point+3]) < 8

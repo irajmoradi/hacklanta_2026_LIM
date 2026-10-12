@@ -25,6 +25,7 @@ export interface ReviewClip {
   why?: string[];
 }
 export interface Job {
+  seed?: number;
   id: string;
   status: string;
   duration: number;
@@ -107,6 +108,7 @@ export function normalizeJob(value: unknown): Job {
   const j = raw.job ? object(raw.job) : raw;
   return {
     id: String(j.id ?? j.job_id),
+    seed: typeof j.seed === 'number' ? j.seed : undefined,
     status: text(j.status) ?? "uploaded",
     duration: number(j.duration ?? object(j.meta).duration),
     progress:
@@ -324,6 +326,16 @@ export class EditorApi {
       })),
     });
   }
+  async reroll(id: string, options: Options, preset: Preset, previousSeed = 0): Promise<number> {
+    const random = crypto.getRandomValues(new Uint32Array(1))[0];
+    const seed = random === previousSeed ? (random + 1) >>> 0 : random;
+    if (this.mode !== 'jobs') throw new Error('Reroll requires the jobs API.');
+    await request(`/api/jobs/${encodeURIComponent(id)}/plan`, 'POST', {
+      chaos: options.chaos ?? (options.mode === 'mean' ? .6 : .35), seed, planner: true,
+      preset, mode: options.mode, style: options.style,
+    });
+    return seed;
+  }
   async render(
     id: string,
     preset: Preset,
@@ -375,6 +387,8 @@ export class EditorApi {
     // Changed automatic cards/joins need a fresh planner budget. Director plans
     // remain authoritative; ordinary reviewed clips were saved by the review flow.
     const refreshExperience =
+      (options.chaos !== undefined && options.chaos !== (plan?.chaos ?? .35)) ||
+      (options.seed !== undefined && options.seed !== (plan?.seed ?? 0)) ||
       (options.cards !== undefined && (Boolean(plan?.intro) !== options.cards || Boolean(plan?.outro) !== options.cards)) ||
       (options.transitions !== undefined && (options.transitions ? plan?.transition !== "varied" : plan?.transition === "varied"));
     await request(`/api/jobs/${encodeURIComponent(id)}/render`, "POST", {
