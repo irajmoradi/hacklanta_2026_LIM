@@ -1,6 +1,7 @@
 """Offline planner contract tests; no downloaded media or provider calls."""
 
 import random
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -9,6 +10,16 @@ from pydantic import ValidationError
 
 from models.effects import SOUND_EFFECTS, VIDEO_EFFECTS
 from planner import GeminiRefiner, RankedClip, RenderPlan, plan_edit
+
+
+def test_documented_quickstart():
+    document = (Path(__file__).resolve().parents[2] / "docs" / "planner.md").read_text(encoding="utf-8")
+    example = document.split("```python\n", 1)[1].split("```", 1)[0]
+    namespace = {}
+    exec(compile(example, "docs/planner.md quickstart", "exec"), namespace)
+    plan = namespace["plan"]
+    assert plan.duration == 14
+    assert [c.phase for c in plan.clips] == ["hook", "build_up", "climax"]
 
 
 def clip(i, *, score=None, label="highlight", kind=None, **signals):
@@ -84,6 +95,19 @@ def test_variety_includes_teaser_and_climax_even_with_no_alternatives():
     assert len(plan.clips) == 2
     assert plan.clips[-1].source_id == "9"
     assert any("variety" in note for note in plan.notes)
+
+
+def test_variety_selects_lower_ranked_alternatives_and_reconsiders_candidates():
+    inputs = [clip(i, kind="kill") for i in range(2, 10)] + [clip(1, kind="clutch")]
+    plan = plan_edit(inputs, target_length=20)
+    assert plan.duration == pytest.approx(20)
+    assert [c.source_id for c in plan.clips] == ["9", "1", "8", "9"]
+
+
+def test_mean_fallback_does_not_repeat_setup_source():
+    plan = plan_edit([clip(i) for i in range(8)], mode="mean", target_length=60)
+    ids = [c.source_id for c in plan.clips[1:]]
+    assert len(ids) == len(set(ids))
 
 
 def test_event_at_source_start_and_end_trims_stay_in_bounds():

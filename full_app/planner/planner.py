@@ -50,7 +50,6 @@ def _decorate(plan, sources):
             return dict(clip_id=c.id, start=start, duration=min(length, end - start))
 
         whole = window(c.start, c.duration)
-        impact = window(c.peak, 0.15)
         beat = window(c.peak, 1.5)
         if c.speed == 0.5:
             plan.effects.append(Effect(**whole, name="slow_motion"))
@@ -147,29 +146,43 @@ def plan_edit(
         climax_duration = min(_capacity(best, options), options.target_length - hook_duration)
         remaining = options.target_length - hook_duration - climax_duration
         selected = []
+
+        def ordered(items):
+            return sorted(items, key=lambda item: (item[1] != "setup", item[0].score, item[0].id))
+
+        def varied(items):
+            kinds = [_kind(best), *[_kind(item[0]) for item in ordered(items)], _kind(best)]
+            return not any(a == b == c for a, b, c in zip(kinds, kinds[1:], kinds[2:]))
+
         # Prefer high scores for selection, then play them in ascending order.
         candidates = sorted((c for c in preferred if c.id != best.id), key=lambda c: (-c.score, c.id))
         if mode == "mean":
             setups = sorted((c for c in eligible if c.label == "highlight" and c.id != best.id), key=lambda c: (-c.score, c.id))
-            if setups and remaining >= minimum:
-                setup = setups[0]
+            for setup in setups:
+                if remaining < minimum:
+                    break
                 duration = min(_capacity(setup, options), remaining, 3)
-                selected.append((setup, "setup", duration, _speed(setup, options)))
-                remaining -= duration
-        for c in candidates:
-            if remaining < minimum:
+                item = (setup, "setup", duration, _speed(setup, options))
+                if varied([item]):
+                    selected.append(item)
+                    remaining -= duration
+                    break
+        candidates = [c for c in candidates if c.id not in {item[0].id for item in selected}]
+        # Reconsider rejected candidates after a different kind creates space.
+        # This fills the budget with alternatives instead of discarding time
+        # already allocated to similar clips.
+        while remaining >= minimum:
+            for c in candidates:
+                duration = min(_capacity(c, options), remaining)
+                item = (c, "fail" if mode == "mean" else "highlight", duration, _speed(c, options))
+                if varied([*selected, item]):
+                    selected.append(item)
+                    remaining -= duration
+                    candidates.remove(c)
+                    break
+            else:
                 break
-            duration = min(_capacity(c, options), remaining)
-            selected.append((c, "fail" if mode == "mean" else "highlight", duration, _speed(c, options)))
-            remaining -= duration
-        selected.sort(key=lambda item: (item[1] != "setup", item[0].score, item[0].id))
-        for item in selected:
-            if len(schedule) >= 2 and _kind(schedule[-2][0]) == _kind(schedule[-1][0]) == _kind(item[0]):
-                continue
-            schedule.append(item)
-        # Climax is non-negotiable: discard an adjacent duplicate if necessary.
-        while len(schedule) >= 2 and _kind(schedule[-2][0]) == _kind(schedule[-1][0]) == _kind(best):
-            schedule.pop()
+        schedule.extend(ordered(selected))
         if mode == "nice" and len(schedule) > 1:
             c, _, duration, speed = schedule[1]
             schedule[1] = (c, "build_up", duration, speed)
