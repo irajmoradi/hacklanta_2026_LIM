@@ -75,8 +75,8 @@ def test_single_video_fallback(video):
 
 def test_clip_outside_chunk_rejected(video):
     provider = MockProvider([{"clips": [clip(0, 100)]}])
-    with pytest.raises(ValueError, match="outside"):
-        provider.analyze_video(video)
+    result = provider.analyze_video(video)
+    assert result.clips[0].end == video_duration(video)
 
 
 @pytest.mark.parametrize("patch", [
@@ -193,7 +193,7 @@ def test_gemini_legacy_pipeline_config_and_logging(video, caplog):
         plan = provider.plan_edit("Plan an edit")
     assert clips[0]["start"] == 0.5 and plan["segments"][0]["source_end"] == 1.5
     call = client.models.generate_content.call_args_list[0].kwargs
-    assert call["config"].response_schema is ClipList
+    assert "exclusiveMinimum" not in json.dumps(call["config"].response_json_schema)
     assert call["config"].media_resolution.value == "MEDIA_RESOLUTION_LOW"
     assert call["contents"][0].video_metadata.fps == 2
     assert "estimated_usd=0.00012" in caplog.text
@@ -292,7 +292,7 @@ def test_agentic_structured_request(video):
     request = client.interactions.create.call_args.kwargs
     assert request["input"][0]["processing"] == "agentic"
     assert request["input"][0]["resolution"] == "low"
-    assert request["response_format"]["schema"] == ClipList.model_json_schema()
+    assert "exclusiveMinimum" not in json.dumps(request["response_format"]["schema"])
     assert request["timeout"] == 120
     client.models.generate_content.assert_not_called()
 

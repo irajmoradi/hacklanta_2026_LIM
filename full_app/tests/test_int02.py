@@ -93,6 +93,10 @@ def test_new_planner_render_music_privacy_social_and_narration(media, tmp_path, 
     assert Path(state['output']).is_file()
     assert (tmp_path / 'share' / 'video.mp4').is_file()
     assert (tmp_path / 'share' / 'metadata.json').is_file()
+    assert isinstance(state['share_kit'], dict)
+    assert state['share_kit']['titles'] and state['share_kit']['metadata']['platforms']
+    assert state['share_kit']['covers'] == state['share_kit']['thumbnails']
+    assert all(row['url'].startswith('/api/jobs/') for row in state['share_kit']['downloads'])
     assert {'privacy', 'music', 'social', 'narration', 'render_v2'} <= state['timings'].keys()
     assert probe_video(state['output'])['duration'] <= 3.15
     assert state['source'] == str(media)

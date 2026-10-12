@@ -58,7 +58,7 @@ describe("jobs API", () => {
     });
     await api.render("abc", "vertical", options);
     expect(JSON.parse(fetcher.mock.calls[3][1].body)).toEqual({
-      preset: "vertical", style: "clean_edit",
+      preset: "vertical", mode: "nice", style: "clean_edit",
       captions: false, reactions: false, sam: false,
     });
     await api.render(
@@ -232,4 +232,34 @@ it("saves unit scores so review round trips cannot multiply scores", async () =>
   const candidates = normalizeJob({id: "a", candidates: [{score: 2}, {score: 8}]}).candidates;
   expect(candidates[1].score).toBeGreaterThan(candidates[0].score);
   expect(candidates[1].score).toBeLessThan(100);
+});
+
+
+it("translates discovered backend controls and normalizes real review payloads", async () => {
+  const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({frontend_capabilities: {
+    options: ["planner_v2", "privacy_blur", "share_kit", "game", "music"], team_upload: true,
+  }})});
+  vi.stubGlobal("fetch", fetcher);
+  const api = new EditorApi("jobs");
+  await api.discover();
+  await api.analyze("one", {...options, planner_v2: true, privacy_blur: true, share_kit: true, music: "off"});
+  const body = JSON.parse(fetcher.mock.calls[1][1].body);
+  expect(body).toMatchObject({planner: true, privacy: true, social: true, profiles: true, game: "auto", music: false});
+  expect(body).not.toHaveProperty("planner_v2");
+  const job = normalizeJob({id: "one", interest_curve: [{time: 0, score: 0}, {time: 1, score: 100}],
+    share_kit: {titles: ["Play"], description: "Gameplay", chapters: "00:00 Play", thumbnails: [{url: "/api/cover", label: "cover"}], downloads: [{url: "/api/video", label: "video"}]}});
+  expect(job.interest[1].score).toBe(100);
+  expect(job.share_kit?.downloads).toHaveLength(1);
+});
+
+
+it("does not send a stale reviewed plan when mode changes", async () => {
+  const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({id: "one"})});
+  vi.stubGlobal("fetch", fetcher);
+  const api = new EditorApi("jobs");
+  await api.analyze("one", options);
+  await api.render("one", "landscape", {...options, mode: "mean"}, demoClips, {segments: []});
+  const body = JSON.parse(fetcher.mock.calls[1][1].body);
+  expect(body.mode).toBe("mean");
+  expect(body).not.toHaveProperty("edit_plan");
 });

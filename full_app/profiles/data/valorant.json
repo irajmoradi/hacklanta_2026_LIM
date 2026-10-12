@@ -109,7 +109,12 @@
       "ace",
       "clutch",
       "thrifty",
-      "flawless"
+      "flawless",
+      "buy phase",
+      "match point",
+      "sudden death",
+      "spike planted",
+      "spike defused"
     ],
     "death_banner": [
       "combat report",
@@ -118,6 +123,9 @@
     "round_score": [
       "spike planted",
       "spike defused"
+    ],
+    "spectating": [
+      "ghost player"
     ]
   },
   "signal_weights": {

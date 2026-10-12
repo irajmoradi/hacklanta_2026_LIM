@@ -12,7 +12,7 @@ flowchart TD
   D --> E[Alive veto, ranking and duplicate suppression]
   E --> F[Optional deterministic planner or legacy Gemini planner]
   F --> G[Optional aligned team viewpoints]
-  G --> H[Default privacy sanitization before cuts and crops]
+  G --> H[Extract selected ranges and cache HUD privacy masks before crops]
   H --> I[Render: effects, captions, reactions, SAM and music]
   I --> J[Optional offline narration and share kit]
   J --> K[MP4 download and share artifacts]
@@ -25,7 +25,7 @@ Flags must be JSON booleans. Unknown fields are rejected.
 | Option | Default | Integration |
 | --- | --- | --- |
 | `profiles` | false | Local game detection; per-game OCR regions, alive/dead rules and prompt fragments |
-| `game` | auto | With profiles: auto, generic, valorant, overwatch2, deadlock, league_of_legends |
+| `game` | auto | Selecting game enables profiles: auto, generic, valorant, overwatch2, deadlock, league_of_legends |
 | `use_signals` | true | Scene, motion, audio-energy and optionally profile OCR candidates |
 | `window_scoring` | true | Provider verifies local candidates; false retains local evidence |
 | `audio_ai` | false | Offline audio event candidates enter the same scoring/veto/ranking path |
@@ -34,7 +34,7 @@ Flags must be JSON booleans. Unknown fields are rejected.
 | `vjepa` | false | Contributes only when `VJEPA_HEAD` names an existing trained head; missing extras/head contribute no scores |
 | `planner` | false | Deterministic narrative planning; unavailable, incompatible or empty plans fall back to the existing Gemini planner |
 | `fx` | false | The effect catalog selects timed zoom punches in deterministic plans; renderer composes validated timed registry requests |
-| `privacy` | **true** | Detect and blur player-name regions on source media before edits, reframing or team composition |
+| `privacy` | **true** | Blur selected source ranges in profile kill-feed, chat and party/voice regions before effects or framing; cache each range |
 | `privacy_options` | defaults | Privacy payload: game, OCR backend, own-name preservation, webcam, regions and manual timed boxes |
 | `multipov` | false | Align repeated multipart video uploads by audio, rank viewpoints using local evidence, compose selected primary-timeline intervals |
 | `team_mode` | best | best, split or pip; ambiguous synchronization warns and retains primary POV |
@@ -371,3 +371,71 @@ tools/remote_run.sh 'cd full_app/production_frontend && npm test -- --run && npm
 **25 passed**, TypeScript/Vite build passed, **exit 0**. Local
 `git diff --check` and Python `compileall` also returned **0**. All changed files
 remain within FIX-2 allowed paths. No full-suite green result is claimed.
+
+
+## FIX-4: real-footage behavior
+
+`GET /api/info` now returns `frontend_capabilities.options`, module availability,
+and route capabilities. The UI sends canonical `planner`, `privacy`, and `social`
+booleans; the API also accepts `planner_v2`, `privacy_blur`, and `share_kit` aliases,
+rejecting conflicting values. Game selection enables profiles. Team uploads use
+repeated `video` parts at `/api/jobs`. URL/music/chat upload routes remain
+unadvertised because this server has no corresponding routes. Music UI choices
+currently enable/disable the existing style-based offline bed.
+
+Automatic detection samples 16 frames across the match (configurable in the
+Python detector up to 32), combining regional OCR keywords and numeric HUD
+anchors. Confidence is heuristic, not a calibrated probability. Inconclusive
+footage stays generic, supported by both OCR and privacy. `GAME_DETECTION_VLM=1`
+opts into one budgeted Gemini fallback using at most three sampled frames.
+Signal OCR samples every two seconds independently of motion sampling; brief
+kill-feed events can still be missed.
+
+Status `interest_curve` contains one point per second of the actual fused local
+signal curve, rectified at zero and normalized by its positive peak to 0-100.
+It is not interpolated from candidate scores; a flat curve stays zero, and
+signals-disabled jobs expose an empty curve. `share_kit` is a structured object
+with metadata, posting titles/description, chapter text, covers/thumbnails and
+server-relative download URLs. The source preview remains the uploaded source.
+
+Privacy extracts each selected interval at source speed and 30 fps, then masks
+it before speed effects, reframing or team composition. The job-owned
+`privacy_cache/` key includes source identity (path/size/mtime), interval, game
+and all privacy options. Cached ranges survive render-option changes and are
+removed with the job. Source clocks and review metadata are restored after
+render. Source-relative manual masks are intersected and offset for each range.
+The pipeline defaults to `privacy_options.backend=none`; setting `auto`,
+`tesseract` or `rapidocr` explicitly opts into expensive name OCR. Default
+coverage is kill feed, chat and party/voice, not center-screen nameplates or
+scoreboards. Set explicit regions/manual masks for custom layouts. Region
+masking cannot preserve the uploader's name.
+
+Mode changes retain candidates, scores, clips and the interest curve and rerun
+only deterministic planning plus rendering. Analysis requests collect both
+highlights and lowlights. The UI avoids submitting an obsolete plan on a mode
+change. Missing local planning support causes an error rather than a paid
+fallback for mode-only replans.
+
+Gemini request schemas translate exclusive bounds to inclusive bounds accepted
+by google-genai. Original strict Pydantic response models remain authoritative;
+invalid individual clips are logged and dropped, negative starts clamped, and
+chunk/source ranges clamped or dropped before ranking. Invalid HTTP review edits
+still fail validation. Error status uses allowlisted actionable diagnoses for
+credentials, model availability, quota, schema, timeout and budget, without
+provider exception text or credentials.
+
+`MAX_GEMINI_CALLS_PER_JOB` defaults to **80** in production. Every generation
+attempt, including retries, thumbnails and optional game identification, reserves
+an atomic slot in `gemini-budget.sqlite3` inside the job before transport. The
+ledger survives isolated stages/restarts and is not reset by invalidation.
+The explicit live smoke launcher sets **3** (the user's task-run ceiling).
+`GEMINI_TOP_N` defaults to 30; window scoring selects the strongest candidates
+that fit the remaining budget after reserving whole-video/chunk analysis and
+legacy planning. Retries for scoring, whole-video analysis and planning are included conservatively in that selection.
+`GEMINI_SCORING_WORKERS` defaults to 3 (maximum 8), and
+`GEMINI_REQUEST_INTERVAL_SECONDS` defaults to 0.25 between request starts.
+`GEMINI_ATTEMPTS` overrides provider attempts; the live smoke sets 1.
+
+Oversized Vertex inline videos are encoded to bounded-bitrate analysis proxies
+inside the stock provider; original uploaded media is retained for rendering.
+Compression can reduce HUD detail. Review semantic accuracy before exporting.

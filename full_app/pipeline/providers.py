@@ -5,11 +5,12 @@ from services.gemini_client import GeminiVideoClient
 
 
 class LocalClient(OpenAICompatibleVLMProvider):
-    def __init__(self, api_key=None):
+    def __init__(self, api_key=None, budget=None):
         super().__init__(os.getenv('LOCAL_VLM_MODEL', 'local'),
                          os.getenv('LOCAL_VLM_URL', 'http://localhost:8000/v1'),
                          api_key=os.getenv('LOCAL_VLM_API_KEY'))
         self.planner_key = api_key
+        self.budget = budget
 
     def upload_video(self, path):
         return path
@@ -20,4 +21,6 @@ class LocalClient(OpenAICompatibleVLMProvider):
     def plan_edit(self, prompt):
         # Local analysis uses Gemini planning unless the local planner option is enabled.
         with GeminiVideoClient(api_key=self.planner_key) as planner:
+            if self.budget is not None:
+                planner.budget = self.budget
             return planner.plan_edit(prompt)

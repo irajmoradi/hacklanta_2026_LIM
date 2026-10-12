@@ -3,6 +3,7 @@ import random
 import subprocess
 from pathlib import Path
 from services.gemini_client import GeminiVideoClient
+from services.provider_errors import classify
 from services.ffmpeg_runner import FFmpegRunner
 gemini = None
 
@@ -112,7 +113,7 @@ def _analyze_segment(seg: dict, prompt_template: str, part_label: str, user_prom
             "clips": [],
             "start": seg["start"],
             "end": seg["end"],
-            "error": str(e),
+            "error": classify(e).code,
         }
 
 ATTITUDE_PROMPTS = {

@@ -39,6 +39,7 @@ export interface Job {
   plan?: legacy.EditPlan;
   share_kit?: ShareKit;
   planningStyle?: string;
+  planningMode?: string;
 }
 export type ApiMode = "jobs" | "mock" | "legacy";
 type Wire = Record<string, unknown>;
@@ -96,6 +97,7 @@ export function normalizeJob(value: unknown): Job {
     warnings: list(j.warnings).filter((v): v is string => typeof v === "string"),
     plan: editPlan(j.plan ?? j.edit_plan),
     share_kit: normalizeKit(j.share_kit),
+    planningMode: text(object(j.planning_settings).mode) ?? text(object(j.options).mode),
     planningStyle: text(object(j.planning_settings).style) ?? text(object(j.options).style),
   };
 }
@@ -159,6 +161,7 @@ export const demoClips: ReviewClip[] = [
 export class EditorApi {
   private cached?: Job;
   private planningStyles = new Map<string, string>();
+  private planningModes = new Map<string, string>();
   capabilities: Capabilities = baseCapabilities;
   constructor(public mode: ApiMode) {}
   async discover(): Promise<Capabilities> {
@@ -177,6 +180,12 @@ export class EditorApi {
     for (const key of [...Object.keys(extensionDefaults), "game"])
       if (this.capabilities.options.includes(key) && options[key as keyof Options] !== undefined)
         result[key] = options[key as keyof Options];
+    const aliases: Record<string, string> = {planner_v2: "planner", privacy_blur: "privacy", share_kit: "social"};
+    for (const [ui, api] of Object.entries(aliases)) {
+      if (ui in result) { result[api] = result[ui]; delete result[ui]; }
+    }
+    if ("game" in result) result.profiles = true;
+    if ("music" in result) result.music = result.music !== "off";
     return result;
   }
   async createTeam(players: { file: File; name: string }[]): Promise<Job> {
@@ -185,9 +194,9 @@ export class EditorApi {
     if (this.mode === "mock") return this.create(players[0].file);
     if (!this.capabilities.team_upload) throw new Error("Team upload is unavailable on this backend.");
     const form = new FormData();
-    players.forEach(p => form.append("videos", p.file));
+    players.forEach(p => form.append("video", p.file));
     form.append("players", JSON.stringify(players.map(p => p.name.trim())));
-    return (this.cached = normalizeJob(await request("/api/jobs/team", "POST", form)));
+    return (this.cached = normalizeJob(await request("/api/jobs", "POST", form)));
   }
   async importVod(url: string, ownsContent: boolean): Promise<Job> {
     const validated = validateVod(url);
@@ -229,6 +238,7 @@ export class EditorApi {
       return { ...this.cached!, ...(await legacy.fetchStatus(id)), id };
     const job = normalizeJob(await request(`/api/jobs/${encodeURIComponent(id)}`));
     if (job.planningStyle) this.planningStyles.set(id, job.planningStyle);
+    if (job.planningMode) this.planningModes.set(id, job.planningMode);
     return job;
   }
   async analyze(id: string, options: Options): Promise<void> {
@@ -261,6 +271,7 @@ export class EditorApi {
       return;
     }
     this.planningStyles.set(id, options.style);
+    this.planningModes.set(id, options.mode);
     const { game, profile, mode, style, provider, use_signals, captions, reactions, sam } = options;
     await request(`/api/jobs/${encodeURIComponent(id)}/analyze`, "POST", {
       mode, style, provider, use_signals, captions, reactions, sam,
@@ -332,10 +343,10 @@ export class EditorApi {
       return;
     }
     await request(`/api/jobs/${encodeURIComponent(id)}/render`, "POST", {
-      preset, style: options.style,
+      preset, mode: options.mode, style: options.style,
       captions: options.captions, reactions: options.reactions, sam: options.sam,
       ...this.extended(options),
-      ...(reviewed && (!this.planningStyles.has(id) || this.planningStyles.get(id) === options.style)
+      ...(reviewed && (!this.planningModes.has(id) || this.planningModes.get(id) === options.mode) && (!this.planningStyles.has(id) || this.planningStyles.get(id) === options.style)
         ? {
             edit_plan: {
               ...plan,

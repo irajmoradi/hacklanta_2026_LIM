@@ -64,11 +64,18 @@ class Pipeline:
 
     def client(self, job, key):
         from services.provider_config import validate_provider
+        from services.call_budget import CallBudget
         provider = validate_provider(job['options'].get('provider', 'gemini'))
+        budget = CallBudget(Path(job['dir']) / 'gemini-budget.sqlite3' if job.get('dir') else None)
         if provider in ('local', 'local_vlm'):
             from .providers import LocalClient
-            return LocalClient(api_key=key)
-        return GeminiVideoClient(api_key=key, model=os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview'))
+            return LocalClient(api_key=key, budget=budget)
+        client = GeminiVideoClient(api_key=key, model=os.getenv('GEMINI_MODEL', 'gemini-3.1-flash-lite-preview'))
+        client.budget = budget
+        client.auto_proxy = True
+        if os.getenv('GEMINI_ATTEMPTS'):
+            client.config = type(client.config).model_validate({**client.config.model_dump(), 'attempts': int(os.environ['GEMINI_ATTEMPTS'])})
+        return client
 
     def analyze(self, job, key):
         options = job['options']
@@ -77,14 +84,15 @@ class Pipeline:
         with self.stage(job, 'probe'):
             job['meta'] = probe_video(job['source'])
         from .extensions import analysis_inputs, extra_signals
-        source = analysis_inputs(self, job)
+        source = analysis_inputs(self, job, key)
         job['candidates'] = []
+        job['interest_curve'] = []
         with self.stage(job, 'signals'):
             if options.get('use_signals', True):
                 detect = self.hook('signals', 'detect_candidates', job)
                 if detect:
                     kwargs = dict(profile=job['game'], ocr=True) if options.get('profiles') else {}
-                    job['candidates'] = [candidate_dict(c) for c in detect(source, **kwargs)]
+                    job['candidates'] = [candidate_dict(c) for c in detect(source, curve_sink=lambda curve: job.update(interest_curve=curve), **kwargs)]
         extra_signals(self, job)
         client = self.client(job, key)
         if options.get('profiles'):
@@ -95,7 +103,24 @@ class Pipeline:
                 if options.get('window_scoring', True) and job['candidates']:
                     score = getattr(client, 'score_windows', None)
                     if callable(score):
-                        scored = [candidate_dict(c) for c in score(source, job['candidates'])]
+                        candidates = job['candidates']
+                        from services.gemini_client import GeminiProvider
+                        if isinstance(client, GeminiProvider):
+                            from services.video_understanding import chunk_ranges
+                            splits = options.get('splits', 1)
+                            length = job['meta']['duration'] / splits
+                            chunks = job.get('_chunks') or [dict(start=i*length, end=(i+1)*length) for i in range(splits)]
+                            reserve = sum(len(list(chunk_ranges(c['end']-c['start'], client.config.chunk_seconds,
+                                                               client.config.overlap_seconds))) for c in chunks)
+                            reserve += 0 if options.get('planner') else 1
+                            reserve *= client.config.attempts
+                            count = max(0, (client.budget.remaining - reserve) // client.config.attempts)
+                            candidates = sorted(candidates, key=lambda c: -c['score'])[:min(count, max(0, int(os.getenv('GEMINI_TOP_N', '30'))))]
+                        try:
+                            scored = [candidate_dict(c) for c in score(source, candidates)]
+                        except Exception as error:
+                            from services.provider_errors import classify
+                            raise classify(error) from None
                     else:
                         self.warn(job, 'Window scoring unavailable; using signal candidates')
             with self.stage(job, 'whole_video'):
@@ -113,7 +138,7 @@ class Pipeline:
         duration = job['meta']['duration']
         splits = options.get('splits', 1)
         template = (ROOT / 'prompts/clip_finder.txt').read_text(encoding='utf-8')
-        prompt = options.get('prompt', '') + ATTITUDE_PROMPTS[options.get('mode', 'nice')]
+        prompt = options.get('prompt', '') + '\nFind both highlights and lowlights for later nice or mean planning.'
         prompt += '\n' + job.get('profile_prompt', '')
         if job['candidates']:
             prompt += '\nCandidate windows (verify against video): ' + json.dumps(job['candidates'])
@@ -127,13 +152,16 @@ class Pipeline:
             for seg in segments:
                 result = _analyze_segment(seg, template, f"part {seg['index'] + 1} of {len(segments)}", prompt, client)
                 if 'error' in result:
-                    raise RuntimeError('Video analysis failed')
+                    from services.provider_errors import ProviderFailure
+                    raise ProviderFailure(result['error'])
                 clips.extend(_offset_clip_timestamps(result['clips'], seg['start']))
         finally:
             if splits > 1 and not job.get('_chunks'):
                 for seg in segments:
                     seg['path'].unlink(missing_ok=True)
         excluded = ('spectating', 'kill cam', 'killcam', 'respawn', 'death screen', 'combat report', 'incoming damage', 'camera follows')
+        from .ranking import bounded_clips
+        clips = bounded_clips(clips, duration)
         clips = [c for c in clips if not any(w in c.get('description', '').lower() for w in excluded)]
         clips.sort(key=lambda c: c['start_seconds'])
         return clips_valid(clips, duration)
@@ -141,14 +169,14 @@ class Pipeline:
     def plan(self, job, key):
         with self.stage(job, 'edit_plan'):
             job['edit_plan'] = self.plan_edit(job, key)
-            job['planning_settings'] = {k: job['options'].get(k) for k in ('style', 'planner', 'max_duration')}
+            job['planning_settings'] = {k: job['options'].get(k) for k in ('mode', 'style', 'planner', 'max_duration')}
 
     def plan_edit(self, job, key):
         """Selected/ranked clips in, validated plan out."""
         options = job['options']
         if not any(c.get('keep', True) for c in job['clips'] or []):
             raise ValueError('No selected clips to plan')
-        if options.get('planner'):
+        if options.get('planner') or job.get('_local_replan'):
             from .extensions import planner_plan
             try:
                 planned = planner_plan(self, job)
@@ -156,6 +184,8 @@ class Pipeline:
                     return plan_valid(planned, job['meta']['duration'])
             except (ImportError, ValueError):
                 self.warn(job, 'Optional planner unavailable or incompatible; using legacy planner')
+        if job.get('_local_replan'):
+            raise ValueError('Local planner unavailable; enable the planner module to change mode without paid calls')
         style = EDIT_STYLES[options.get('style', 'hype_montage')]
         prompt = (ROOT / 'prompts/editor.txt').read_text(encoding='utf-8').format(
             max_duration=options.get('max_duration', 180),
@@ -164,7 +194,11 @@ class Pipeline:
             edit_style=style['label'], style_instructions=style['instructions'], user_prompt=options.get('prompt', ''))
         client = self.client(job, key)
         try:
-            planned = plan_valid(client.plan_edit(prompt), job['meta']['duration'])
+            try:
+                planned = plan_valid(client.plan_edit(prompt), job['meta']['duration'])
+            except Exception as error:
+                from services.provider_errors import classify
+                raise classify(error) from None
             for segment in planned['segments']:
                 clip = next((c for c in job['clips'] if c.get('keep', True) and 'caption' in c
                              and c['start_seconds'] < segment['source_end']

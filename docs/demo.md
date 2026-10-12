@@ -278,3 +278,116 @@ docs/demo.md
 Branch: `ext/DEMO-01`. Milestones before the final verified handoff:
 `1fddaa7`, `d359922`, `56b30b1`, `2d42249`. The final handoff commit is reported
 in the task completion message and is the branch tip.
+
+
+## FIX-4 core replacement (October 12, 2026)
+
+The historical DEMO-01 results above remain unchanged. FIX-4 moves the following
+workarounds into the stock pipeline; `demo_video/live_smoke_server.py` is no
+longer needed for these behaviors:
+
+| Demo adapter | Core replacement |
+| --- | --- |
+| Generic-to-Valorant forced fallback | Generic mappings in signal OCR/privacy; 16-frame OCR and HUD detection, confidence, optional budgeted three-frame VLM fallback |
+| Capability and option translation | `/api/info` discovery, canonical frontend flags plus validated API aliases, game selection enables profiles |
+| Candidate-midpoint curve | Dense per-second fused-signal curve normalized to 0-100 |
+| Share-directory wire adapter | Structured metadata, posting copy, chapters, covers and download links |
+| Whole-source privacy workaround | Per-selected-range source-speed extraction and privacy cache before effects/crops; kill feed/chat/party masks by default |
+| Manual mode workaround | Mode changes preserve analysis and use local planning with no new generation calls |
+| SDK schema override | Inclusive request bounds with strict per-item response validation |
+| Manual timestamp filtering | Logged clamp/drop at chunk and source boundaries; malformed clips do not discard valid siblings |
+| Demo-only three-call wrapper | Persisted per-job attempt budget, configurable production default 80; explicit smoke default 3 |
+| Demo-only Vertex compression | Stock provider makes a size-bounded inline proxy when needed |
+
+The combined-response adapter is unnecessary for stock operation. With this
+run's three-call ceiling, two top-ranked windows and one full-video request fit
+without combining schemas. This does not assess every candidate. Editorial
+review, semantic accuracy checks, reaction-pack assets and demonstration video
+assembly remain distinct from these infrastructure fixes. Default privacy does
+not claim scoreboard/nameplate coverage or uploader-name preservation.
+
+Reproduce the explicit smoke only after syncing/testing, since rsync replaces
+the runner checkout:
+
+```powershell
+bash tools/remote_run.sh 'cd full_app && python -m pytest tests/test_fix4.py -q'
+python full_app/tests/launch_fix4_live.py
+```
+
+The launcher reads `GOOGLE_API_KEY` from the owner-specified dotenv at runtime
+and sends only that key plus nonsecret configuration over SSH stdin. It does
+not copy the dotenv, persist credentials or put credentials in process arguments.
+The runner launches the stock `create_app` with its normal isolated worker and
+serves real loopback HTTP requests. It trims the first 360 seconds with ffmpeg,
+uploads via multipart, analyzes with automatic profiles/signals/window scoring,
+then renders nice and mean 30-second targets with privacy and share kits.
+No demo adapters, provider mocks, pre-curated ranges or response replays are used.
+
+The user message's **at-most-three live calls** takes precedence over FIX-4.md's
+30-call smoke allowance. The launcher fixes retries to one and the per-job
+budget to three. `/srv/demo_out/fix4/job-id.txt` resumes the same job on restart;
+never remove its job ledger to obtain a fresh budget. Runtime media, status
+snapshots and results remain under `/srv/demo_out/fix4/`, outside the checkout.
+Both exports are fully decoded by ffmpeg, and the script asserts that rendering
+and the mode change do not increase the generation count.
+
+
+### FIX-4 measured stock-API smoke result
+
+`python docs/fix4_launch_live.py` exited **0** on October 12 (the launcher is now
+`full_app/tests/launch_fix4_live.py`; only its repository-root lookup changed). The input was exactly
+360.000 seconds; output evidence is also saved in `docs/fix4_smoke_results.json`.
+The normal API job was `139b8b0ac9a04cb5999a429eea01b54a`.
+
+- Auto profile: **valorant**, heuristic confidence **0.909**; no forced profile
+  or VLM identification fallback.
+- **14** local candidates, **2** Gemini window assessments, **13** retained clips,
+  and **360** dense fused-curve points.
+- Both assessed windows were vetoed as player-not-alive. Retained evidence was
+  **12 unscored signal clips and 1 whole-video clip**, all labeled good; the
+  three-call ceiling leaves their semantic quality incompletely verified.
+- Exactly **3 generation attempts**, all completed. Nice rendering, mean local
+  replanning and mean rendering added **zero** calls.
+- Nice and mean exports: **8.021333 seconds**, **1920x1080**, **30 fps**, H.264/AAC.
+  Both fully decoded with ffmpeg. Each share kit exposed **5** real downloads.
+- Both plans used the same source intervals (132.7-134.7 and 130.1-136.1), with a
+  different closing caption. No validated lowlights survived this run. This
+  demonstrates analysis reuse and a mode-specific local plan, not a distinct
+  verified roast selection. The 30-second target was underfilled by the existing
+  deterministic planner's eligible selection; the smoke did not force ranges.
+- One exported frame was visually inspected: the center gameplay remained
+  visible with region masks at top-left, top-right and lower-left. Central
+  teammate nameplates remain outside default coverage. This is a limited
+  region-mask check, not a privacy guarantee or full semantic review.
+
+| Stage | Seconds |
+| --- | ---: |
+| Game detection | 17.1420 |
+| Local signals | 93.0453 |
+| Two parallel window assessments | 13.4315 |
+| Whole-video analysis including inline proxy | 55.8527 |
+| Nice planning | 0.0247 |
+| Nice selected-range privacy | 18.8055 |
+| Nice render including privacy/share kit | 29.0768 |
+| Mean planning | 0.0253 |
+| Mean privacy with range-cache hits | 1.0485 |
+| Mean render including privacy/share kit | 11.5536 |
+
+Timings are nested; do not sum render totals with their child stages. Analysis
+keys retained in the mean snapshot are inherited, not repeated work. Media and
+raw status snapshots remain on the runner under `/srv/demo_out/fix4/`; no source
+footage, output videos, credentials or model weights are committed. The smoke
+server was shut down by its launcher after verification.
+
+
+Final FIX-4 regression verification on the Linux runner:
+
+```powershell
+bash tools/remote_run.sh 'cd full_app && python -m pytest -q > /tmp/fix4-pytest-final.log 2>&1; result=$?; tail -n 100 /tmp/fix4-pytest-final.log; exit $result'
+# Exit 0: 1009 passed, 21 skipped in 521.19 seconds.
+bash tools/remote_run.sh 'cd full_app/production_frontend && npm test && npm run build'
+# Exit 0: 27 Vitest tests, TypeScript check and production build passed.
+```
+
+See `docs/FIX-4-report.md` for the file inventory, earlier failed runs and fixes,
+configuration, reproduction instructions and remaining limitations.
