@@ -90,6 +90,15 @@ def test_render_timing_position_audio(pack, tmp_path, preset, size, width, heigh
     # Outside the circular mask, the original neutral background survives.
     point = (y*width + x)*3
     assert max(during[point:point+3]) - min(during[point:point+3]) < 12
+    # Inside the circular crop but outside the avatar: white has been keyed out.
+    point = ((y+side//2)*width + x+int(side*.94))*3
+    assert max(during[point:point+3]) < 100
+    # Pop-in and pop-out are visibly less opaque than the settled avatar.
+    center = ((y+side//2)*width + x+side//2)*3
+    settled = max(during[center:center+3]) - min(during[center:center+3])
+    for time in (1.04, 1.96):
+        transition = frame(out, time)[center:center+3]
+        assert max(transition) - min(transition) < settled * .8
     assert tone(out, 1.4, 220) < tone(out, .4, 220) * .4
     assert tone(out, 2.4, 220) > tone(out, .4, 220) * .8
     assert tone(out, 1.4, 880) > .04
@@ -117,3 +126,16 @@ def test_hook(pack, tmp_path):
                             selector, enabled=True)
     assert result.exists() and result != base
     assert apply_reaction(base, {}, ReactionSelector([]), enabled=True) == base
+
+
+def test_short_segment_and_existing_output(pack, tmp_path):
+    original = make_base(tmp_path / 'base.mp4')
+    short = tmp_path / 'short.mp4'
+    subprocess.run(['ffmpeg', '-v', 'error', '-i', str(original), '-t', '0.4',
+                    '-c:v', 'libx264', '-c:a', 'aac', str(short)], check=True)
+    output = render_overlay(short, pack[0], peak_time=4)
+    assert abs(float(probe(output)['format']['duration']) - .4) < .1
+    prior = output.read_bytes()
+    with pytest.raises(RuntimeError):
+        render_overlay(short, pack[0], output_path=output)
+    assert output.read_bytes() == prior
