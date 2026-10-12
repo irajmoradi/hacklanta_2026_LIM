@@ -125,8 +125,8 @@ python -m fx.contact_sheet --source /path/to/clip.mp4 --output /tmp/fx-gallery
 ```
 
 It creates a two-second synthetic test source when no input is supplied, renders
-one MP4 for every registry entry, extracts labeled 320×180 stills, and tiles a
-1280×540 `contact-sheet.png`. Inspect the MP4s to assess temporal effects; a still
+one MP4 for every registry entry, extracts 320×180 stills with separate label bands,
+and tiles a 1280×630 `contact-sheet.png`. Inspect the MP4s to assess temporal effects; a still
 cannot demonstrate speed, shake, or motion trails. Outputs stay in the requested
 directory and are not meant to be committed. Re-running replaces gallery outputs.
 
@@ -143,3 +143,27 @@ geometry and duration (including multiple speed settings and minterpolate), chec
 freeze hold/resume behavior, exercise composition and both other grade presets,
 reject invalid parameters, verify pure builders and JSON metadata, test optional
 RIFE success/fallback, and render the complete contact sheet. No paid calls occur.
+
+### EXT-18 validation record
+
+Linux runner commands executed from the worktree root:
+
+* `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_fx.py"`
+  — initial milestone: **34 passed**, exit **0**.
+* `tools/remote_run.sh "cd full_app && python -m pytest -q -m 'not live' && python -m fx.contact_sheet --output /tmp/lim-ext18-fx-gallery"`
+  — broader suite: **194 passed, 4 failed, 4 skipped, 1 deselected**, exit **1**.
+  The chained gallery command did not execute because pytest failed.
+  `eval/test_app_smoke.py::test_app_pipeline` expects the removed module-level
+  `app.WORKSPACE`; the three preset variants of
+  `tests/test_jobs.py::test_default_pipeline_mocked_gemini_and_real_render`
+  expect five warnings but receive four. These files and their production consumers
+  were not changed by EXT-18 and do not use the new FX package.
+* `tools/remote_run.sh "cd full_app && python -m fx.contact_sheet --output /tmp/lim-ext18-fx-gallery"`
+  — gallery generated, exit **0**. Visual review prompted moving labels below
+  previews so the name-tag effect is unobstructed.
+* `tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_fx.py && python -m fx.contact_sheet --output /tmp/lim-ext18-fx-gallery"`
+  — final FX suite: **44 passed**, revised gallery generated, exit **0**.
+
+The added boundary cases cover full-clip, start-of-clip, and end-of-clip freeze and
+speed windows. Invalid RIFE geometry is also checked. No live Gemini calls were
+made and no credentials were accessed.

@@ -23,7 +23,7 @@ def generate(output: Path, source: Path | None = None):
         # Sample the flash itself and the interior of every other effect's window.
         position = 0.53 if name == "impact_frame" else 0.8
         run(["ffmpeg", "-v", "error", "-y", "-ss", position, "-i", preview,
-             "-vf", f"scale=320:180,drawbox=y=150:w=iw:h=30:c=black@0.7:t=fill,drawtext=text='{name}':fontsize=17:fontcolor=white:x=8:y=158",
+             "-vf", f"scale=320:180,pad=320:210:0:0:black,drawtext=text='{name}':fontsize=17:fontcolor=white:x=8:y=186",
              "-frames:v", "1", "-threads", "1", tile])
         tiles.append(tile)
     sheet = output / "contact-sheet.png"

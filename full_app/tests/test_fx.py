@@ -116,9 +116,27 @@ def test_optional_rife_hook(fx_source, tmp_path):
     assert_video(path, 1.75)
 
 
+def test_invalid_rife_output_keeps_preview(fx_source, tmp_path):
+    def hook(source, target, fps):
+        run(["ffmpeg", "-v", "error", "-y", "-i", source, "-vf", "scale=80:60",
+             "-threads", "1", target])
+    with pytest.warns(RuntimeWarning, match="changed geometry"):
+        path = REGISTRY["speed_ramp"].preview(fx_source, tmp_path / "invalid.mp4", Timing(2), rife_hook=hook)
+    assert_video(path, 1.75)
+
+
+@pytest.mark.parametrize("name", ["impact_frame", "freeze_name_tag", "speed_ramp"])
+@pytest.mark.parametrize("window", [(0, 2), (1.5, 2), (0, 0.5)])
+def test_timeline_boundaries(name, window, fx_source, tmp_path):
+    timing = Timing(2, *window)
+    effect = REGISTRY[name]
+    expected = (2 - window[1] + window[0]) / 2 + (window[1] - window[0]) * 2 if name == "speed_ramp" else 2
+    assert_video(effect.preview(fx_source, tmp_path / "edge.mp4", timing), expected)
+
+
 def test_contact_sheet(tmp_path):
     from fx.contact_sheet import generate
     path = generate(tmp_path)
     stream = probe(path)["streams"][0]
-    assert (stream["width"], stream["height"]) == (1280, 540)
+    assert (stream["width"], stream["height"]) == (1280, 630)
     assert len(list(tmp_path.glob("*.mp4"))) == 13
