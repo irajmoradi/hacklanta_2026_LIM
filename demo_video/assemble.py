@@ -65,12 +65,14 @@ def main():
     analysis=json.loads((OUT/'analysis.json').read_text())
     land=json.loads((OUT/'landscape.json').read_text())
     calls=json.loads((OUT/'live_calls.json').read_text())
+    cold=json.loads((OUT/'cold_analysis_timings.json').read_text())
     counts={key:sum(c.get('signals',{}).get(key,0)>0 for c in analysis['candidates'])
             for key in sorted({k for c in analysis['candidates'] for k in c.get('signals',{})})}
     evidence={'source_seconds':analysis['meta']['duration'],'game':analysis.get('game'),
               'game_confidence':analysis.get('game_confidence'),'candidate_windows':len(analysis['candidates']),
               'gemini_scored_windows':len(analysis.get('window_scores',[])),
               'positive_signal_windows':counts,'analysis_timings':analysis['timings'],
+              'cold_analysis_timings':cold,
               'landscape_timings':land['timings'],'reserved_live_attempts':len(calls),
               'combined_full_match_and_window_request':True}
     (OUT/'evidence.json').write_text(json.dumps(evidence,indent=2))
@@ -99,11 +101,11 @@ def main():
         ui_parts.append(target)
     ui_manifest=EDIT/'ui_concat.txt';ui_manifest.write_text(''.join(f"file '{p}'\n" for p in ui_parts))
     run(['-f','concat','-safe','0','-i',str(ui_manifest),'-c','copy','-movflags','+faststart',str(OUT/'ui_walkthrough.mp4')])
-    t=analysis['timings']
+    t=cold
     parts.append(still('04_pipeline',card('pipeline','MEASURED ON THE LINUX RUNNER','What the pipeline observed.',
         [f"{len(analysis['candidates'])} candidate windows / {len(analysis.get('window_scores',[]))} scored window / {len(calls)} reserved attempts.",
          f"Signals: {t.get('signals',0):.1f}s   |   Combined Gemini pass: {t.get('window_scoring',0):.1f}s",
-         f"Local plan: {t.get('edit_plan',0):.1f}s   |   Landscape render: {land['timings'].get('render',0):.1f}s",
+         f"Local plan: {analysis['timings'].get('edit_plan',0):.1f}s   |   Landscape render: {land['timings'].get('render',0):.1f}s",
          'Positive signal windows: '+', '.join(f'{k} {v}' for k,v in counts.items())]),14))
     background=card('compare','BEFORE / AFTER','Same source. Two edits.',[],footer='OLD VERSION (LEFT)    /    EXTENSION + TEAM REACTIONS (RIGHT)')
     target=EDIT/'05_compare.mp4'
@@ -115,7 +117,7 @@ def main():
     for name,file,title,lines,duration in [
         ('06_short','montage_vertical.mp4','Ready for the vertical feed.',
          ['1080 x 1920 export','Real team reaction overlays','Source gameplay audio','Conservative HUD privacy blur'],22),
-        ('07_mean','montage_mean_vertical.mp4','Same plays. Mean mode.',
+        ('07_mean','montage_mean_vertical.mp4','Same source. Mean mode.',
          ['An alternate local story plan','Iraj + Stefanny roast reactions','No additional Gemini analysis','Review humor before sharing'],18)]:
         base=Image.open(card(name,name.split('_')[1],'',[]))
         draw=ImageDraw.Draw(base)
@@ -131,8 +133,9 @@ def main():
     parts.append(still('08_notes',card('notes','DEMO NOTES','Evidence, with limits.',
         ['Auto detection was inconclusive; the supplied Valorant label was used.',
          'Full-match Gemini input: a compressed 640px / 2fps proxy.',
-         'UI contract adapters and privacy caching live only in demo_video/.',
-         'The old/new comparison illustrates editing, not an accuracy benchmark.']),9))
+         'UI recording resumes real cached results after validation fixes.',
+         'Editor-reviewed clips. HUD masks cover selected regions.',
+         'The comparison illustrates editing, not an accuracy benchmark.']),12))
     parts.append(still('09_end',card('end','LIM / STUDIO','Make every play count.',
         ['Three raw montages + share kits + per-clip signal evidence.',
          'Reproduction steps, timings and pipeline issues: docs/demo.md']),8))

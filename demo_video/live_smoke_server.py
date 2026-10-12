@@ -4,6 +4,7 @@ No production files are modified. Launch only with launch_live.py. A persistent
 ledger caps SDK generation attempts across restarts; SDK/provider retries are off.
 """
 import hashlib
+import copy
 import json
 import logging
 import os
@@ -27,6 +28,11 @@ from flask import request, send_from_directory
 OUT = Path(os.getenv('DEMO_OUT', '/srv/demo_out/demo01'))
 OUT.mkdir(parents=True, exist_ok=True)
 BUDGET = Budget(OUT / 'live_calls.json')
+PRIVACY_REGIONS = {
+    'kill_feed': {'x': .64, 'y': .03, 'width': .36, 'height': .27},
+    'chat': {'x': 0., 'y': .55, 'width': .4, 'height': .4},
+    'party_voice': {'x': 0., 'y': 0., 'width': .25, 'height': .35},
+}
 
 
 class CombinedAssessment(BaseModel):
@@ -42,6 +48,24 @@ def compatible_schema(value):
         return {('minimum' if k == 'exclusiveMinimum' else k): compatible_schema(v)
                 for k, v in value.items()}
     return value
+
+
+def remap_selected(plan, clips):
+    """Map the selected source ranges onto a concatenated, source-speed reel."""
+    result = copy.deepcopy(plan)
+    mapped, ranges, cursor = [], [], 0.
+    for index, segment in enumerate(result['segments']):
+        start, end = segment['source_start'], segment['source_end']
+        ranges.append((start, end))
+        segment.update(source_start=cursor, source_end=cursor + end - start)
+        for clip in clips or []:
+            left, right = max(start, clip['start_seconds']), min(end, clip['end_seconds'])
+            if left < right:
+                mapped.append({**clip, 'id': f"{clip['id']}_{index}",
+                               'start_seconds': cursor + left - start,
+                               'end_seconds': cursor + right - start})
+        cursor += end - start
+    return result, mapped, ranges
 
 
 class DemoClient(GeminiVideoClient):
@@ -93,7 +117,12 @@ class DemoClient(GeminiVideoClient):
 
     def analyze_video(self, path, prompt=''):
         if self.combined is not None:
-            return self.combined.moments
+            from services.video_understanding import video_duration
+            duration = video_duration(path)
+            valid = [c for c in self.combined.moments.clips if c.end <= duration and c.start < duration]
+            rejected = [c.model_dump() for c in self.combined.moments.clips if c.end > duration or c.start >= duration]
+            (OUT / 'rejected_ranges.json').write_text(json.dumps(rejected, indent=2))
+            return ClipList(clips=valid)
         proxy = self.proxy(path)
         prompt += ('\nReturn 8 to 12 complete action beats distributed across the match, '
                    'including some mistakes for a roast edit. Prefer 6-10 second clips. '
@@ -102,6 +131,13 @@ class DemoClient(GeminiVideoClient):
 
 
 class DemoPipeline(Pipeline):
+    def render(self, job, key):
+        original_clips = job.get('clips')
+        try:
+            return super().render(job, key)
+        finally:
+            job['clips'] = original_clips
+
     def run_stage(self, stage, job, key, report):
         try:
             return super().run_stage(stage, job, key, report)
@@ -130,6 +166,14 @@ class DemoPipeline(Pipeline):
         if module == 'signals' and function == 'detect_candidates' and original:
             def signals(source, **kwargs):
                 import signals.detector as detector
+                manifest = OUT / 'local_candidates_source.json'
+                cache = OUT / 'local_candidates.json'
+                with Path(source).open('rb') as stream:
+                    digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+                if manifest.exists() and cache.exists() and json.loads(manifest.read_text())['sha256'] == digest:
+                    from signals import Candidate
+                    self.warn(job, 'DEMO-01 reuses real cached local signals after provider validation failure')
+                    return [Candidate(**c) for c in json.loads(cache.read_text())]
                 reader = detector.HUDReader
                 class BoundedOCR(reader):
                     def __init__(self, *args, **options):
@@ -145,23 +189,43 @@ class DemoPipeline(Pipeline):
                     result = original(source, **kwargs, sample_fps=2)
                     from dataclasses import asdict
                     (OUT / 'local_candidates.json').write_text(json.dumps([asdict(c) for c in result], indent=2))
+                    manifest.write_text(json.dumps({'sha256': digest}))
                     return result
                 finally:
                     detector.HUDReader = reader
             return signals
         if module == 'privacy' and function == 'sanitize' and original:
             def cached(source, output, payload):
-                # Exact source and options cache, shared only by this demo run.
+                # Extract reviewed ranges at source speed, then sanitize before
+                # effects/framing. Preserve source-relative API state on return.
+                remapped, clips, ranges = remap_selected(job['edit_plan'], job.get('clips'))
                 stat = Path(source).stat()
                 digest = hashlib.sha256(json.dumps([str(source), stat.st_size, stat.st_mtime_ns,
-                                                   payload], sort_keys=True).encode()).hexdigest()[:16]
+                                                   payload, ranges], sort_keys=True).encode()).hexdigest()[:16]
+                selected = OUT / ('selected_' + digest + '.mp4')
+                if not selected.exists():
+                    inputs, graph, joins = [], [], []
+                    for i, (start, end) in enumerate(ranges):
+                        inputs += ['-ss', str(start), '-t', str(end-start), '-i', str(source)]
+                        graph += [f'[{i}:v]fps=30,setpts=PTS-STARTPTS[v{i}]',
+                                  f'[{i}:a]asetpts=PTS-STARTPTS[a{i}]']
+                        joins.append(f'[v{i}][a{i}]')
+                    graph.append(''.join(joins) + f'concat=n={len(ranges)}:v=1:a=1[v][a]')
+                    subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', *inputs,
+                                    '-filter_complex_threads', '1', '-filter_complex', ';'.join(graph),
+                                    '-map', '[v]', '-map', '[a]', '-c:v', 'libx264', '-threads', '4',
+                                    '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p',
+                                    '-c:a', 'aac', str(selected)], check=True)
+                job['edit_plan'], job['clips'] = remapped, clips
+                (OUT / ('selection_' + digest + '.json')).write_text(json.dumps({'ranges': ranges, 'remapped': remapped}, indent=2))
                 cache = OUT / ('private_' + digest + '.mp4')
                 trackfile = cache.with_suffix('.json')
                 from privacy import BlurTrack
                 if cache.exists() and trackfile.exists():
                     track = BlurTrack.model_validate_json(trackfile.read_text())
                 else:
-                    _, track = original(source, cache, payload)
+                    cache.unlink(missing_ok=True)  # This exact generated cache may be incomplete after interruption.
+                    _, track = original(selected, cache, payload)
                     trackfile.write_text(track.model_dump_json())
                 os.link(cache, output)
                 return Path(output), track
@@ -215,6 +279,10 @@ def make_app(workspace=None, pipeline=None):
                 if request.path.endswith('/analyze'):
                     data.setdefault('max_duration', 45)
                     data.setdefault('privacy_options', {'backend': 'none'})
+                if data.get('privacy_options', {}).get('backend') == 'none':
+                    # Whole-region fallback must not blanket the central action.
+                    # This explicit demo profile covers named HUD areas only.
+                    data['privacy_options'].setdefault('regions', PRIVACY_REGIONS)
 
     @app.after_request
     def adapt(response):

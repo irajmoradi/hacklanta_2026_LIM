@@ -62,6 +62,21 @@ def test_sdk_schema_adapter_and_strict_response_validation(tmp_path, monkeypatch
         ClipList.model_validate({'clips':[dict(start=0.,start_seconds=0.,end=0.,end_seconds=0.,type='good',description='invalid')]})
 
 
+def test_selected_privacy_timeline_preserves_speed_order_and_metadata():
+    from live_smoke_server import remap_selected
+    plan = {'segments':[{'source_start':20.,'source_end':24.,'speed':.5},
+                        {'source_start':10.,'source_end':13.,'speed':1.}]}
+    clips = [dict(id='a',start_seconds=19.,end_seconds=23.,score=.8),
+             dict(id='b',start_seconds=10.,end_seconds=13.,score=.4)]
+    mapped, metadata, ranges = remap_selected(plan, clips)
+    assert ranges == [(20.,24.),(10.,13.)]
+    assert mapped['segments'] == [dict(source_start=0.,source_end=4.,speed=.5),
+                                  dict(source_start=4.,source_end=7.,speed=1.)]
+    assert [(c['start_seconds'],c['end_seconds'],c['score']) for c in metadata] == [(0.,3.,.8),(4.,7.,.4)]
+    assert plan['segments'][0]['source_start'] == 20.
+    assert clips[0]['start_seconds'] == 19.
+
+
 def test_video_compositor_with_synthetic_media(tmp_path):
     import assemble
     assemble.EDIT = tmp_path

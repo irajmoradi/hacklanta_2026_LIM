@@ -1,0 +1,15 @@
+{
+  "basis": "Manual source-frame review of the real API candidates; model suggestions are not ground truth.",
+  "nice": [
+    {"original_start": 215.0, "original_end": 218.0, "start": 212.5, "end": 220.0, "type": "good", "caption": "Phoenix lands the A Stairs headshot"},
+    {"original_start": 1139.0, "original_end": 1159.0, "start": 1140.0, "end": 1152.0, "type": "good", "caption": "Phoenix closes the round"},
+    {"original_start": 1189.0, "original_end": 1208.0, "start": 1192.0, "end": 1203.0, "type": "good", "caption": "Low-health pressure at B"},
+    {"original_start": 1404.0, "original_end": 1422.0, "start": 1406.0, "end": 1418.0, "type": "good", "caption": "Run It Back: double elimination"},
+    {"original_start": 1674.0, "original_end": 1692.0, "start": 1677.0, "end": 1688.0, "type": "good", "caption": "Phoenix ultimate entry"}
+  ],
+  "mean": [
+    {"original_start": 23.0, "original_end": 28.0, "start": 24.0, "end": 31.0, "type": "bad", "caption": "The opening duel goes wrong"},
+    {"original_start": 693.0, "original_end": 705.0, "start": 694.0, "end": 701.0, "type": "bad", "caption": "Two kills, no escape"},
+    {"original_start": 1275.0, "original_end": 1287.0, "start": 1274.0, "end": 1281.0, "type": "bad", "caption": "The round ends early"}
+  ]
+}

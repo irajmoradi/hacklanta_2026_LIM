@@ -30,7 +30,12 @@ frontend and providers remain as checked out at that commit.
   uses the original 1080p source. Fine HUD details are weaker in this proxy.
   The `whole_video` stage reuses the combined response; its near-zero timing is
   not the model's inference time. That time is reported under `window_scoring`.
-- Mean mode is a local alternate story plan of the selected moments, submitted
+  After validation failures, the final UI recording resumes real cached
+  candidates and the real model response. No UI responses are mocked.
+  `cold_analysis_timings.json` preserves the actual scan/inference durations;
+  the final API snapshot separately reports the cache-reuse timings.
+- Mean mode is a local alternate story plan using valid lowlights from the same
+  saved analysis plus one setup moment, submitted
   as an explicit plan to the render API. It is not a separate Gemini lowlight
   analysis. No additional paid calls are needed for renders or share kits.
 
@@ -57,11 +62,19 @@ These are in `demo_video/live_smoke_server.py`; none is a claimed core fix.
    The adapter derives a sparse curve from actual candidate midpoint scores and
    exposes actual generated metadata, chapters, covers and download links.
    This is candidate evidence, not a dense per-frame interest measurement.
-4. **Privacy cost.** The core sanitizes the entire source before editing.
+4. **Privacy cost.** The core sanitizes the entire source before editing. The
+   full-source attempt progressed only about 10 MB into the 1.34 GB input after
+   roughly one minute, making three full-length passes impractical.
    The demo opts into the existing `backend=none` conservative region fallback
-   and caches its result by source path/size/mtime and privacy options. This is
+   and first extracts only reviewed ranges at source speed, at the final export's
+   30 fps. It remaps the plan and reaction metadata, then applies the existing
+   sanitizer before effects/framing. It restores original source-relative API
+   state afterward. The selected-range result is cached by source path/size/mtime,
+   ranges and privacy options. This is
    HUD-region blur, not precise name-only detection; it cannot preserve the
-   uploader's name. Review the outputs before publishing.
+   uploader's name. The original fallback also blankets the center of gameplay.
+   This demo explicitly restricts masks to kill feed, chat and party voice.
+   Scoreboard/nameplate coverage is **not demonstrated**. Review before publishing.
 5. **Mode changes invalidate analysis.** Changing `mode` clears clips and
    candidates. An explicit local mean-mode plan avoids another paid analysis;
    the prior selected-clip evidence is retained in `mean_editorial_input.json`.
@@ -76,6 +89,24 @@ These are in `demo_video/live_smoke_server.py`; none is a claimed core fix.
    inclusive minimum constraints and retains strict original Pydantic response
    validation, including rejection of zero-length or nonpositive-ending clips.
    Core needs an SDK-compatible schema and safe, actionable error reporting.
+7. **Out-of-bounds model ranges.** The final response proposed 2636–2640 and
+   2802–2807 seconds for a 1871.970-second source. The pipeline reported
+   `start_seconds must be a finite number between 0 and 1871.969524`.
+   The demo rejects both ranges, retains the original response in
+   `combined_result.json`, and saves rejected ranges separately. It does not
+   reinterpret, clamp or invent model timestamps. Source-hashed cached local
+   candidates allow recovery without further paid calls. Core should preserve
+   valid observations and actionable range diagnostics for long-video drift.
+8. **Semantic quality / spectating.** Source-frame review showed that 38–42 and
+   47.5–53 seconds were spectator footage despite "good" descriptions; 448–453
+   was buy phase; 215–218 showed a headshot despite being labeled "bad".
+   The single assessed end-of-match window correctly reported the player not
+   alive and was vetoed, but this budget did not allow assessment of every
+   candidate. Final nice/mean ranges and captions are manually curated from the
+   actual candidate set in `demo_video/editorial_selection.json` and submitted
+   through the real clip-edit/render API. `review_frames.py` generates the source
+   QA sheets. This run demonstrates an **editor-reviewed workflow**, not reliable
+   unattended highlight accuracy on a compressed 31-minute video.
 
 ## Reproduction
 

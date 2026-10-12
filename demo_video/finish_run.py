@@ -27,6 +27,17 @@ def main():
     job = json.loads((OUT / 'vertical.json').read_text())
     job_id = job['id']
     alternate = copy.deepcopy(job)
+    analysis = json.loads((OUT / 'analysis.json').read_text())
+    editorial = json.loads((ROOT / 'demo_video/editorial_selection.json').read_text())
+    (OUT / 'editorial_selection.json').write_text(json.dumps(editorial, indent=2))
+    edits = editorial['mean']
+    lowlights = []
+    for edit in edits:
+        original = next(c for c in analysis['clips'] if c['start_seconds'] == edit['original_start'] and c['end_seconds'] == edit['original_end'])
+        lowlights.append({**original, 'start_seconds': edit['start'], 'end_seconds': edit['end'],
+                         'type': edit['type'], 'description': edit['caption'], 'caption': edit['caption'], 'editorial_review': True})
+    if lowlights:
+        alternate['clips'] = [*lowlights, *job['clips'][:1]]
     alternate['options'].update(mode='mean', style='meme_edit', max_duration=32)
     plan = planner_plan(Pipeline(), alternate)
     (OUT / 'mean_editorial_input.json').write_text(json.dumps(alternate, indent=2))

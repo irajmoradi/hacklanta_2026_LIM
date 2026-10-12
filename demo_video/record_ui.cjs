@@ -61,11 +61,14 @@ async function main() {
     let data = await idle();
     fs.writeFileSync(OUT+'/analysis.json',JSON.stringify(data,null,2));
     // Keep a concise editorial selection from the real analysis; preserve evidence.
-    const verified = data.clips.filter(c=>c.source==='signals+vlm');
-    const whole = data.clips.filter(c=>c.source==='whole_video');
-    const local = data.clips.filter(c=>c.source==='signals');
-    const selection = [...verified.slice(0,1), ...local.slice(0,1), ...whole, ...data.clips];
-    const selected = [...new Map(selection.map(c=>[c.id,c])).values()].slice(0,5).map(c=>({...c,keep:true}));
+    const editorial = JSON.parse(fs.readFileSync(path.join(__dirname,'editorial_selection.json')));
+    const selected = editorial.nice.map(edit=>{
+      const c=data.clips.find(c=>c.start_seconds===edit.original_start && c.end_seconds===edit.original_end);
+      if(!c) throw new Error('Editorial selection no longer matches analyzed source ranges');
+      return {...c,keep:true,start_seconds:edit.start,end_seconds:edit.end,
+        type:edit.type,caption:edit.caption,description:edit.caption,editorial_review:true};
+    });
+    fs.writeFileSync(OUT+'/editorial_selection.json',JSON.stringify(editorial,null,2));
     const response = await context.request.patch(BASE+'/api/jobs/'+jobId+'/clips',{data:{clips:selected}});
     if(!response.ok()) throw new Error(await response.text());
     await wait(6500);
@@ -79,7 +82,7 @@ async function main() {
       await page.getByRole('button',{name:'Save edits',exact:true}).click();
     });
     await scene('Landscape export',async()=>{
-      await page.getByLabel('Export preset',{exact:true}).selectOption('landscape');
+      await page.locator('.export select').selectOption('landscape');
       await page.getByRole('button',{name:/Render reel/}).click();
     });
     data = await idle();
@@ -95,7 +98,7 @@ async function main() {
       await page.locator('.output video').evaluate(v=>v.pause());
     });
     await scene('Vertical Short export',async()=>{
-      await page.getByLabel('Export preset',{exact:true}).selectOption('vertical');
+      await page.locator('.export select').selectOption('vertical');
       await page.getByRole('button',{name:/Render reel/}).click();
     });
     data = await idle();
