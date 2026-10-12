@@ -45,7 +45,7 @@ def plan_valid(plan, duration):
 
 
 def options_valid(data, styles):
-    allowed = {'mode', 'style', 'provider', 'use_signals', 'captions', 'reactions', 'sam',
+    allowed = {'mode', 'style', 'provider', 'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam',
                'prompt', 'splits', 'max_duration', 'preset', 'generate_thumbnails', 'edit_plan',
                'attitude', 'edit_style', 'job_id', 'api_key'}
     if set(data) - allowed:
@@ -61,7 +61,7 @@ def options_valid(data, styles):
         raise ValueError('unknown style')
     if result.get('preset', 'landscape') not in ('landscape', 'vertical', 'square'):
         raise ValueError('unknown preset')
-    for name in ('use_signals', 'captions', 'reactions', 'sam', 'generate_thumbnails'):
+    for name in ('use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam', 'generate_thumbnails'):
         if name in result and not isinstance(result[name], bool):
             raise ValueError(f'{name} must be boolean')
     for name in ('prompt', 'provider'):

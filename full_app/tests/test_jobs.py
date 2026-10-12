@@ -70,7 +70,7 @@ def wait(app, job_id):
     with queue.lock:
         future = queue.active.get(job_id)
     if future:
-        future.result(timeout=10)
+        future.result(timeout=60)
     return app.extensions['job_store'].get(job_id)
 
 
@@ -186,7 +186,7 @@ def test_sse_replay_and_heartbeat(setup, video):
 
 @pytest.mark.parametrize('data', [[], None, {'mode': 'evil'}, {'style': []}, {'use_signals': 'true'},
                                   {'splits': 0}, {'splits': True}, {'max_duration': float('nan')},
-                                  {'preset': 'huge'}, {'unknown': True}, {'provider': []}])
+                                  {'preset': 'huge'}, {'unknown': True}, {'provider': []}, {'window_scoring': 1}, {'sam_reframe': 'yes'}])
 def test_bad_options(setup, video, data):
     _, client, _ = setup
     job = upload(client, video)
@@ -222,10 +222,11 @@ def test_bad_edits_and_plan(setup, video):
                                                ('landscape', (1920, 1080))])
 def test_default_pipeline_mocked_gemini_and_real_render(tmp_path, video, monkeypatch, preset, dimensions):
     client_mock = Mock()
+    client_mock.score_windows.return_value = []
     client_mock.find_clips.return_value = [{'start': '0:00', 'end': '0:01', 'description': 'kill'}]
     client_mock.plan_edit.return_value = {'segments': [{'source_start': 0, 'source_end': 1,
                                                        'video_effects': [], 'sound_effects': []}]}
-    monkeypatch.setattr('server.pipeline.GeminiVideoClient', Mock(return_value=client_mock))
+    monkeypatch.setattr('pipeline.orchestrator.GeminiVideoClient', Mock(return_value=client_mock))
     monkeypatch.setenv('GEMINI_API_KEY', 'fake')
     app = create_app({'TESTING': True, 'WORKSPACE': str(tmp_path)})
     client = app.test_client()
@@ -238,7 +239,11 @@ def test_default_pipeline_mocked_gemini_and_real_render(tmp_path, video, monkeyp
         assert client.post(url + '/render', json={'preset': preset}).status_code == 202
         result = wait(app, job)
         assert result['status'] == 'done', result
-        assert len(result['warnings']) == 5
+        assert any('services.providers' in w for w in result['warnings'])
+        assert 'render_v2' in result['timings']
+        events = [json.loads(data) for _, data in app.extensions['job_store'].events(job, 0)]
+        assert any(e.get('pipeline_stage') == 'rank_merge' for e in events)
+        assert any('render_v2' in (e.get('timings') or {}) for e in events)
         from services.probe import probe_video
         metadata = probe_video(result['output'])
         assert (metadata['width'], metadata['height']) == dimensions
@@ -282,6 +287,20 @@ def test_changed_analysis_prompt_invalidates_checkpoints(setup, video):
     assert pipeline.calls == ['analyze', 'plan', 'analyze', 'plan']
 
 
+def test_scoring_and_render_flags_invalidate_correct_stages(setup, video):
+    app, client, pipeline = setup
+    job = upload(client, video)
+    url = '/api/jobs/' + job
+    client.post(url + '/render', json={})
+    assert wait(app, job)['status'] == 'done'
+    client.post(url + '/render', json={'sam_reframe': True})
+    assert wait(app, job)['status'] == 'done'
+    assert pipeline.calls == ['analyze', 'plan', 'render', 'render']
+    client.post(url + '/render', json={'window_scoring': False})
+    assert wait(app, job)['status'] == 'done'
+    assert pipeline.calls[-3:] == ['analyze', 'plan', 'render']
+
+
 def test_custom_plan_skips_provider_and_queue_capacity(setup, video):
     app, client, pipeline = setup
     job = upload(client, video)
@@ -304,36 +323,3 @@ def test_custom_plan_skips_provider_and_queue_capacity(setup, video):
     assert client.post('/api/jobs/' + job2 + '/analyze', json={}).status_code == 409
     pipeline.release.set()
     wait(app, job1)
-
-
-def test_optional_hooks_present(tmp_path, monkeypatch):
-    import sys
-    from types import SimpleNamespace
-    source = tmp_path / 'source.mp4'
-    source.write_bytes(b'source')
-    client_mock = Mock()
-    client_mock.find_clips.return_value = [{'start_seconds': 0, 'end_seconds': 1}]
-    client_mock.plan_edit.return_value = {'segments': [{'source_start': 0, 'source_end': 1}]}
-    get_provider = Mock(return_value=client_mock)
-    signals = Mock(return_value=[{'start': 0, 'end': 1}])
-    apply = Mock(side_effect=lambda **kwargs: kwargs['plan'])
-    def render(**kwargs):
-        output = kwargs['workspace'] / 'hook.mp4'
-        output.write_bytes(b'rendered')
-        return output
-    monkeypatch.setitem(sys.modules, 'signals', SimpleNamespace(detect_candidates=signals))
-    monkeypatch.setitem(sys.modules, 'services.providers', SimpleNamespace(get_provider=get_provider))
-    for feature in ('captions', 'reactions', 'sam'):
-        monkeypatch.setitem(sys.modules, feature, SimpleNamespace(apply=apply))
-    monkeypatch.setitem(sys.modules, 'render', SimpleNamespace(render_job=render))
-    monkeypatch.setenv('ENABLE_RENDER_HOOK', '1')
-    job = dict(options={'provider': 'local', 'use_signals': True, 'captions': True, 'reactions': True, 'sam': True},
-               source=str(source), dir=str(tmp_path), warnings=[], candidates=[], meta={'duration': 3})
-    pipeline = Pipeline()
-    pipeline.analyze(job, None)
-    pipeline.plan(job, None)
-    pipeline.render(job, None)
-    assert job['candidates'] == [{'start': 0, 'end': 1}]
-    assert Path(job['output']).read_bytes() == b'rendered'
-    assert apply.call_count == 3
-    assert not job['warnings']

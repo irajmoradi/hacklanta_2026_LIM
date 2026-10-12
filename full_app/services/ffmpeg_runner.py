@@ -54,8 +54,10 @@ class FFmpegRunner:
         """Extract a clip from source with optional effects and speed change."""
         output = self.workspace / f"seg_{index:03d}.mp4"
 
-        cmd = ["ffmpeg", "-y", "-i", str(self.source)]
-        cmd += ["-ss", f"{start:.3f}", "-to", f"{end:.3f}"]
+        # Trim the input timeline before applying speed filters. Output-side
+        # -to otherwise truncates slowed clips back to their original duration.
+        cmd = ["ffmpeg", "-y", "-ss", f"{start:.3f}",
+               "-t", f"{end - start:.3f}", "-i", str(self.source)]
 
         # Normalize to list
         if isinstance(video_effects, str):
@@ -264,8 +266,7 @@ class FFmpegRunner:
         to avoid NVENC session limits, but each segment encodes fast on GPU.
         """
         # Explicit opt-in keeps old planner payloads and defaults unchanged.
-        from render.plan import RenderPlan
-        if isinstance(edit_plan, RenderPlan) or edit_plan.get("render_version") == 2:
+        if not isinstance(edit_plan, dict) or edit_plan.get("render_version") == 2:
             from render.engine import Renderer
             return Renderer(self).render(edit_plan)
 

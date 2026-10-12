@@ -19,8 +19,9 @@ def probe(path):
 
 
 class Renderer:
-    def __init__(self, runner):
+    def __init__(self, runner, segment_processor=None):
         self.runner = runner
+        self.segment_processor = segment_processor
         self.source = runner.source.resolve()
         self.workspace = runner.workspace.resolve()
 
@@ -113,6 +114,8 @@ class Renderer:
                     from services.ffmpeg_runner import FFmpegRunner
                     helper = FFmpegRunner(directory, self.source, *plan.size, plan.fps)
                     path = helper.overlay_sfx(path, [s.model_dump() for s in segment.sound_effects], index)
+                if self.segment_processor:
+                    path, duration = self.segment_processor(path, index, segment, duration, directory)
                 paths.append(path)
                 timeline.append(duration)
             if plan.outro:

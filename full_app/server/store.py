@@ -45,7 +45,7 @@ class JobStore:
             job['updated_at'] = time.time()
             data = json.dumps(job, allow_nan=False)
             db.execute('INSERT OR REPLACE INTO jobs VALUES (?, ?)', (job['id'], data))
-            event = {k: job.get(k) for k in ('id', 'status', 'stage', 'progress', 'error', 'updated_at')}
+            event = {k: job.get(k) for k in ('id', 'status', 'stage', 'progress', 'error', 'updated_at', 'pipeline_stage', 'timings')}
             db.execute('INSERT INTO events(job_id,data) VALUES (?,?)', (job['id'], json.dumps(event)))
         logging.getLogger('jobs').info(json.dumps(event))
 
