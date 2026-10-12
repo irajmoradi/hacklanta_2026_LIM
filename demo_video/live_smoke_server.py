@@ -17,6 +17,9 @@ sys.path.insert(0, str(ROOT / 'full_app'))
 from budget import Budget
 from services.gemini_client import GeminiVideoClient
 from services.video_understanding import ProviderConfig
+from models.schemas import ClipList, WindowAssessment, ScoredWindow
+from pydantic import BaseModel
+from google.genai import types
 from pipeline import Pipeline
 from server.api import create_app
 from flask import request, send_from_directory
@@ -26,18 +29,59 @@ OUT.mkdir(parents=True, exist_ok=True)
 BUDGET = Budget(OUT / 'live_calls.json')
 
 
+class CombinedAssessment(BaseModel):
+    moments: ClipList
+    window: WindowAssessment
+
+
+def compatible_schema(value):
+    """SDK Schema lacks exclusiveMinimum; local Pydantic validation stays strict."""
+    if isinstance(value, list):
+        return [compatible_schema(v) for v in value]
+    if isinstance(value, dict):
+        return {('minimum' if k == 'exclusiveMinimum' else k): compatible_schema(v)
+                for k, v in value.items()}
+    return value
+
+
 class DemoClient(GeminiVideoClient):
     def __init__(self, key):
         super().__init__(api_key=key, vertexai=True, model='gemini-3.5-flash-lite',
                          config=ProviderConfig(attempts=1, chunk_seconds=3600,
                                                timeout_seconds=300, fps=2))
         self.client.models.generate_content = BUDGET.wrap(self.client.models.generate_content)
+        self.combined = None
+
+    def _generation_config(self, schema, temperature, video):
+        return types.GenerateContentConfig(response_mime_type='application/json',
+            response_json_schema=compatible_schema(schema.model_json_schema()), temperature=temperature,
+            **({'media_resolution': self.media_resolution} if video else {}))
 
     def score_windows(self, path, candidates):
-        # One real high-resolution window, explicitly bounded for this demo budget.
-        return super().score_windows(path, sorted(candidates, key=lambda c: -c['score'])[:1])
+        candidate = sorted(candidates, key=lambda c: -c['score'])[0]
+        cached = OUT / 'combined_result.json'
+        if cached.exists():
+            saved = json.loads(cached.read_text())
+            if saved['candidate'] != candidate:
+                raise ValueError('Cached assessment belongs to a different window; refusing to reuse')
+            self.combined = CombinedAssessment.model_validate(saved['response'])
+        else:
+            proxy = self.proxy(path)
+            prompt = ('Analyze this complete Valorant match. Return 8 to 12 complete action beats '
+                      'spread across the match, including some mistakes. Prefer 6-10 second clips. '
+                      'Use numeric original-source seconds; start and start_seconds must match exactly, '
+                      'as must end and end_seconds. Do not claim unreadable HUD details. '
+                      'In the window field, assess ONLY this candidate window: ' + json.dumps(candidate) +
+                      '\nSet player_alive false for spectating/death screens, null if uncertain. '
+                      'hype is 0-10. Caption describes visible evidence. ' + getattr(self, 'profile_prompt', ''))
+            self.combined = self._infer(proxy, prompt, CombinedAssessment)
+            cached.write_text(json.dumps({'candidate': candidate, 'response': self.combined.model_dump()}, indent=2))
+        assessment = self.combined.window.model_dump()
+        if assessment['player_alive'] is not True:
+            assessment.update(kind='neutral', hype=0.)
+        return [ScoredWindow(**candidate, **assessment)]
 
-    def analyze_video(self, path, prompt=''):
+    def proxy(self, path):
         proxy = OUT / 'full_match_analysis_proxy.mp4'
         if not proxy.exists():
             subprocess.run(['ffmpeg', '-nostdin', '-v', 'error', '-y', '-threads', '4',
@@ -45,6 +89,12 @@ class DemoClient(GeminiVideoClient):
                             '-threads', '4', '-preset', 'fast', '-b:v', '55k', '-maxrate', '55k',
                             '-bufsize', '110k', '-c:a', 'aac', '-ac', '1', '-b:a', '16k',
                             str(proxy)], check=True)
+        return proxy
+
+    def analyze_video(self, path, prompt=''):
+        if self.combined is not None:
+            return self.combined.moments
+        proxy = self.proxy(path)
         prompt += ('\nReturn 8 to 12 complete action beats distributed across the match, '
                    'including some mistakes for a roast edit. Prefer 6-10 second clips. '
                    'Do not claim unreadable HUD details. This is a compressed analysis proxy.')
@@ -92,7 +142,10 @@ class DemoPipeline(Pipeline):
                         return super().read(frame, timestamp)
                 detector.HUDReader = BoundedOCR
                 try:
-                    return original(source, **kwargs, sample_fps=2)
+                    result = original(source, **kwargs, sample_fps=2)
+                    from dataclasses import asdict
+                    (OUT / 'local_candidates.json').write_text(json.dumps([asdict(c) for c in result], indent=2))
+                    return result
                 finally:
                     detector.HUDReader = reader
             return signals

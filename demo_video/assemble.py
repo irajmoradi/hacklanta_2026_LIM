@@ -71,12 +71,14 @@ def main():
               'game_confidence':analysis.get('game_confidence'),'candidate_windows':len(analysis['candidates']),
               'gemini_scored_windows':len(analysis.get('window_scores',[])),
               'positive_signal_windows':counts,'analysis_timings':analysis['timings'],
-              'landscape_timings':land['timings'],'live_calls':len(calls)}
+              'landscape_timings':land['timings'],'reserved_live_attempts':len(calls),
+              'combined_full_match_and_window_request':True}
     (OUT/'evidence.json').write_text(json.dumps(evidence,indent=2))
     with (OUT/'clip_signals.csv').open('w',newline='') as stream:
-        writer=csv.writer(stream);writer.writerow(['id','start_seconds','end_seconds','description','source','score','signals','events'])
+        writer=csv.writer(stream);writer.writerow(['id','start_seconds','end_seconds','description','source','score','signals','events','overlapping_candidates'])
         for c in analysis['clips']:
-            writer.writerow([c.get(k,'') for k in ['id','start_seconds','end_seconds','description','source','score']]+[json.dumps(c.get(k,{})) for k in ['signals','events']])
+            overlapping=[r for r in analysis['candidates'] if r['start'] < c['end_seconds'] and r['end'] > c['start_seconds']]
+            writer.writerow([c.get(k,'') for k in ['id','start_seconds','end_seconds','description','source','score']]+[json.dumps(c.get(k,{})) for k in ['signals','events']]+[json.dumps(overlapping)])
     parts=[]
     parts.append(still('01_title',card('title','REAL GAMEPLAY / REAL API','31 minutes. One story.',
         ['Valorant / Phoenix / Lotus / 44-kill source recording',
@@ -99,10 +101,10 @@ def main():
     run(['-f','concat','-safe','0','-i',str(ui_manifest),'-c','copy','-movflags','+faststart',str(OUT/'ui_walkthrough.mp4')])
     t=analysis['timings']
     parts.append(still('04_pipeline',card('pipeline','MEASURED ON THE LINUX RUNNER','What the pipeline observed.',
-        [f"{len(analysis['candidates'])} candidate windows / {len(analysis.get('window_scores',[]))} Gemini-scored window / {len(calls)} live calls.",
-         f"Signals: {t.get('signals',0):.1f}s   |   Window scoring: {t.get('window_scoring',0):.1f}s",
-         f"Full-match analysis: {t.get('whole_video',0):.1f}s   |   Local plan: {t.get('edit_plan',0):.1f}s",
-         'Positive signal windows: '+', '.join(f'{k} {v}' for k,v in counts.items())]),12))
+        [f"{len(analysis['candidates'])} candidate windows / {len(analysis.get('window_scores',[]))} scored window / {len(calls)} reserved attempts.",
+         f"Signals: {t.get('signals',0):.1f}s   |   Combined Gemini pass: {t.get('window_scoring',0):.1f}s",
+         f"Local plan: {t.get('edit_plan',0):.1f}s   |   Landscape render: {land['timings'].get('render',0):.1f}s",
+         'Positive signal windows: '+', '.join(f'{k} {v}' for k,v in counts.items())]),14))
     background=card('compare','BEFORE / AFTER','Same source. Two edits.',[],footer='OLD VERSION (LEFT)    /    EXTENSION + TEAM REACTIONS (RIGHT)')
     target=EDIT/'05_compare.mp4'
     encode(['-loop','1','-i',str(background),'-stream_loop','-1','-i','/srv/demo_in/final_v3.mp4',

@@ -61,8 +61,11 @@ async function main() {
     let data = await idle();
     fs.writeFileSync(OUT+'/analysis.json',JSON.stringify(data,null,2));
     // Keep a concise editorial selection from the real analysis; preserve evidence.
-    const good = data.clips.filter(c=>c.source==='whole_video' || c.source==='signals+vlm');
-    const selected = (good.length>=4?good:data.clips).slice(0,5).map(c=>({...c,keep:true}));
+    const verified = data.clips.filter(c=>c.source==='signals+vlm');
+    const whole = data.clips.filter(c=>c.source==='whole_video');
+    const local = data.clips.filter(c=>c.source==='signals');
+    const selection = [...verified.slice(0,1), ...local.slice(0,1), ...whole, ...data.clips];
+    const selected = [...new Map(selection.map(c=>[c.id,c])).values()].slice(0,5).map(c=>({...c,keep:true}));
     const response = await context.request.patch(BASE+'/api/jobs/'+jobId+'/clips',{data:{clips:selected}});
     if(!response.ok()) throw new Error(await response.text());
     await wait(6500);

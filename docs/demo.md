@@ -21,10 +21,15 @@ frontend and providers remain as checked out at that commit.
   overriding the task record's 120-call allowance. `budget.py` reserves attempts
   before SDK calls, persists across restarts and disables SDK/provider retries.
   Never delete the ledger to retry this task. Failed requests consume budget.
-- One strongest candidate is scored at source resolution. A complete-match
+- The initial candidate request succeeded at source resolution, but its following
+  full-match attempt hit a local SDK schema error. The final successful run uses
+  one combined structured request for full-match clips plus assessment of the
+  strongest candidate. A complete-match
   640-pixel, 2 fps, approximately 55 kb/s video + 16 kb/s mono audio proxy keeps
   the full-video request inside Vertex Express's inline size limit. Rendering
   uses the original 1080p source. Fine HUD details are weaker in this proxy.
+  The `whole_video` stage reuses the combined response; its near-zero timing is
+  not the model's inference time. That time is reported under `window_scoring`.
 - Mean mode is a local alternate story plan of the selected moments, submitted
   as an explicit plan to the render API. It is not a separate Gemini lowlight
   analysis. No additional paid calls are needed for renders or share kits.
@@ -61,6 +66,16 @@ These are in `demo_video/live_smoke_server.py`; none is a claimed core fix.
    candidates. An explicit local mean-mode plan avoids another paid analysis;
    the prior selected-clip evidence is retained in `mean_editorial_input.json`.
    Mean rendering then chooses roast reactions without per-clip classification.
+6. **Gemini SDK schema construction fails before transport.** The original
+   `ClipList` request raised `ValidationError: 2 validation errors for Schema`:
+   `properties.clips.items.properties.end.exclusiveMinimum` and
+   `properties.clips.items.properties.end_seconds.exclusiveMinimum`, each with
+   `Extra inputs are not permitted [type=extra_forbidden, input_value=0, input_type=int]`.
+   The core then hid this as `Video analysis failed`. `diagnose_schema.py`
+   reproduced it with a mocked transport. The demo sends a JSON schema with
+   inclusive minimum constraints and retains strict original Pydantic response
+   validation, including rejection of zero-length or nonpositive-ending clips.
+   Core needs an SDK-compatible schema and safe, actionable error reporting.
 
 ## Reproduction
 

@@ -42,6 +42,26 @@ def test_baseline_generic_profile_contract():
         regions_for('generic', None)
 
 
+def test_sdk_schema_adapter_and_strict_response_validation(tmp_path, monkeypatch):
+    monkeypatch.setenv('DEMO_OUT', str(tmp_path / 'out'))
+    from live_smoke_server import compatible_schema, CombinedAssessment, DemoClient
+    from google.genai import types
+    from models.schemas import ClipList
+    from pydantic import ValidationError
+    value = compatible_schema(CombinedAssessment.model_json_schema())
+    assert 'exclusiveMinimum' not in json.dumps(value)
+    types.GenerateContentConfig(response_json_schema=value)
+    from unittest.mock import patch
+    from google.genai.models import Models
+    with DemoClient('offline-not-a-key') as client:
+        with patch.object(client.client.models._api_client, 'request', side_effect=RuntimeError('mocked transport')):
+            with pytest.raises(RuntimeError, match='mocked transport'):
+                Models.generate_content(client.client.models, model='gemini-3.5-flash-lite', contents=['offline'],
+                    config=client._generation_config(CombinedAssessment, .3, True))
+    with pytest.raises(ValidationError):
+        ClipList.model_validate({'clips':[dict(start=0.,start_seconds=0.,end=0.,end_seconds=0.,type='good',description='invalid')]})
+
+
 def test_video_compositor_with_synthetic_media(tmp_path):
     import assemble
     assemble.EDIT = tmp_path
