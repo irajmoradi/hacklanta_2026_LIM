@@ -1,9 +1,62 @@
 # Edit planner v2
 
+FX-2 adds `plan_edit(..., chaos=None, seed=0)`. Chaos defaults to 0.35 in nice
+mode and 0.6 in mean mode; explicit values must be finite and between 0 and 1.
+The same inputs and seed reproduce the local plan. Save the returned JSON for
+exact replay when opting into an external Gemini refinement, whose response can vary. Reroll means supplying a new integer
+seed; changing it changes the decoration, not the selected cuts. Chaos zero keeps
+rich stacks but disables weighted randomness in selection, timing jitter and
+wildcards. Nice uses hype sounds; mean uses higher gains, extra layers and roast
+text on failures. All styles now receive stacks (replacing clean edit's old empty
+decoration). Clip speed remains explicit and audio follows it.
+
+`Signals.events` accepts `{kind, time}` entries for kill, headshot, multikill,
+clutch, death, whiff, ability and play, with absolute source timestamps. Detector
+events and explicit kill/fail timestamps take priority. Saved window descriptions
+can classify an existing peak; these are semantic hints, not newly measured event
+timestamps. The current pipeline adapter only forwards its existing kill/fail and
+action anchors; callers that retain kill-feed events should pass `Signals.events`.
+
+The entire legacy VFX/SFX inventory is tagged by `fx.catalog.catalog()`. Each clip
+gets 1–4 VFX (including a slow-motion annotation when present), and 2–5 SFX.
+Fade-in/out are reserved for boundary transitions; event flashes last 0.12 s.
+Transitions are separate. At most one `text_*` word effect is selected per clip,
+so roast words do not collide at the same position. Decorative effects never repeat in adjacent clips;
+each identifier is capped at `max(2, ceil(clip_count / 5))` uses per montage.
+Speed annotations are exempt, because consecutive clutch clips may already be
+slowed. All registry entries are available; speed effects use segment speed
+rather than timed overlays. Wildcard budget is `round(clips * chaos * .4)`
+(minimum one when chaos is positive), and a wildcard is only occasionally drawn.
+If all relevant names hit their caps, the chooser uses another mode-compatible
+effect at the same event anchor instead of violating the caps.
+
+An explicitly supplied `GeminiRefiner(client, model)` makes exactly one request
+containing captions, tagged options and event anchors. It can replace existing
+effect slots and adjust their times within 0.35 seconds of a compatible event.
+Unknown IDs, wrong moods, repeat violations and invalid placements reject the
+whole patch and preserve the seeded fallback. There are no retries or implicit
+credentials. No live calls were needed for FX-2.
+
+`services.fx_planning.restack_saved_job(job, chaos=None, seed=0, refiner=None)`
+accepts the same options, preserves the saved native cuts and returns
+`planner_plan`, renderer `edit_plan`, and an event table. Renderer plans persist
+`chaos` and `seed` as provenance; rendering an already assigned plan does not
+reroll it.
+
+HTTP/UI integration boundary: `server/validation.py::options_valid` rejects
+chaos/seed, and `pipeline/extensions.py::planner_plan` does not forward them. Both are outside
+FX-2 allowed paths; neither was modified. The integrator must allowlist these
+two fields (finite chaos in [0,1], integer seed), forward them to `plan_edit`
+(or call `restack_saved_job` when rerolling an existing job), and add both to
+the plan-invalidation keys in `server/queue.py::JobQueue.submit` so rerolls
+reuse analysis but regenerate the plan. There is no existing chaos UI field. A future Reroll
+button should send a fresh seed and retain the returned value. Library/service
+and render JSON options work now; HTTP settings do not yet expose the knob.
+
 `full_app/planner` produces a deterministic, validated Pydantic `RenderPlan`.
 It needs no network, media files, model weights, or new dependencies. The optional
-Gemini pass rewrites caption wording only. The pipeline still uses its separate
-Gemini planning path; this package is an opt-in library.
+Gemini pass can rewrite captions and select tagged effect slots in one call. The pipeline still uses its separate
+Gemini planning path; the pipeline enables this package with its planner option.
 
 ## Try it
 
@@ -102,14 +155,14 @@ not independently verifiable from a serialized RenderPlan alone.
 
 Effect choices:
 
-- Hype/meme: `flash_white` plus `impact_hit` at a known kill; `zoom_in_center`
-  around multikill peaks. Mean-mode failures get `text_bruh`, `spongebob_fail`,
-  and a short gameplay roast. All SFX durations are bounded to the owning clip.
+- All styles use the FX-2 tagged chooser described above, with event-anchored
+  impact layers, varied supporting effects and bounded SFX durations. Mean-mode
+  failures get a varied roast text effect and a short gameplay roast.
 - Hype/cinematic clutches: `slow_motion`. **Apply speed exactly once**:
   `clip.speed` controls timing; the `slow_motion` effect expresses the same intent,
   not an additional speed multiplier. Do not blindly apply both existing filters.
-- Cinematic: `vignette` and fade-in. Clean: no video effects or SFX; source captions,
-  reaction intent and a minimal outro remain. Meme text is specific to mean mode.
+- Cinematic retains fade-in transitions; all styles retain source captions,
+  reaction intent and an outro. Meme text is specific to mean mode.
 - Reaction slots occur at clutch/multikill/climax peaks, excluding separate
   teasers. Preferred labels are respected except roast/bruh/fail become wholesome
   in nice mode. Corners are top-right for vertical and bottom-right otherwise.
@@ -128,9 +181,9 @@ reaction, music and placement timing information.
 ## Optional Gemini refinement
 
 Default planning makes **zero API calls**. A supplied refiner is called once, with
-no retries, using `prompts/editor_v2.txt` plus the plan as data. The accepted response
-is `{"captions": [{"text_index": 0, "content": "Clean finish!"}]}`. Only wording
-changes; timing, effects, story, and budget cannot be changed. Invalid indices,
+no retries, using the FX-2 schema prompt in `planner/refinement.py` plus the plan as data. The accepted response
+may include `{"captions": [{"text_index": 0, "content": "Clean finish!"}]}` and
+effect-slot patches described above. Cuts, story and budget cannot change. Invalid indices,
 duplicate patches, excess fields, overlong captions, invalid JSON, and provider
 failures retain the whole deterministic plan with a generic diagnostic note.
 Provider exceptions are not echoed because they may contain credentials.

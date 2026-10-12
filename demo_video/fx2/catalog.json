@@ -1,0 +1,1416 @@
+{
+  "vfx:slow_motion": {
+    "name": "slow_motion",
+    "kind": "vfx",
+    "description": "0.5x slow-mo for epic moments",
+    "events": [
+      "clutch"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.5,
+    "timing": "segment-speed"
+  },
+  "vfx:speed_2x": {
+    "name": "speed_2x",
+    "kind": "vfx",
+    "description": "2x speed for filler/transitions",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.5,
+    "timing": "segment-speed"
+  },
+  "vfx:fade_in": {
+    "name": "fade_in",
+    "kind": "vfx",
+    "description": "1s fade from black",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "transition"
+  },
+  "vfx:fade_out": {
+    "name": "fade_out",
+    "kind": "vfx",
+    "description": "1s fade to black at end",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "transition"
+  },
+  "vfx:flash_white": {
+    "name": "flash_white",
+    "kind": "vfx",
+    "description": "Brief white flash at start",
+    "events": [
+      "kill",
+      "multikill",
+      "ability"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.12,
+    "timing": "event"
+  },
+  "vfx:shake": {
+    "name": "shake",
+    "kind": "vfx",
+    "description": "Camera shake \u2014 impact/fail moments",
+    "events": [
+      "multikill",
+      "death",
+      "ability"
+    ],
+    "mood": "hype",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:zoom_in_center": {
+    "name": "zoom_in_center",
+    "kind": "vfx",
+    "description": "Slow Ken Burns zoom into center",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:chromatic_aberration": {
+    "name": "chromatic_aberration",
+    "kind": "vfx",
+    "description": "RGB channel split \u2014 glitchy/broken feel",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:light_blur": {
+    "name": "light_blur",
+    "kind": "vfx",
+    "description": "Subtle gaussian blur \u2014 dreamy/flashback feel",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:moderate_blur": {
+    "name": "moderate_blur",
+    "kind": "vfx",
+    "description": "Medium gaussian blur \u2014 transition/death screen",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:heavy_blur": {
+    "name": "heavy_blur",
+    "kind": "vfx",
+    "description": "Heavy blur \u2014 disorientation/drunk effect",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:light_sharpen": {
+    "name": "light_sharpen",
+    "kind": "vfx",
+    "description": "Subtle sharpen \u2014 crisp detail pop",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:moderate_sharpen": {
+    "name": "moderate_sharpen",
+    "kind": "vfx",
+    "description": "Medium sharpen \u2014 enhanced clarity",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:heavy_sharpen": {
+    "name": "heavy_sharpen",
+    "kind": "vfx",
+    "description": "Aggressive sharpen \u2014 hyper-detailed look",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:saturation_boost": {
+    "name": "saturation_boost",
+    "kind": "vfx",
+    "description": "Boosted color saturation \u2014 vibrant look",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:heavy_saturation": {
+    "name": "heavy_saturation",
+    "kind": "vfx",
+    "description": "Heavy saturation \u2014 oversaturated/anime style",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:desaturate": {
+    "name": "desaturate",
+    "kind": "vfx",
+    "description": "Desaturated/washed out \u2014 sad/failure moment",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:black_and_white": {
+    "name": "black_and_white",
+    "kind": "vfx",
+    "description": "Full grayscale \u2014 dramatic/death moment",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:contrast_pop": {
+    "name": "contrast_pop",
+    "kind": "vfx",
+    "description": "High contrast \u2014 punchy/aggressive look",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:warm_tint": {
+    "name": "warm_tint",
+    "kind": "vfx",
+    "description": "Warm golden tint \u2014 nostalgic/victory feel",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:cold_tint": {
+    "name": "cold_tint",
+    "kind": "vfx",
+    "description": "Cool blue tint \u2014 cold/menacing feel",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:vignette": {
+    "name": "vignette",
+    "kind": "vfx",
+    "description": "Dark vignette overlay \u2014 cinematic framing",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.5,
+    "timing": "event"
+  },
+  "vfx:bright_boost": {
+    "name": "bright_boost",
+    "kind": "vfx",
+    "description": "Brightness boost \u2014 flashy/heavenly moment",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:dark_mood": {
+    "name": "dark_mood",
+    "kind": "vfx",
+    "description": "Darkened \u2014 sinister/intense atmosphere",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:invert_colors": {
+    "name": "invert_colors",
+    "kind": "vfx",
+    "description": "Inverted colors \u2014 shock/glitch effect",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:text_highlight": {
+    "name": "text_highlight",
+    "kind": "vfx",
+    "description": "Huge 'HIGHLIGHT' text splash on screen",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.5,
+    "timing": "event"
+  },
+  "vfx:text_fail": {
+    "name": "text_fail",
+    "kind": "vfx",
+    "description": "Huge 'FAIL' text in red",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.5,
+    "timing": "event"
+  },
+  "vfx:text_clutch": {
+    "name": "text_clutch",
+    "kind": "vfx",
+    "description": "Huge 'CLUTCH' text in gold",
+    "events": [
+      "clutch"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.5,
+    "timing": "event"
+  },
+  "vfx:text_rip": {
+    "name": "text_rip",
+    "kind": "vfx",
+    "description": "Huge 'RIP' text \u2014 death/fail moment",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.5,
+    "timing": "event"
+  },
+  "vfx:text_nice": {
+    "name": "text_nice",
+    "kind": "vfx",
+    "description": "Huge 'NICE' text in green \u2014 clean play",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.5,
+    "timing": "event"
+  },
+  "vfx:text_bruh": {
+    "name": "text_bruh",
+    "kind": "vfx",
+    "description": "Huge 'BRUH' meme text \u2014 dumb/funny fail",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.5,
+    "timing": "event"
+  },
+  "vfx:text_gg": {
+    "name": "text_gg",
+    "kind": "vfx",
+    "description": "Huge 'GG' text \u2014 round/match ending moment",
+    "events": [
+      "clutch",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.5,
+    "timing": "event"
+  },
+  "vfx:text_lol": {
+    "name": "text_lol",
+    "kind": "vfx",
+    "description": "Huge 'LOL' text \u2014 funny moment",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.5,
+    "timing": "event"
+  },
+  "vfx:text_oof": {
+    "name": "text_oof",
+    "kind": "vfx",
+    "description": "Huge 'OOF' text \u2014 painful fail",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.5,
+    "timing": "event"
+  },
+  "vfx:light_grain": {
+    "name": "light_grain",
+    "kind": "vfx",
+    "description": "Subtle film grain \u2014 cinematic texture",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:moderate_grain": {
+    "name": "moderate_grain",
+    "kind": "vfx",
+    "description": "Medium film grain \u2014 retro/VHS feel",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:heavy_grain": {
+    "name": "heavy_grain",
+    "kind": "vfx",
+    "description": "Heavy noise \u2014 damaged/corrupted footage look",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:glitch": {
+    "name": "glitch",
+    "kind": "vfx",
+    "description": "Glitch/datamosh noise \u2014 error/broken feel",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:zoom_punch": {
+    "name": "zoom_punch",
+    "kind": "vfx",
+    "description": "Quick centered impact zoom",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:freeze": {
+    "name": "freeze",
+    "kind": "vfx",
+    "description": "Hold the event frame",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:deep_fry": {
+    "name": "deep_fry",
+    "kind": "vfx",
+    "description": "Crunchy oversaturated fail",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "vfx:hitmarker": {
+    "name": "hitmarker",
+    "kind": "vfx",
+    "description": "Crosshair hit confirmation",
+    "events": [
+      "kill",
+      "headshot"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 0.65,
+    "timing": "event"
+  },
+  "sfx:few_moments_later": {
+    "name": "few_moments_later",
+    "kind": "sfx",
+    "description": "SpongeBob 'A Few Moments Later' narrator",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:again_again": {
+    "name": "again_again",
+    "kind": "sfx",
+    "description": "Excited 'Again! Again!' reaction",
+    "events": [
+      "multikill"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:among_us_reveal": {
+    "name": "among_us_reveal",
+    "kind": "sfx",
+    "description": "Among Us role reveal sound",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:anime_wow": {
+    "name": "anime_wow",
+    "kind": "sfx",
+    "description": "Anime wow reaction",
+    "events": [
+      "clutch",
+      "headshot"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:another_one": {
+    "name": "another_one",
+    "kind": "sfx",
+    "description": "DJ Khaled 'Another One'",
+    "events": [
+      "multikill"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:atla_why": {
+    "name": "atla_why",
+    "kind": "sfx",
+    "description": "Avatar 'Why?' dramatic moment",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:agamotto": {
+    "name": "agamotto",
+    "kind": "sfx",
+    "description": "Doctor Strange 'By the Eye of Agamotto' dramatic",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:bye_bye_mewing": {
+    "name": "bye_bye_mewing",
+    "kind": "sfx",
+    "description": "Bye bye mewing meme sound",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:lemons": {
+    "name": "lemons",
+    "kind": "sfx",
+    "description": "Caine 'When life gives you lemons' speech",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:clown_music": {
+    "name": "clown_music",
+    "kind": "sfx",
+    "description": "Circus clown music for embarrassing moments",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:daddy_chill": {
+    "name": "daddy_chill",
+    "kind": "sfx",
+    "description": "'Daddy chill' meme sound",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:deku_hero": {
+    "name": "deku_hero",
+    "kind": "sfx",
+    "description": "Deku 'World's Greatest Hero' inspirational",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:dexter_meme": {
+    "name": "dexter_meme",
+    "kind": "sfx",
+    "description": "Dexter meme sound",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:faaah": {
+    "name": "faaah",
+    "kind": "sfx",
+    "description": "Dramatic 'Faaah' reaction",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:gunshot": {
+    "name": "gunshot",
+    "kind": "sfx",
+    "description": "Gunshot impact sound",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:homelander_rage": {
+    "name": "homelander_rage",
+    "kind": "sfx",
+    "description": "Homelander angry violin theme \u2014 intense/unhinged moment",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:homelander_yummers": {
+    "name": "homelander_yummers",
+    "kind": "sfx",
+    "description": "Homelander 'Yummers' \u2014 satisfying moment",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:i_need_you": {
+    "name": "i_need_you",
+    "kind": "sfx",
+    "description": "'I need you' emotional plea",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:knight_shining_armor": {
+    "name": "knight_shining_armor",
+    "kind": "sfx",
+    "description": "'I was the knight in shining armor' dramatic",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:i_will_eliminate_you": {
+    "name": "i_will_eliminate_you",
+    "kind": "sfx",
+    "description": "'I will eliminate you' threat",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:im_better": {
+    "name": "im_better",
+    "kind": "sfx",
+    "description": "'I'm better' flex/boast",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:kinda_cringe": {
+    "name": "kinda_cringe",
+    "kind": "sfx",
+    "description": "Jax 'It's kinda cringe'",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:jojos_golden_wind": {
+    "name": "jojos_golden_wind",
+    "kind": "sfx",
+    "description": "JoJo's Golden Wind dramatic theme",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:death_note": {
+    "name": "death_note",
+    "kind": "sfx",
+    "description": "Death Note dramatic moment theme",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:leave_me_alone": {
+    "name": "leave_me_alone",
+    "kind": "sfx",
+    "description": "'Leave me alone!' frustrated scream",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:low_honor": {
+    "name": "low_honor",
+    "kind": "sfx",
+    "description": "RDR2 low honor sound \u2014 dishonorable moment",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:meow": {
+    "name": "meow",
+    "kind": "sfx",
+    "description": "Cat meow sound",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:sad_cat": {
+    "name": "sad_cat",
+    "kind": "sfx",
+    "description": "Sad cat meow \u2014 sad/pathetic moment",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:movie_clip": {
+    "name": "movie_clip",
+    "kind": "sfx",
+    "description": "Short movie transition sting",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:my_leg": {
+    "name": "my_leg",
+    "kind": "sfx",
+    "description": "SpongeBob 'My leg!' scream",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:cinematic_boom": {
+    "name": "cinematic_boom",
+    "kind": "sfx",
+    "description": "Cinematic boom/impact",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:hello_there": {
+    "name": "hello_there",
+    "kind": "sfx",
+    "description": "Obi-Wan 'Hello there!'",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:outro_song": {
+    "name": "outro_song",
+    "kind": "sfx",
+    "description": "Outro/ending music",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:prowler": {
+    "name": "prowler",
+    "kind": "sfx",
+    "description": "Prowler menacing bass sound \u2014 threat approaching",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:rizz": {
+    "name": "rizz",
+    "kind": "sfx",
+    "description": "Rizz sound effect \u2014 smooth/cool moment",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:roblox_death": {
+    "name": "roblox_death",
+    "kind": "sfx",
+    "description": "Roblox 'oof' death sound",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:bass_drop": {
+    "name": "bass_drop",
+    "kind": "sfx",
+    "description": "Bass drop hit",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill"
+    ],
+    "mood": "hype",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:spongebob_fail": {
+    "name": "spongebob_fail",
+    "kind": "sfx",
+    "description": "SpongeBob fail sound \u2014 embarrassing fail",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:stand_ready": {
+    "name": "stand_ready",
+    "kind": "sfx",
+    "description": "'Stand ready for my arrival, worm' \u2014 domination",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:za_warudo": {
+    "name": "za_warudo",
+    "kind": "sfx",
+    "description": "JoJo Star Platinum 'ZA WARUDO' bass boosted \u2014 time stop moment",
+    "events": [
+      "clutch",
+      "ability"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:surprise": {
+    "name": "surprise",
+    "kind": "sfx",
+    "description": "'Surprise motherf-' reveal",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:taco_bell": {
+    "name": "taco_bell",
+    "kind": "sfx",
+    "description": "Taco Bell bong sound",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:nemesis": {
+    "name": "nemesis",
+    "kind": "sfx",
+    "description": "Nemesis dramatic theme",
+    "events": [
+      "kill",
+      "headshot",
+      "multikill",
+      "clutch",
+      "ability",
+      "play"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:thats_rough": {
+    "name": "thats_rough",
+    "kind": "sfx",
+    "description": "Zuko 'That's rough, buddy' \u2014 sympathy",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:impact_hit": {
+    "name": "impact_hit",
+    "kind": "sfx",
+    "description": "Short impact hit sting",
+    "events": [
+      "kill",
+      "headshot"
+    ],
+    "mood": "hype",
+    "intensity": 0.45,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:tuco_get_out": {
+    "name": "tuco_get_out",
+    "kind": "sfx",
+    "description": "Tuco 'Get out!' \u2014 angry dismissal",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:you_are_an_idiot": {
+    "name": "you_are_an_idiot",
+    "kind": "sfx",
+    "description": "'You are an idiot' taunt",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:should_have_died": {
+    "name": "should_have_died",
+    "kind": "sfx",
+    "description": "'You should have died at birth' \u2014 brutal roast",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  },
+  "sfx:yowai_mo": {
+    "name": "yowai_mo",
+    "kind": "sfx",
+    "description": "Yowai mo \u2014 anime weakness callout",
+    "events": [
+      "death",
+      "whiff",
+      "fail"
+    ],
+    "mood": "roast",
+    "intensity": 0.9,
+    "length": 1.8,
+    "timing": "event"
+  }
+}
