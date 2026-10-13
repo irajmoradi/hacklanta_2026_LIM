@@ -70,6 +70,23 @@ def test_hitmarker_does_not_displace_editorial_word_pop():
     assert [b['content'] for b in boxes] == ['pop_no_shot']
 
 
+def test_crossfade_outgoing_reaction_cannot_cover_incoming_speech(video, tmp_path):
+    engine = Renderer(FFmpegRunner(tmp_path/'work', video, 160, 120, 10))
+    plan = RenderPlan(resolution=720, fps=10, transition='flash', transition_duration=.2,
+        captions=dict(enabled=True), segments=[
+            dict(source_start=0, source_end=1,
+                 reactions=[dict(start=.5, duration=.5, label='hype')]),
+            dict(source_start=1, source_end=2,
+                 words=[dict(start=0, end=.5, text="Someone's")])])
+    engine.render(plan)
+    boxes = [dict(box, start=box['start']+timing['start'], end=box['end']+timing['start'])
+             for i, timing in enumerate(engine.segment_timeline) for box in engine.text_boxes[i]]
+    assert all(not overlaps(a, b) for a, b in combinations(boxes, 2))
+    assert engine.executed_plan.segments[0].reactions[0].duration == pytest.approx(.3)
+    assert engine.executed_plan.segments[1].words[0].start == pytest.approx(.2)
+    assert plan.segments[1].words[0].start == 0  # original saved plan is unchanged
+
+
 @pytest.mark.parametrize('copy', ['Signal candidate', 'Phoenix aggressively pushes the smoke and gets several kills'])
 def test_refiner_cannot_reintroduce_descriptions_or_labels(copy):
     from planner.refinement import refine_captions

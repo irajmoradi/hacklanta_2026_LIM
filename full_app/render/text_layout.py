@@ -49,6 +49,43 @@ def text_filter(name, fx=False):
     return entry.get('category') == 'text' or 'drawtext' in (entry.get('filter') or '')
 
 
+def trim_transition_text(segment, left, right):
+    """Keep copy/reactions out of crossfade windows shared by adjacent clips."""
+    def trim(events, *, words=False, effects=False):
+        kept = []
+        for event in events:
+            if effects and not text_filter(event.name):
+                kept.append(event)
+                continue
+            end = event.end if words else event.start+event.duration
+            start, end = max(left, event.start), min(right, end)
+            if end <= start:
+                continue
+            event.start = start
+            if words:
+                event.end = end
+            else:
+                event.duration = end-start
+            kept.append(event)
+        return kept
+    segment.words = trim(segment.words, words=True)
+    segment.texts = trim(segment.texts)
+    segment.reactions = trim(segment.reactions)
+    segment.timed_effects = trim(segment.timed_effects, effects=True)
+    if left > 0 or right < segment.duration:
+        segment.video_effects = [name for name in segment.video_effects if not text_filter(name)]
+        if left > 0 or right < min(3., segment.duration):
+            segment.title = None
+    kept = []
+    for effect in segment.fx:
+        if text_filter(effect['name'], True):
+            effect['start'], effect['end'] = max(left, effect['start']), min(right, effect['end'])
+            if effect['end'] <= effect['start']:
+                continue
+        kept.append(effect)
+    segment.fx = kept
+
+
 def resolve_segment(segment, preset):
     """Mutate a private render plan, retaining higher-priority reservations.
 

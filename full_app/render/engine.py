@@ -142,8 +142,11 @@ class Renderer:
                     segment.words = words
                     if words:
                         texts = []
-                from .text_layout import resolve_segment
+                from .text_layout import resolve_segment, trim_transition_text
                 segment.words, segment.texts = words, texts
+                trim_transition_text(segment,
+                    overlap if index > 0 or plan.intro else 0.,
+                    duration - (overlap if index < len(plan.segments)-1 or plan.outro else 0.))
                 self.text_boxes[index] = resolve_segment(segment, plan.preset)
                 words, texts = segment.words, segment.texts
                 points = []

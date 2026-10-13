@@ -302,6 +302,8 @@ is omitted. Unknown text filters reserve the whole frame. Graphic hit markers,
 particles, and freeze arrows are not editorial text. Original input plans are
 not mutated; `render_plan` records the executed placements and
 `render_evidence.text_boxes` exposes clip-local reservations for audit.
+Text and reactions are trimmed out of both sides of transition windows so an
+outgoing reaction cannot collide with incoming speech during a crossfade.
 
 Regression tests cover all three presets, every frame of a synthetic timeline,
 speech priority, saved descriptions, provider failure caching, and pixel checks
