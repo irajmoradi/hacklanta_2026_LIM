@@ -20,7 +20,9 @@ def source(tmp_path):
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
                     'testsrc2=s=320x180:r=30:d=2', '-f', 'lavfi', '-i',
                     'sine=frequency=440:sample_rate=48000:duration=2',
-                    '-c:v', 'libx264', '-threads', '2', '-c:a', 'aac', str(path)], check=True)
+                    '-c:v', 'libx264', '-threads', '2', '-color_primaries', 'bt709',
+                    '-color_trc', 'bt709', '-colorspace', 'bt709',
+                    '-c:a', 'aac', str(path)], check=True)
     return path
 
 

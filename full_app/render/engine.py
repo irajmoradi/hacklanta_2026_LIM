@@ -304,6 +304,13 @@ class Renderer:
 
         def chunk(index, inputs, graph, duration):
             output = directory / f'window_{index}.mp4'
+            # Cards, source footage and reaction encodes can carry different
+            # VUI color tags, producing different H.264 SPS even at equal sizes.
+            # Normalize pixels/range and tags before the strict copy-concat.
+            graph = graph.replace('[outv]', '[chunk_color]')
+            graph += (';[chunk_color]scale=iw:ih:out_color_matrix=bt709:out_range=tv,'
+                      'setparams=range=limited:color_primaries=bt709:'
+                      'color_trc=bt709:colorspace=bt709[outv]')
             return self.encode([*inputs, '-filter_complex', graph, '-map', '[outv]',
                                 '-map', '[outa]', '-t', str(duration)], output, directory)
 
