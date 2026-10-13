@@ -148,6 +148,9 @@ def _render_job(pipeline, job, key):
                     bed = generate(options.get('music_mood', 'chill' if options.get('style') in ('clean_edit', 'cinematic') else 'energetic'),
                                    min(600, length), min(599, length*.8), output_dir=scratch)
                     plan['music'] = dict(path=str(bed.path), beats=bed.beats, duck=True, beat_sync=options.get('beat_sync', True))
+        from .experience import trim_beat_events
+        plan = trim_beat_events(plan)
+        original_segments = copy.deepcopy(plan['segments'])
         applied_reactions, applied_sam, skipped_sam = [], [], []
         with pipeline.stage(job, 'subject_track'):
             track = pipeline.hook('sam', 'subject_track', job) if options.get('sam_reframe') else None

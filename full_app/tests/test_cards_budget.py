@@ -9,6 +9,22 @@ from pipeline import Pipeline
 from services.probe import probe_video
 
 
+def test_beat_snap_trims_late_sound_and_caption_before_encode(video, tmp_path):
+    job = job_for(video, tmp_path)
+    job['options'].update(ai_cards=False, cards=False, music=True, beat_sync=True,
+                          captions=True, max_duration=3)
+    job['edit_plan'].update(music=dict(path=str(video), beats=[.8], beat_sync=True))
+    job['edit_plan']['segments'] = [dict(source_start=0, source_end=1,
+        sound_effects=[dict(sfx_key='cinematic_boom', offset_in_segment=.9, duration=.1)],
+        texts=[dict(start=.1, duration=.9, content='A complete phrase')]),
+        dict(source_start=2, source_end=3)]
+    Pipeline().render(job, None)
+    segment = job['render_plan']['segments'][0]
+    assert not segment['sound_effects']
+    assert not segment['texts']  # snapped below the 0.75-second readability floor
+    assert probe_video(job['output'])['duration'] <= 2.1
+
+
 def test_budget_drops_single_word_and_trimmed_editorial_flashes():
     plan = dict(segments=[dict(source_start=0, source_end=10, texts=[
         dict(start=9, duration=1, content='GG!'),
