@@ -1,0 +1,71 @@
+{
+  "method": "Manual inspection of every event contact sheet and thumbnail sheet, plus larger selected card/damage/reaction stills. Complete master and Discord decode checks are recorded separately in verification.json.",
+  "cuts": {
+    "valorant_nice_landscape": {
+      "event_samples_reviewed": 55,
+      "contact_sheets_reviewed": 3,
+      "thumbnail_variants_reviewed": 9,
+      "observations": [
+        "Readable AI intro and fish/car outro; large head-only reactions from all four speakers.",
+        "Stacked hitmarkers, rain, camera movement, glitch effects and varied joins are visible.",
+        "Complete editorial phrases replace the prior 67 ms GG footer.",
+        "Stock selection still includes death/spectator material and a generic Signal candidate caption.",
+        "One spotlight is recorded as applied; two unstable-mask targets are rejected. The accepted target does not establish reliable enemy recognition.",
+        "The large bottom-right head partly covers the end of a long lower caption in the compressed preview."
+      ],
+      "compressed_preview_reviewed": true
+    },
+    "valorant_mean_vertical": {
+      "event_samples_reviewed": 34,
+      "contact_sheets_reviewed": 2,
+      "thumbnail_variants_reviewed": 9,
+      "observations": [
+        "The two 0.4-second damage flashes are confined to the edges; centre gameplay remains gray and untinted.",
+        "All four head-only speakers appear; cards preserve their landscape lettering with portrait letterboxing.",
+        "The outro visibly contains a large fish, pink car, thanks text and EVEN THE FISH AIMED BETTER.",
+        "NEXT TIME VFX overlaps the editorial caption around 4.5 seconds; this existing lower-area text collision remains.",
+        "All three strict spotlight targets are rejected; no SAM spotlight is claimed for this cut."
+      ],
+      "compressed_preview_reviewed": true
+    },
+    "valorant_mean_vertical_reroll": {
+      "event_samples_reviewed": 34,
+      "contact_sheets_reviewed": 2,
+      "thumbnail_variants_reviewed": 9,
+      "observations": [
+        "The seed changes build/hit/after effects visibly while retaining source analysis and the cached cards.",
+        "All four head-only speakers appear; complete editorial text and new AI thumbnail candidates are visible.",
+        "The freeze box/arrow is procedural VFX, not successful SAM evidence.",
+        "All three strict spotlight targets are rejected, including a viewmodel mask."
+      ],
+      "compressed_preview_reviewed": true
+    },
+    "deadlock_nice_landscape": {
+      "event_samples_reviewed": 47,
+      "contact_sheets_reviewed": 2,
+      "thumbnail_variants_reviewed": 9,
+      "compressed_preview_reviewed": true,
+      "observations": [
+        "AI intro and two AI thumbnail candidates are present; the outro is the local fallback with visible cyan fish, pink car and THANKS FOR WATCHING, not an AI outro.",
+        "All four speakers appear as large head-only overlays; stacked hitmarkers, glitch, bars, freeze/arrow and camera effects are visible.",
+        "The large bottom-right head overlaps the end of a long lower caption in the compressed preview.",
+        "Editorial phrases remain complete; isolated transcribed words such as Thanks and Reduce remain. Their speech accuracy was not independently established.",
+        "All three spotlight targets are rejected (two unstable IoU, one fragmented); no SAM spotlight is claimed."
+      ]
+    },
+    "deadlock_mean_vertical": {
+      "event_samples_reviewed": 32,
+      "contact_sheets_reviewed": 2,
+      "thumbnail_variants_reviewed": 9,
+      "compressed_preview_reviewed": true,
+      "observations": [
+        "The AI intro and local fish/car outro are cached from the nice cut and letterboxed; this cut does not have a new AI outro or mean-specific card art.",
+        "All four large head-only speakers appear, including one explicit Lance reaction; the compressed preview keeps the full editorial phrase above the head.",
+        "The mean preset retains highlight footage and positive hype wording from stock selection, so it is not a convincing lowlight/roast montage despite SKILL ISSUE thumbnails.",
+        "One spotlight was accepted; two were rejected as fragmented and viewmodel. Acceptance does not establish correct enemy identity in these heavily distorted frames.",
+        "Bold hitmarkers, glitch, speed lines and edge fire appear; isolated transcribed words remain, with speech accuracy not independently established.",
+        "One narration line was omitted by the stock safe-gap rule to protect reactions."
+      ]
+    }
+  }
+}

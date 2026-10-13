@@ -134,6 +134,12 @@ def _render_job(pipeline, job, key):
         if not options.get('fx') or not pipeline.hook('fx', 'compose', job):
             for segment in plan['segments']:
                 segment.pop('fx', None)
+        if options.get('ai_cards') and options.get('cards', True):
+            plan['intro'] = dict(text='AI INTRO', duration=3.5)
+            plan['outro'] = dict(text='THANKS FOR WATCHING', duration=3.5)
+        from .experience import budget_duration
+        plan = budget_duration(plan, options.get('max_duration'))
+        original_segments = copy.deepcopy(plan['segments'])
         if options.get('music') and not plan.get('music'):
             generate = pipeline.hook('music', 'pick_or_generate', job)
             if generate:
@@ -142,7 +148,10 @@ def _render_job(pipeline, job, key):
                     bed = generate(options.get('music_mood', 'chill' if options.get('style') in ('clean_edit', 'cinematic') else 'energetic'),
                                    min(600, length), min(599, length*.8), output_dir=scratch)
                     plan['music'] = dict(path=str(bed.path), beats=bed.beats, duck=True, beat_sync=options.get('beat_sync', True))
-        applied_reactions, applied_sam = [], []
+        from .experience import trim_beat_events
+        plan = trim_beat_events(plan)
+        original_segments = copy.deepcopy(plan['segments'])
+        applied_reactions, applied_sam, skipped_sam = [], [], []
         with pipeline.stage(job, 'subject_track'):
             track = pipeline.hook('sam', 'subject_track', job) if options.get('sam_reframe') else None
             if track:
@@ -155,9 +164,6 @@ def _render_job(pipeline, job, key):
                         pipeline.warn(job, 'SAM subject tracking unavailable or degraded; using fallback crop')
                     segment['sam'] = {**(segment.get('sam') or {}), 'subject_track': [dict(time=max(0, t-start)/segment.get('speed', 1), x=x, y=y)
                                                        for t, x, y, *_ in points][::max(1, len(points)//499 + 1)]}
-        if options.get('ai_cards') and options.get('cards', True):
-            plan['intro'] = dict(text='AI INTRO', duration=3.5)
-            plan['outro'] = dict(text='THANKS FOR WATCHING', duration=3.5)
         validated = RenderPlan.model_validate(plan)
         pack = os.getenv('REACTION_PACK')
         selector, apply = None, None
@@ -216,11 +222,20 @@ def _render_job(pipeline, job, key):
                             native = native_clips[index]
                             local_peak = native['peak']-native['start']
                         local_peak = min(max(0, local_peak), max(0, duration-1/validated.fps))
-                        spotlight(path, output, 0, duration, effect='spotlight',
-                                  kill_time=local_peak, freeze_seconds=0)
+                        with warnings.catch_warnings(record=True) as mask_warnings:
+                            warnings.simplefilter('always', RuntimeWarning)
+                            spotlight(path, output, 0, duration, effect='spotlight',
+                                      kill_time=local_peak, freeze_seconds=0)
+                        rejected = [str(w.message) for w in mask_warnings
+                                    if str(w.message).startswith('SAM spotlight skipped:')]
+                        for warning in mask_warnings:
+                            pipeline.warn(job, str(warning.message))
                         # Duration-preserving spotlight keeps beats, captions and narration aligned.
                         path = output
-                        applied_sam.append(dict(segment=index, time=local_peak, effect='spotlight'))
+                        if rejected:
+                            skipped_sam.append(dict(segment=index, time=local_peak, reasons=rejected))
+                        else:
+                            applied_sam.append(dict(segment=index, time=local_peak, effect='spotlight'))
             if selector and apply and not segment.reactions and 'reactions' not in original_segments[index]:
                 with pipeline.stage(job, f'reactions_{index}'):
                     path = apply(path, clip_metadata[index], selector, validated.preset,
@@ -251,11 +266,14 @@ def _render_job(pipeline, job, key):
             job['subtitle_events'] = getattr(engine, 'caption_events', [])
             executed = getattr(engine, 'executed_plan', validated)
             job['render_plan'] = executed.model_dump(mode='json')
+            # Narration/share stages must consume the same trimmed source ranges.
+            job['edit_plan'] = copy.deepcopy(plan)
             # Scratch music filenames must not be mistaken for reusable client assets.
             if job['render_plan'].get('music'):
                 job['render_plan']['music']['path'] = 'generated music bed'
             job['render_evidence'] = dict(filter_graphs=getattr(engine, 'filter_graphs', []),
                 timeline=getattr(engine, 'segment_timeline', []), reactions=applied_reactions, sam=applied_sam,
+                sam_skipped=skipped_sam,
                 privacy=bool(options.get('privacy', False)), output=probe_video(output))
             if options.get('reactions') and selector and not applied_reactions and all('reactions' in s for s in original_segments):
                 pipeline.warn(job, 'Reactions requested but no eligible pack events were rendered')
