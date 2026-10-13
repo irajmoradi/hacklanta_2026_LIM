@@ -86,10 +86,14 @@ Errors propagate so the backend can report them; disabled/empty hooks return the
 
 Landscape/square use bottom-right; direct vertical overlays use bottom-left
 (explicit planned placements use bottom-right). `reaction_size` is small, medium,
-or large (default). Large targets 33% of landscape height, 27% of vertical width,
-and 30% of square height. Medium/small multiply that by .78/.55. A fixed union of
-sampled alpha/mask bounds removes transparent portrait padding before sizing the
-visible head. Heads overlap the bottom/side edge slightly. Soft offset shadow,
+or large (default). Large targets 35% of landscape height, 28% of vertical width,
+and 32% of square height before feather padding and slight edge overlap. Visible
+heads land inside the requested 28–35% / 22–28% ranges. Medium/small multiply
+that by .78/.55. A fixed union of sampled alpha/mask bounds removes transparent
+portrait padding before sizing the visible head. Each sample uses the largest
+opaque component, excluding disconnected keying dust and faint halos that would
+otherwise inflate the crop and shrink the actual face. Heads overlap the
+bottom/side edge slightly. Soft offset shadow,
 short fade/bounce transitions and subtle idle bob remain enabled.
 Matted portraits retain their full silhouette; legacy portraits retain the circular crop.
 Matted portraits show a name tag by default; `show_speaker=False` disables it.

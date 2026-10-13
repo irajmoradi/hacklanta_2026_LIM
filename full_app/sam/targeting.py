@@ -84,6 +84,10 @@ def target_masks(video, start, end, kill_time, *, config=None, crosshair=(.5, .5
         w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         low, high = max(first, round(kill_time*fps)-int(.3*fps)), min(stop-1, round(kill_time*fps)+int(.3*fps))
         indices = np.unique(np.linspace(low, high, min(config.max_samples, 7, high-low+1)).astype(int))
+        # Even sample budgets must still include the actual kill frame.
+        anchor = min(stop-1, max(first, round(kill_time*fps)))
+        indices[np.argmin(np.abs(indices-anchor))] = anchor
+        indices = np.sort(indices)
         masks = []
         for index in indices:
             cap.set(cv2.CAP_PROP_POS_FRAMES, int(index))

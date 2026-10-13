@@ -193,7 +193,7 @@ def test_compositing_changes_background_and_preserves_subject():
     assert np.array_equal(blurred[mask == 1], frame[mask == 1])
     assert np.std(blurred[mask == 0]) < np.std(frame[mask == 0])/2
     spotlight = composite(frame, mask, "spotlight_freeze")
-    assert spotlight[:10].mean() < frame[:10].mean()*.5
+    assert frame[:10].mean()*.80 < spotlight[:10].mean() < frame[:10].mean()*.95
     assert not np.array_equal(composite(frame, mask, "outline_pulse", 0), composite(frame, mask, "outline_pulse", .25))
 
 

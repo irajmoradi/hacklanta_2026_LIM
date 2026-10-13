@@ -11,7 +11,7 @@ from sam import Config, render_effect
 from sam.backends import LocalSegmenter
 from sam.effects import composite
 from sam.targeting import rejection, target_prompt, target_masks, profile_crosshair
-from test_sam import video, run
+from test_sam import video, run, target_backend
 
 
 def mask():
@@ -104,3 +104,52 @@ def test_event_local_sampling_rejects_unstable_sequence(video, monkeypatch):
         clip = target_masks(video, 0, 2, 1, config=Config(backend='local'))
     assert clip.degraded and not clip.masks.any()
     assert len(points) == 2
+
+
+def test_accepted_spotlight_has_bounded_window(tmp_path, target_backend):
+    source = tmp_path/'gray.mp4'
+    run('ffmpeg', '-v', 'error', '-f', 'lavfi', '-i', 'color=gray:s=320x180:r=12:d=2',
+        '-c:v', 'libx264', '-pix_fmt', 'yuv420p', str(source))
+    result = render_effect(source, tmp_path/'effect.mp4', 0, 2, kill_time=1, effect='spotlight')
+    cap = cv2.VideoCapture(str(result))
+    changed = []
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        changed.append(frame[:20].mean() < 120)
+    cap.release()
+    assert len(changed) == 24
+    assert 0 < sum(changed) <= int(.6*12)
+    assert not any(changed[:8]+changed[17:])
+    held = render_effect(source, tmp_path/'held.mp4', 0, 2, kill_time=1,
+                         effect='spotlight_freeze', freeze_seconds=3)
+    cap = cv2.VideoCapture(str(held))
+    assert cap.get(cv2.CAP_PROP_FRAME_COUNT) == 24+int(.6*12)
+    cap.release()
+
+
+def test_even_budget_includes_kill_frame(video, target_backend):
+    clip = target_masks(video, 0, 2, 1, config=Config(backend='local', max_samples=4))
+    assert not clip.degraded
+    assert len(clip.times) <= 4
+    assert 1 in clip.times
+
+
+def test_rejection_reaches_job_warning(video, tmp_path, monkeypatch):
+    from pipeline import Pipeline
+    from services.probe import probe_video
+    import sam
+    monkeypatch.setenv('SAM_BACKEND', 'local')
+    monkeypatch.setattr(sam, 'clip_masks', lambda *a, **kw: SimpleNamespace(degraded=False))
+    monkeypatch.setattr('sam.targeting.BoundedBackend.segment',
+                        lambda self, frame, prompt, seed: np.ones(frame.shape[:2], np.uint8))
+    job = dict(source=str(video), dir=str(tmp_path), meta=probe_video(video), clips=[], warnings=[],
+               options=dict(sam=True, privacy=False),
+               edit_plan=dict(render_version=2, resolution=720,
+                              segments=[dict(source_start=0, source_end=1)]))
+    pipeline = Pipeline()
+    pipeline.client = Mock(side_effect=AssertionError('No provider calls'))
+    pipeline.render(job, None)
+    assert any('SAM spotlight skipped: too large' in message for message in job['warnings'])
+    pipeline.client.assert_not_called()

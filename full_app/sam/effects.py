@@ -14,7 +14,7 @@ from .tracking import clip_masks, track_from_masks
 def composite(frame: np.ndarray, mask: np.ndarray, effect: str, phase: float = 0) -> np.ndarray:
     """Pure BGR compositor, also useful to an existing frame renderer."""
     base = frame.astype(np.float32)
-    if effect == 'spotlight':
+    if effect in {'spotlight', 'spotlight_freeze'}:
         if not np.any(mask):
             return frame.copy()
         radius = max(1, round(min(frame.shape[:2])*.002))
@@ -27,12 +27,12 @@ def composite(frame: np.ndarray, mask: np.ndarray, effect: str, phase: float = 0
         edge = cv2.dilate(closed, np.ones((radius*2+1, radius*2+1), np.uint8))-closed
         glow = cv2.GaussianBlur(edge, (0, 0), max(1, radius*2))[..., None]*.55
         return np.clip(base*(1-glow)+np.array([230, 245, 255])*glow, 0, 255).astype(np.uint8)
-    if effect in {"background_blur", "spotlight_freeze"}:
+    if effect == "background_blur":
         alpha = mask.astype(np.float32)[..., None]
         blurred = cv2.GaussianBlur(frame, (0, 0), 7).astype(np.float32)
-        background = blurred * (.3 if effect == "spotlight_freeze" else 1)
+        background = blurred
         base = base*alpha + background*(1-alpha)
-    if effect in {"outline_pulse", "spotlight_freeze"}:
+    if effect == "outline_pulse":
         edge = cv2.dilate(mask, np.ones((5, 5), np.uint8)) - mask
         glow = cv2.GaussianBlur(edge.astype(np.float32), (0, 0), 4)
         strength = .55 + .45 * math.cos(phase*math.tau*2)
@@ -74,10 +74,11 @@ def render_effect(video, output, start, end, *, effect="outline_pulse", kill_tim
                   freeze_seconds=.6, text="SICK KILL", vertical=False, size=(720, 1280),
                   prompt="player character", config=None, encode_timeout=120,
                   crosshair=None, hud_boxes=(), profile=None) -> Path:
-    """Render [start,end) to H.264/AAC. Freeze adds rounded freeze_seconds to duration.
+    """Render [start,end) to H.264/AAC. Valid freezes insert at most 0.6 seconds.
 
     kill_time is absolute source time. Other effects preserve clip duration. Model
-    errors use fallback masks; invalid media/parameters and encoding errors raise.
+    errors use fallback masks for outline/blur; spotlights skip uncertain targets.
+    Invalid media/parameters and encoding errors raise.
     Output is replaced atomically only after a successful encode.
     """
     if effect not in {"outline_pulse", "background_blur", "spotlight_freeze", "spotlight"}:
