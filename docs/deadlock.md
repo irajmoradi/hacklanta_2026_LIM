@@ -1,5 +1,66 @@
 # Deadlock real-footage calibration (DEADLOCK-1)
 
+## Owner recording follow-up (IRAJ-DL)
+
+The `ext/IRAJ-DL` follow-up uses the owner's GeForce NOW recording,
+`/srv/demo_in/deadlock_iraj_gfn_20261012.mp4`, without third-party attribution.
+The original stays on runner 1 and is never committed. Reproduction tools are
+in `demo_video/iraj_deadlock/`; local media belongs in its ignored `out/` folder.
+
+This recording uses a newer three-lane HUD, rather than the four-lane HUD below.
+The initial automatic result was `generic / 0.000`. The added profile variant
+requires orange, green and blue map evidence, the moved mint souls counter,
+timer OCR, and the existing distributed team portraits together. It retains the
+old layout and never combines partial cues from different variants. Timer OCR
+tries original color first, then a bright-glyph mask. The corrected whole-source
+detection returned **deadlock / 0.706** (3 of 16 sampled frames corroborate the
+complete layout). This score is heuristic, not a measured probability.
+
+Generated fixtures cover 2560, 1280 and 960 widths, a corner stats overlay,
+incomplete HUDs, and kill-feed emission. No real frames or player names are
+stored in tests. The original Deadlock fixtures remain covered.
+
+Run from the worktree root in Git Bash:
+
+```sh
+bash tools/remote_run.sh 'cd full_app && OMP_THREAD_LIMIT=1 python -m pytest -q tests/test_deadlock.py tests/test_deadlock_gfn.py tests/test_game_profiles.py'
+bash tools/remote_run.sh 'OMP_THREAD_LIMIT=1 PYTHONPATH=full_app python demo_video/iraj_deadlock/measure.py /srv/demo_in/deadlock_iraj_gfn_20261012.mp4'
+bash tools/remote_run.sh 'set -o pipefail; cd full_app && OMP_THREAD_LIMIT=1 python -m pytest -q 2>&1 | tee /srv/demo_out/iraj_deadlock/pytest-full.log'
+python demo_video/iraj_deadlock/launch_live.py
+```
+
+The explicitly authorized live smoke reads `GOOGLE_API_KEY` at runtime from
+the owner-specified dotenv path, transmits it through SSH stdin, and selects
+Vertex express. One stock HTTP job and one persistent ledger enforce **60
+generation attempts total**, including images and retries. SDK retries are
+disabled; application attempts are capped at two. No VLM game detection is used.
+The launcher never writes credentials. Retrying preserves the job ID and ledger.
+
+The stock API receives the entire original file, `full_experience: true`,
+`game: auto`, `ingest: true`, and privacy off. Supported server configuration
+raises the default quotas for the 9.47 GB upload and ingest intermediates. The
+runner-only team pack is copied from `/srv/packs/team`; **do not run the sync
+helper while a live render is active**, because its `rsync --delete` removes
+runner-only files. SAM local is selected only if `sam2` is importable; otherwise
+the stock fallback and its warnings are retained. No weights are downloaded.
+
+Three exports reuse the analysis: nice Hype landscape 60 s, mean Meme vertical
+30 s, and nice Cinematic landscape 45 s. Stock AI cards are cached per job, so
+later styles reuse the first intro and fish outro by design. Each export saves
+its status, executed render plan, timings, warnings, and complete share kit
+before another render can replace the job's output. The verifier produces
+two-pass Discord copies below 20,000,000 bytes and paginated contact sheets at
+every executed effect, reaction, text, transition and card. Sound-event frames
+identify timing only; a still image does not establish audible quality.
+
+Initial calibration testing found three new fixture failures in timer OCR;
+after adding the mask fallback, **62 passed in 43.97 s** on the focused runner
+suite (exit 0). Two live attempts were deliberately stopped during ingest while
+correcting detection, before any paid call; their sanitized error snapshots are
+retained. The harness now preflights detection before starting paid analysis.
+
+Final output verification and visual review are recorded below when complete.
+
 Branch: `ext/DEADLOCK-1`. Implementation milestone: `35ff180`.
 Reproduction/live harness milestone: `a362ed3`; full-VOD validation: `4e3001c`;
 shared-pack compatibility and retry audit: `1717347`. No push or merge performed.

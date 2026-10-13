@@ -31,6 +31,10 @@ def main():
     assert os.environ.get('IRAJ_DL_LIVE_SMOKE') == '1'
     assert int(os.environ['MAX_GEMINI_CALLS_PER_JOB']) <= 60
     ROOT.mkdir(parents=True, exist_ok=True)
+    from profiles import detect_game
+    game, confidence = detect_game(SOURCE)
+    save(ROOT/'preflight.json', dict(game=game, confidence=confidence))
+    assert game == 'deadlock', 'Fix offline detection before starting paid analysis'
     pack = Path('reaction_packs/team')
     shutil.copytree('/srv/packs/team', pack, dirs_exist_ok=True)
     os.environ['REACTION_PACK'] = str(pack.resolve())
