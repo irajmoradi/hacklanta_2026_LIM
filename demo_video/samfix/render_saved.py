@@ -130,12 +130,20 @@ def main():
             timestamp = evidence['timeline'][spotlight['segment']]['start']+spotlight['time']
             subprocess.run(['ffmpeg','-v','error','-y','-ss',str(timestamp),'-i',str(output),
                             '-frames:v','1',str(qa/f'{name}_sam_{index}.jpg')],check=True)
+        # Refresh the other variant when separate --only replays run concurrently.
+        manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
         manifest[name] = dict(metadata=metadata, seconds=round(time.monotonic()-started,2),
             bytes=output.stat().st_size, discord_bytes=discord.stat().st_size,
             sha256=hashlib.sha256(output.read_bytes()).hexdigest(), seed=seed, chaos=job['options']['chaos'],
             speakers=speakers, sam=evidence['sam'], warnings=job['warnings'], gemini_calls=0)
-        manifest_path.write_text(json.dumps(manifest, indent=2))
+        staged = out/f'manifest-{name}.tmp'
+        staged.write_text(json.dumps(manifest, indent=2))
+        staged.replace(manifest_path)
         print(name, 'complete', manifest[name], flush=True)
+
+    # A separate command also supports re-mastering existing saved artifacts.
+    from finalize import finalize_outputs
+    finalize_outputs(out, [args.only] if args.only else ('landscape', 'mean_vertical'))
 
 
 if __name__ == '__main__':
