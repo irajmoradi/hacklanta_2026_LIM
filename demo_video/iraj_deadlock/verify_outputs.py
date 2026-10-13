@@ -76,7 +76,7 @@ def main():
             continue
         data = json.loads(status.read_text())
         folder = root/name
-        if name == 'cinematic':
+        if name != 'hype':
             # Stock limits thumbnails to four attempts per job. Keep the raw
             # share kit intact and offer earlier AI art with honest provenance.
             earlier = root/'hype'/'share'/'metadata.json'
@@ -102,15 +102,23 @@ def main():
         for video in [master]:
             subprocess.run(['ffmpeg', '-v', 'error', '-xerror', '-i', str(video),
                             '-f', 'null', '-'], check=True, timeout=300)
-        if not discord.exists():
-            # Two-pass target rate leaves ample room under the strict 20 MB cap.
+        try:
+            complete = discord.is_file() and abs(probe_video(discord)['duration']-meta['duration']) < .1
+        except (ValueError, OSError, subprocess.SubprocessError):
+            complete = False
+        if not complete:
+            # Capped bitrate with headroom avoids muxer-dependent two-pass frame
+            # counts. Publish only a successfully finished encode.
             rate = int((19_000_000*8/meta['duration']-128_000)*.93)
+            temporary = folder/'discord-encoding.mp4'
             args = ['ffmpeg', '-nostdin', '-v', 'error', '-y', '-i', str(master),
+                    '-map', '0:v:0', '-map', '0:a:0?', '-vf', 'fps=30', '-fps_mode', 'cfr',
                     '-c:v', 'libx264', '-preset', 'fast', '-b:v', str(rate), '-threads', '2',
-                    '-passlogfile', str(folder/'discord-pass')]
-            subprocess.run(args+['-pass', '1', '-an', '-f', 'null', '/dev/null'], check=True)
-            subprocess.run(args+['-pass', '2', '-c:a', 'aac', '-b:a', '96k',
-                                 '-movflags', '+faststart', str(discord)], check=True)
+                    '-maxrate', str(rate), '-bufsize', str(rate*2), '-c:a', 'aac', '-b:a', '96k',
+                    '-t', str(meta['duration']), '-movflags', '+faststart', str(temporary)]
+            subprocess.run(args, check=True, timeout=600)
+            assert temporary.stat().st_size < 20_000_000
+            temporary.replace(discord)
         assert discord.stat().st_size < 20_000_000
         subprocess.run(['ffmpeg', '-v', 'error', '-xerror', '-i', str(discord), '-f', 'null', '-'], check=True)
         events = event_samples(data, meta['duration'])
@@ -120,8 +128,16 @@ def main():
             discord_bytes=discord.stat().st_size, event_count=len(events), contact_sheets=sheets,
             timings=data['timings'], warnings=data['warnings'])
     (root/'verification.json').write_text(json.dumps(results, indent=2))
+    summary_file = root/'results.json'
+    count_file = root/'analysis-calls.json'
+    if summary_file.exists() and count_file.exists():
+        summary = json.loads(summary_file.read_text())
+        summary['analysis_calls'] = json.loads(count_file.read_text())['calls']
+        summary['analysis_timings'] = json.loads((root/'analysis-status.json').read_text())['timings']
+        summary_file.write_text(json.dumps(summary, indent=2))
     print(json.dumps(results), flush=True)
-    assert len(results) == 3, 'Not all requested exports are present yet'
+    if '--partial' not in sys.argv:
+        assert len(results) == 3, 'Not all requested exports are present yet'
 
 
 if __name__ == '__main__':

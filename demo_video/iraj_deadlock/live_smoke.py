@@ -103,13 +103,34 @@ def main():
                        'Reject shop menus, item purchases, idle traversal, loading screens and scoreboards. '
                        'Prefer complete fights with visible outcomes.')).raise_for_status()
             data = wait()
-        save(ROOT/'analysis-status.json', data)
+        if not (ROOT/'analysis-status.json').exists():
+            save(ROOT/'analysis-status.json', data)
+            save(ROOT/'analysis-calls.json', {'calls': calls()})
+        reviewed_path = ROOT/'reviewed-clips.json'
+        if reviewed_path.exists() and data.get('download_url') and not (ROOT/'pre-review').exists():
+            previous = ROOT/'pre-review'
+            previous.mkdir()
+            save(previous/'status.json', data)
+            (previous/'master.mp4').write_bytes(client.get(data['download_url']).raise_for_status().content)
+            prior_share = previous/'share'
+            prior_share.mkdir()
+            for item in (data.get('share_kit') or {}).get('downloads', []):
+                (prior_share/Path(item['label']).name).write_bytes(client.get(item['url']).raise_for_status().content)
+        original_analysis = json.loads((ROOT/'analysis-status.json').read_text())
+        count_file = ROOT/'analysis-calls.json'
         summary.update(game=data['game'], confidence=data['game_confidence'],
-                       source_meta=data['meta'], analysis_calls=calls(), analysis_timings=data['timings'])
+                       source_meta=data['meta'], analysis_timings=original_analysis['timings'])
+        if count_file.exists():
+            summary['analysis_calls'] = json.loads(count_file.read_text())['calls']
         assert data['game'] == 'deadlock', 'Auto-detection did not transfer'
         for name, mode, preset, duration, style in EXPORTS:
             if (ROOT/f'{name}-status.json').exists():
                 continue
+            if reviewed_path.exists():
+                reviewed = json.loads(reviewed_path.read_text())
+                for clip in reviewed:
+                    clip['keep'] = clip['type'] == ('bad' if mode == 'mean' else 'good')
+                client.patch(url+'/clips', json={'clips': reviewed}).raise_for_status()
             options = dict(full_experience=True, mode=mode, preset=preset,
                            max_duration=duration, style=style, privacy=False)
             client.post(url+'/plan', json=options).raise_for_status()

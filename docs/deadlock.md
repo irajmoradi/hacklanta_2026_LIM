@@ -49,7 +49,7 @@ Three exports reuse the analysis: nice Hype landscape 60 s, mean Meme vertical
 later styles reuse the first intro and fish outro by design. Each export saves
 its status, executed render plan, timings, warnings, and complete share kit
 before another render can replace the job's output. The verifier produces
-two-pass Discord copies below 20,000,000 bytes and paginated contact sheets at
+capped-bitrate Discord copies below 20,000,000 bytes and paginated contact sheets at
 every executed effect, reaction, text, transition and card. Sound-event frames
 identify timing only; a still image does not establish audible quality.
 
@@ -75,12 +75,104 @@ does transfer. `detection.jsonl` and `detection-after.jsonl` preserve timestamps
 and event types without OCR participant names.
 
 The app limits Nano Banana share thumbnails to four attempts per job (two per
-render), independently of the 60-call overall cap. The third render can
-therefore fall back to local covers. The verifier preserves its raw share kit
-and places successfully generated Hype covers, if any, in Cinematic's separate
-`ai-thumbnail-alternates/`, with explicit reuse provenance. It never resets
-either image ledger or claims those alternatives were newly generated.
-Final output verification and visual review are recorded below when complete.
+render), independently of the 60-call overall cap. The initial automatic Hype
+and reviewed Hype exhausted those attempts. Meme and Cinematic therefore have
+local covers in their stock share kits and successfully generated Hype covers
+in separate `ai-thumbnail-alternates/` folders with reuse provenance. These are
+not fresh style-specific Nano Banana generations. Neither ledger was reset.
+
+### IRAJ-DL final output and editorial review
+
+One stock job (`70320227e5c145e7a127e3e4025de1ed`) processed the entire original.
+It used **15 of 60 authorized live generation attempts**: nine analysis calls
+(three window calls and six chunk calls), two AI cards, and four thumbnail
+attempts. `results.json`, `analysis-calls.json`, original `analysis-status.json`,
+per-export status files, and `verification.json` preserve the audit. Cold ingest
+took 3,842.80 s, signal extraction 798.50 s, and whole-video analysis 372.61 s.
+Stage dictionaries retain some keys from earlier renders; executed render plans
+and reaction lists, rather than accumulated timing-key counts, identify content.
+
+The raw model returned 78 candidates, including four lowlights. Source-frame
+review showed that **all four proposed lowlight timestamp ranges were travel or
+repositioning rather than the described deaths**; some highlight intervals also
+showed spectating. This is not a successful fully automatic editorial selection.
+The initial automatic Hype output is retained under `pre-review/`. For final
+exports, the stock clips PATCH endpoint selected visually checked fights,
+assists, base pressure, victory, and deaths near source seconds 897, 1556, and
+2318. `reviewed_clips.json` records the selections and editorial provenance;
+no recorder kill is asserted without evidence. Clip IDs are specific to this
+job and must be mapped to existing IDs for a fresh analysis. An initial PATCH
+with invented IDs correctly returned HTTP 400; it was corrected without a paid
+call. The review interruption exited 254; the completed resumed launcher exited 0.
+
+Files are present both at `/srv/demo_out/iraj_deadlock/` and the gitignored local
+`demo_video/iraj_deadlock/out/`. Open each `<style>/master.mp4` to try the final
+edit, or `<style>/discord.mp4` for the smaller copy. Each folder also contains
+the share kit, thumbnails, and all event contact sheets.
+
+| Export | Actual duration | Frame size | Master bytes | Discord bytes | Reactions | Render time |
+| --- | ---: | --- | ---: | ---: | ---: | ---: |
+| Nice Hype | 58.854362 s | 1920 x 1080 | 102,389,510 | 17,391,507 | 7 | 172.01 s |
+| Mean Meme | 28.987696 s | 1080 x 1920 | 34,065,036 | 16,990,257 | 4 | 98.97 s |
+| Nice Cinematic | 43.654362 s | 1920 x 1080 | 31,804,948 | 17,304,497 | 6 | 120.74 s |
+
+All outputs are 30 fps H.264/AAC. Transition overlap makes durations slightly
+shorter than the requested caps. Full `ffmpeg -xerror` video/audio decode of all
+six files passed. The final verifier command exited 0:
+
+```sh
+bash tools/remote_run.sh 'set -o pipefail; PYTHONPATH=full_app python demo_video/iraj_deadlock/verify_outputs.py /srv/demo_out/iraj_deadlock 2>&1 | tee /srv/demo_out/iraj_deadlock/verify-final.log'
+```
+
+The initial partial verifier failed (explicit verifier exit 1) when the two-pass
+encoder stalled with incomplete MB-tree statistics. It was replaced with a
+bounded single-pass encode, atomic output replacement, and duration/decode
+validation. `verify-partial.log` retains that failure; no master was altered.
+
+Visual review covered **every export sheet**: Hype 01-06 (71 event samples),
+Meme 01-13 (49), Cinematic 01-05 (49). It also covered both HUD sheets, all
+lowlight/candidate/death source-review sheets, both AI cards, and the three
+selected YouTube covers. Observed limitations are intentionally explicit:
+
+- Hype's reviewed fights, victory bookends, all team reaction identities,
+  intro and fish/car outro are visible. Flash and glitch bursts briefly obscure
+  gameplay, which is readable between effects.
+- Meme shows the reviewed failures and four reactions. Portrait cropping loses
+  peripheral HUD information; VHS, borders, freeze frames, hit markers and large
+  text can obscure action. Cards use blurred portrait padding. This is the
+  stock rendering of the requested style, not a claim of perfect framing.
+- Cinematic retains six reactions and victory bookends, but its stacked dark
+  treatment and vignette obscure shadow detail through several combat shots.
+  Its cached colorful cards contrast strongly with the dark footage. Tuning the
+  shared renderer is outside this task's allowed paths.
+- The AI intro invents a TikTok/Snoopy label, and the fish/car outro adds a
+  comic `5,000,000 KILL STREAK` claim. These are generated embellishments, not
+  attribution or factual match statistics. The Hype AI cover is clean and
+  legible; local Meme/Cinematic covers overlap text already baked into the card.
+  Prefer their separately labeled AI alternatives when sharing.
+- SAM2 was not importable, so no SAM spotlight appeared; stock motion/contrast
+  crop fallback ran. Whisper and WebRTC VAD were unavailable. Automatic speech
+  captions did not appear; editorial text remains. One speech item exceeded its
+  safe gap and was omitted to protect reactions. Narration evidence reports
+  audio in 7/3/6 segments respectively. Still-sheet review and decode validation
+  do not constitute a listening review.
+- Fresh style-specific Nano Banana covers for Meme/Cinematic did not appear
+  because of the stock four-attempt cap, as described above. AI cards were
+  successfully generated once and reused across all three styles.
+
+Changed IRAJ-DL files are `full_app/profiles/data/deadlock.json`,
+`full_app/profiles/deadlock_hud.py`, `full_app/tests/test_deadlock_gfn.py`, this
+document, and the harness/measurement/review scripts plus editorial manifest in
+`demo_video/iraj_deadlock/`. Everything is within the allowlist. Media, source
+frames, runtime ledgers, logs and secrets are not committed.
+
+Branch: **ext/IRAJ-DL**. Milestones: `07d157e`, `9dbb506`, `8bdb4f0`,
+`b6183f0`, `f873f1c`; final review/verification changes follow those milestones.
+No push or merge was performed. Remaining product issues are inaccurate model
+timestamps, overly dark Cinematic treatment, thumbnail text overlap/generated
+claims, and the optional-feature fallbacks listed above.
+
+## Earlier DEADLOCK-1 calibration report
 
 Branch: `ext/DEADLOCK-1`. Implementation milestone: `35ff180`.
 Reproduction/live harness milestone: `a362ed3`; full-VOD validation: `4e3001c`;

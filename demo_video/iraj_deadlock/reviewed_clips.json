@@ -1,0 +1,257 @@
+[
+  {
+    "id": "26",
+    "start_seconds": 439,
+    "end_seconds": 455,
+    "type": "good",
+    "description": "Close-range lane fight",
+    "score": 0.86,
+    "score_scale": "unit",
+    "editorial_review": true,
+    "source": "editorial_review",
+    "keep": true,
+    "suggested_reaction_label": "hype",
+    "signals": {
+      "action_time": 452.5
+    },
+    "events": [
+      {
+        "type": "play",
+        "time": 452.5
+      }
+    ],
+    "nice_veto": false,
+    "score_provenance": "editorial_review",
+    "sources": [
+      "editorial_review"
+    ],
+    "label": ""
+  },
+  {
+    "id": "14",
+    "start_seconds": 548,
+    "end_seconds": 565,
+    "type": "good",
+    "description": "Pressure around an enemy walker",
+    "score": 0.87,
+    "score_scale": "unit",
+    "editorial_review": true,
+    "source": "editorial_review",
+    "keep": true,
+    "suggested_reaction_label": "hype",
+    "signals": {
+      "action_time": 562.5
+    },
+    "events": [
+      {
+        "type": "play",
+        "time": 562.5
+      }
+    ],
+    "nice_veto": false,
+    "score_provenance": "editorial_review",
+    "sources": [
+      "editorial_review"
+    ],
+    "label": ""
+  },
+  {
+    "id": "39",
+    "start_seconds": 2018,
+    "end_seconds": 2027,
+    "type": "good",
+    "description": "Close-range combat and recovery",
+    "score": 0.9,
+    "score_scale": "unit",
+    "editorial_review": true,
+    "source": "editorial_review",
+    "keep": true,
+    "suggested_reaction_label": "hype",
+    "signals": {
+      "action_time": 2022
+    },
+    "events": [
+      {
+        "type": "play",
+        "time": 2022
+      }
+    ],
+    "nice_veto": false,
+    "score_provenance": "editorial_review",
+    "sources": [
+      "editorial_review"
+    ],
+    "label": ""
+  },
+  {
+    "id": "28",
+    "start_seconds": 2448,
+    "end_seconds": 2467,
+    "type": "good",
+    "description": "Late team fight with visible assist notifications",
+    "score": 0.93,
+    "score_scale": "unit",
+    "editorial_review": true,
+    "source": "editorial_review",
+    "keep": true,
+    "suggested_reaction_label": "hype",
+    "signals": {
+      "action_time": 2461
+    },
+    "events": [
+      {
+        "type": "play",
+        "time": 2461
+      }
+    ],
+    "nice_veto": false,
+    "score_provenance": "editorial_review",
+    "sources": [
+      "editorial_review"
+    ],
+    "label": ""
+  },
+  {
+    "id": "27",
+    "start_seconds": 2550,
+    "end_seconds": 2566,
+    "type": "good",
+    "description": "Team pushes the enemy base",
+    "score": 0.96,
+    "score_scale": "unit",
+    "editorial_review": true,
+    "source": "editorial_review",
+    "keep": true,
+    "suggested_reaction_label": "hype",
+    "signals": {
+      "action_time": 2560
+    },
+    "events": [
+      {
+        "type": "play",
+        "time": 2560
+      }
+    ],
+    "nice_veto": false,
+    "score_provenance": "editorial_review",
+    "sources": [
+      "editorial_review"
+    ],
+    "label": ""
+  },
+  {
+    "id": "43",
+    "start_seconds": 2567,
+    "end_seconds": 2575,
+    "type": "good",
+    "description": "Final push resolves in the victory screen",
+    "score": 0.98,
+    "score_scale": "unit",
+    "editorial_review": true,
+    "source": "editorial_review",
+    "keep": true,
+    "suggested_reaction_label": "wholesome",
+    "signals": {
+      "action_time": 2571
+    },
+    "events": [
+      {
+        "type": "play",
+        "time": 2571
+      }
+    ],
+    "nice_veto": false,
+    "score_provenance": "editorial_review",
+    "sources": [
+      "editorial_review"
+    ],
+    "label": ""
+  },
+  {
+    "id": "60",
+    "start_seconds": 889,
+    "end_seconds": 900,
+    "type": "bad",
+    "description": "Immobilized during a fight, then eliminated",
+    "score": 0.92,
+    "score_scale": "unit",
+    "editorial_review": true,
+    "source": "editorial_review",
+    "keep": true,
+    "suggested_reaction_label": "bruh",
+    "signals": {
+      "action_time": 897,
+      "fail_time": 897
+    },
+    "events": [
+      {
+        "type": "death",
+        "time": 897
+      }
+    ],
+    "nice_veto": false,
+    "score_provenance": "editorial_review",
+    "sources": [
+      "editorial_review"
+    ],
+    "label": ""
+  },
+  {
+    "id": "67",
+    "start_seconds": 1548,
+    "end_seconds": 1559,
+    "type": "bad",
+    "description": "Crowd control and incoming fire lead to elimination",
+    "score": 0.94,
+    "score_scale": "unit",
+    "editorial_review": true,
+    "source": "editorial_review",
+    "keep": true,
+    "suggested_reaction_label": "fail",
+    "signals": {
+      "action_time": 1556,
+      "fail_time": 1556
+    },
+    "events": [
+      {
+        "type": "death",
+        "time": 1556
+      }
+    ],
+    "nice_veto": false,
+    "score_provenance": "editorial_review",
+    "sources": [
+      "editorial_review"
+    ],
+    "label": ""
+  },
+  {
+    "id": "68",
+    "start_seconds": 2309,
+    "end_seconds": 2320,
+    "type": "bad",
+    "description": "Low-health fight ends in elimination",
+    "score": 0.96,
+    "score_scale": "unit",
+    "editorial_review": true,
+    "source": "editorial_review",
+    "keep": true,
+    "suggested_reaction_label": "roast",
+    "signals": {
+      "action_time": 2318,
+      "fail_time": 2318
+    },
+    "events": [
+      {
+        "type": "death",
+        "time": 2318
+      }
+    ],
+    "nice_veto": false,
+    "score_provenance": "editorial_review",
+    "sources": [
+      "editorial_review"
+    ],
+    "label": ""
+  }
+]
