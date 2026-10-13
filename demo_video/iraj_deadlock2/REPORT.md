@@ -2,6 +2,7 @@
 
 Branch: `ext/IRAJ-DL2`. No pushes or merges. Implementation milestones:
 `b17de11` (controls/filter/defaults), `a9ef215` (clear stale narration metadata).
+Offline render/verification milestone: `7b28524`.
 
 Full experience now defaults to `narration=false` in the API and production UI.
 Narration remains an explicit toggle with the existing persona choices. The new
@@ -109,4 +110,13 @@ gameplay timestamps: 66.89→124.98, 19.57→67.92, 33.66→82.03, 38.37→88.87
 intentionally darker. Narrator absence was verified from the fresh-source render
 path, options, stage/evidence JSON and stream inventory, not a listening test.
 
-Final full-suite result is recorded below after completion.
+Final full-suite command:
+
+```sh
+bash tools/remote_run.sh 'set -o pipefail && cd full_app && python -m pytest -q | tee /srv/demo_out/iraj_deadlock2/pytest.log'
+```
+
+Exit **0**: **1,480 passed, 20 skipped in 661.59 seconds**. This run used the
+final backend implementation, including stale-narration cleanup. The full log
+is in `/srv/demo_out/iraj_deadlock2/pytest.log` and `out/pytest.log`.
+No requested work remains. No live calls were made and no credential file was read.
