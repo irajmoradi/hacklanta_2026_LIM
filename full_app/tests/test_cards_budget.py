@@ -1,0 +1,47 @@
+"""Card-inclusive caps, with provider-free synthetic render regression coverage."""
+import copy
+import pytest
+
+from pipeline.experience import budget_duration
+from render.plan import RenderPlan
+from test_cards import FakeImageClient, job_for
+from pipeline import Pipeline
+from services.probe import probe_video
+
+
+@pytest.mark.parametrize('maximum', [1, 3, 30, 45, 60])
+@pytest.mark.parametrize('transition', ['cut', 'varied'])
+def test_budget_caps_cards_and_validates_local_events(maximum, transition):
+    segment = dict(source_start=0, source_end=10, speed=.5,
+        timed_effects=[dict(name='damage_pulse', start=9, duration=.4)],
+        texts=[dict(start=0, duration=20, content='A complete caption')],
+        reactions=[dict(start=9, duration=1, label='hype')],
+        words=[dict(start=9, end=10, text='hello')],
+        sound_effects=[dict(sfx_key='cinematic_boom', offset_in_segment=9, duration=1)],
+        fx=[dict(name='zoom_punch', start=9, end=10)],
+        sam=dict(subject_track=[dict(time=9, x=.5)]))
+    plan = dict(render_version=2, fps=30, transition=transition,
+        intro=dict(text='Intro', duration=3.5), outro=dict(text='Outro', duration=3.5),
+        segments=[copy.deepcopy(segment) for _ in range(4)])
+    original = copy.deepcopy(plan)
+    result = RenderPlan.model_validate(budget_duration(plan, maximum))
+    assert plan == original
+    assert sum(round(s.duration*30)/30 for s in result.segments) + sum(
+        round(c.duration*30)/30 for c in (result.intro, result.outro)) <= maximum+1e-8
+    assert result.segments[0].source_start >= 0
+    assert all(s.source_end <= 10 for s in result.segments)
+
+
+@pytest.mark.parametrize('ai_cards', [False, True])
+@pytest.mark.parametrize('transition', ['cut', 'varied'])
+def test_actual_media_includes_cards_inside_cap(video, tmp_path, monkeypatch, ai_cards, transition):
+    job = job_for(video, tmp_path)
+    job['options'].update(max_duration=3, ai_cards=ai_cards, full_experience=True,
+                          reactions=False, transitions=transition != 'cut')
+    job['edit_plan']['transition'] = transition
+    pipeline, client = Pipeline(), FakeImageClient()
+    monkeypatch.setattr(pipeline, 'client', lambda *args: client)
+    pipeline.render(job, None)
+    assert probe_video(job['output'])['duration'] <= 3.05
+    assert job['render_plan']['intro'] and job['render_plan']['outro']
+    assert len(client.calls) == (2 if ai_cards else 0)

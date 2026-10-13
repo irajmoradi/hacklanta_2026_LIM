@@ -48,9 +48,8 @@ for name, color in [('hitmarker_burst', 'white'), ('hitmarker_gold', 'gold'), ('
 for name, color in [('damage_flash', 'red'), ('damage_pulse', '0xff3300')]:
     # Force an opaque working pixel format before drawbox: on RGBA, drawbox
     # can otherwise change alpha that a later overlay composites a second time.
-    # Nested translucent borders approximate a red edge vignette. Centre tint
-    # is only 10%, and even two simultaneous damage layers stay below 20%.
-    edges = [f'drawbox=x=0:y=0:w=iw:h=ih:c={color}@0.10:t=fill']
+    # Edge-only vignette: even stacked damage cues leave the crosshair untinted.
+    edges = []
     for fraction, alpha in ((.035, .28), (.07, .16), (.11, .10)):
         edges.append(f'drawbox=x=0:y=0:w=iw:h=ih:c={color}@{alpha}:t=min(iw\\,ih)*{fraction}')
     add(name, 'format=yuv420p,'+','.join(edges), 'hit', FAIL, 'roast', .4)

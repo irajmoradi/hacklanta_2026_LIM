@@ -1,5 +1,6 @@
 """Deterministic product defaults and editorial enrichment; no provider calls."""
 import copy
+import math
 
 # Register the preset's new boolean with the shared HTTP validator. Keep this
 # scoped here so FISH-1 does not edit FINAL-1's server validation files.
@@ -11,6 +12,66 @@ FULL_EXPERIENCE = dict(planner=True, profiles=True, use_signals=True, audio_ai=T
     captions=True, reactions=True, sam=True, sam_reframe=True, music=True,
     beat_sync=True, transitions=True, cards=True, narration=True, social=True,
     privacy=False, ai_cards=True, gemini_image=True, window_scoring=True)
+
+
+def budget_duration(plan, maximum):
+    """Reserve cards within the cap, trimming source and local events together.
+
+    Work in whole frames; transitions and beat snapping only shorten this upper
+    bound. Keep every selected clip when possible, with symmetric source trims.
+    """
+    plan = copy.deepcopy(plan)
+    if maximum is None:
+        return plan
+    fps = plan.get('fps', 30)
+    frames = math.floor(maximum * fps + 1e-8)
+    cards = [plan[k] for k in ('intro', 'outro') if plan.get(k)]
+    # Tiny requests still retain gameplay and both cards (minimum 0.25 seconds).
+    for card in cards:
+        card['duration'] = max(math.ceil(.25*fps), min(round(card['duration']*fps),
+                              frames // (len(cards)+1))) / fps
+    available = frames - sum(round(c['duration']*fps) for c in cards)
+    segments = plan['segments']
+    # A transition requires a body plus two overlap frames.
+    minimum = 3 if plan.get('transition', 'cut') != 'cut' else 1
+    if available < minimum:
+        raise ValueError('max_duration leaves no gameplay after cards')
+    segments = segments[:max(1, available//minimum)]
+    lengths = [(s['source_end']-s['source_start'])/s.get('speed', 1) for s in segments]
+    counts = [max(1, round(d*fps)) for d in lengths]
+    if sum(counts) > available:
+        # Water-fill proportional allocations with a small per-clip floor.
+        counts = [max(minimum, math.floor(available*d/sum(lengths))) for d in lengths]
+        while sum(counts) > available:
+            i = max(range(len(counts)), key=lambda i: counts[i])
+            counts[i] -= 1
+    for segment, old, count in zip(segments, lengths, counts):
+        length = min(old, count/fps)
+        offset = max(0., (old-length)/2)
+        segment['source_start'] += offset*segment.get('speed', 1)
+        segment['source_end'] = segment['source_start']+length*segment.get('speed', 1)
+        for key in ('timed_effects', 'texts', 'reactions', 'sound_effects', 'words', 'fx'):
+            kept = []
+            for entry in segment.get(key, []):
+                start_key = 'offset_in_segment' if key == 'sound_effects' else 'start'
+                start = entry.get(start_key, 0)
+                end = entry.get('end', start+(entry.get('duration') or old))
+                left, right = max(0., start-offset), min(length, end-offset)
+                if left >= right:
+                    continue
+                entry[start_key] = left
+                if key in ('words', 'fx'):
+                    entry['end'] = right
+                else:
+                    entry['duration'] = right-left
+                kept.append(entry)
+            if key in segment:
+                segment[key] = kept
+        if segment.get('sam'):
+            segment['sam']['subject_track'] = [dict(p, time=p['time']-offset)
+                for p in segment['sam'].get('subject_track', []) if offset <= p['time'] <= offset+length]
+    plan['segments'] = segments
+    return plan
 
 
 def enrich(job, plan):

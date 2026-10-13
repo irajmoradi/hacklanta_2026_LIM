@@ -22,14 +22,33 @@ def frame(names, size, color):
 
 @pytest.mark.parametrize('size', [(320, 180), (180, 320)])
 @pytest.mark.parametrize('names', [('damage_flash',), ('damage_pulse',), ('damage_flash', 'damage_pulse')])
-def test_damage_retains_at_least_55_percent_centre_contrast(size, names):
+def test_damage_retains_at_least_75_percent_centre_contrast(size, names):
     # Difference between white and black reveals retained source contribution,
     # independently of the chosen tint. Chroma conversion gets 3/255 tolerance.
     w, h = size
     retained = (frame(names, size, 'white') - frame(names, size, 'black')) / 255
     centre = retained[h//3:2*h//3, w//3:2*w//3]
-    assert centre.mean() >= .55
+    assert centre.min() >= .75 - 3/255
     assert centre.mean() > retained[:3, :3].mean()
+
+
+@pytest.mark.parametrize('name', sorted(BOLD))
+def test_every_effect_centre_coverage_and_opacity(name):
+    # Measure changed coverage and lost source contrast, including the actual
+    # RGBA placement path. Full-frame transformations are intentionally allowed;
+    # opaque overlays have tighter per-family contracts.
+    white, black = frame([name], (320, 180), 'white'), frame([name], (320, 180), 'black')
+    base = frame([], (320, 180), 'white')
+    region = np.s_[60:120, 106:214]
+    coverage = (abs(white-base).max(axis=2)[region] > 5).mean()
+    opacity = 1 - np.clip((white-black)[region]/255, 0, 1).mean()
+    max_coverage, max_opacity = (1., 1.)
+    if name.startswith(('damage_', 'banner_', 'clutch_bars')) or name == 'speed_lines':
+        max_coverage, max_opacity = (.30, .25)
+    assert coverage <= max_coverage, (name, coverage)
+    assert opacity <= max_opacity + 3/255, (name, opacity)
+    if name.startswith('damage_'):
+        assert BOLD[name]['length'] <= .5
 
 
 @pytest.mark.parametrize('size', [(320, 180), (180, 320)])

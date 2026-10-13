@@ -61,7 +61,8 @@ def test_full_experience_http_feature_coverage(video, tmp_path, monkeypatch):
         job_id = client.post('/api/jobs', data={'video': (io.BytesIO(video.read_bytes()), 'test.mp4')}).json['id']
         url = '/api/jobs/' + job_id
         assert client.post(url+'/analyze', json=dict(full_experience=True, use_signals=False,
-            window_scoring=False, profiles=False, audio_ai=False, mode='mean', max_duration=6)).status_code == 202
+            window_scoring=False, profiles=False, audio_ai=False, ai_cards=False,
+            mode='mean', max_duration=6)).status_code == 202
         planned = wait(app, job_id)
         assert planned['options']['privacy'] is False
         assert planned['edit_plan']['intro'] and planned['edit_plan']['outro']

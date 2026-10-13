@@ -134,6 +134,12 @@ def _render_job(pipeline, job, key):
         if not options.get('fx') or not pipeline.hook('fx', 'compose', job):
             for segment in plan['segments']:
                 segment.pop('fx', None)
+        if options.get('ai_cards') and options.get('cards', True):
+            plan['intro'] = dict(text='AI INTRO', duration=3.5)
+            plan['outro'] = dict(text='THANKS FOR WATCHING', duration=3.5)
+        from .experience import budget_duration
+        plan = budget_duration(plan, options.get('max_duration'))
+        original_segments = copy.deepcopy(plan['segments'])
         if options.get('music') and not plan.get('music'):
             generate = pipeline.hook('music', 'pick_or_generate', job)
             if generate:
@@ -155,9 +161,6 @@ def _render_job(pipeline, job, key):
                         pipeline.warn(job, 'SAM subject tracking unavailable or degraded; using fallback crop')
                     segment['sam'] = {**(segment.get('sam') or {}), 'subject_track': [dict(time=max(0, t-start)/segment.get('speed', 1), x=x, y=y)
                                                        for t, x, y, *_ in points][::max(1, len(points)//499 + 1)]}
-        if options.get('ai_cards') and options.get('cards', True):
-            plan['intro'] = dict(text='AI INTRO', duration=3.5)
-            plan['outro'] = dict(text='THANKS FOR WATCHING', duration=3.5)
         validated = RenderPlan.model_validate(plan)
         pack = os.getenv('REACTION_PACK')
         selector, apply = None, None
@@ -251,6 +254,8 @@ def _render_job(pipeline, job, key):
             job['subtitle_events'] = getattr(engine, 'caption_events', [])
             executed = getattr(engine, 'executed_plan', validated)
             job['render_plan'] = executed.model_dump(mode='json')
+            # Narration/share stages must consume the same trimmed source ranges.
+            job['edit_plan'] = copy.deepcopy(plan)
             # Scratch music filenames must not be mistaken for reusable client assets.
             if job['render_plan'].get('music'):
                 job['render_plan']['music']['path'] = 'generated music bed'
