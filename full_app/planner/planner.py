@@ -63,8 +63,12 @@ def _decorate(plan: RenderPlan, sources: dict[str, RankedClip]) -> None:
             plan.effects.append(Effect(**whole, name="slow_motion"))
         if original.label == "lowlight" and plan.mode == "mean":
             plan.text.append(Text(**beat, content="Confidence: 100. Accuracy: 0.", role="meme", position="center"))
-        if original.caption:
-            plan.text.append(Text(**whole, content=original.caption))
+        # Source captions are analysis metadata, never display copy.
+        editorial = {'clutch': 'CLUTCH TIME', 'multikill': 'ON A ROLL',
+                     'kill': 'CLEAN PICK', 'whiff': 'AIM NOT FOUND',
+                     'death': 'BACK TO LOBBY', 'fail': 'NEXT ROUND'}
+        if _kind(original) in editorial:
+            plan.text.append(Text(**beat, content=editorial[_kind(original)]))
         # Teasers stay uncluttered. Slots refer to labels, never real avatar files.
         if c.phase != "hook" and (c.phase in ("climax", "hook_climax") or original.signals.clutch or original.signals.multikill):
             label = original.reaction_label or (
