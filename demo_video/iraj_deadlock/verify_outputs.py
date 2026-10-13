@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import shutil
 
 from PIL import Image, ImageDraw, ImageOps
 from services.probe import probe_video
@@ -75,6 +76,23 @@ def main():
             continue
         data = json.loads(status.read_text())
         folder = root/name
+        if name == 'cinematic':
+            # Stock limits thumbnails to four attempts per job. Keep the raw
+            # share kit intact and offer earlier AI art with honest provenance.
+            earlier = root/'hype'/'share'/'metadata.json'
+            if earlier.exists():
+                alternatives = folder/'ai-thumbnail-alternates'
+                alternatives.mkdir(exist_ok=True)
+                reused = []
+                for candidate in json.loads(earlier.read_text()).get('thumbnail_candidates', []):
+                    if candidate['provider'] != 'gemini':
+                        continue
+                    for variant in candidate['variants'].values():
+                        filename = Path(variant['file']).name
+                        shutil.copy2(earlier.parent/filename, alternatives/filename)
+                        reused.append(dict(file=filename, provider='gemini', reused_from='hype/share',
+                                           reason='Stock four-attempt thumbnail budget per job'))
+                (alternatives/'provenance.json').write_text(json.dumps(reused, indent=2))
         master, discord = folder/'master.mp4', folder/'discord.mp4'
         meta = probe_video(master)
         assert target-3 <= meta['duration'] <= target+.1, (name, meta)

@@ -61,6 +61,25 @@ retained. The harness now preflights detection before starting paid analysis.
 
 The full runner suite passed: **1,458 passed, 20 skipped in 772.67 s**, exit 0,
 using the `pytest-full.log` command above. Skips are not counted as passes.
+
+Both offline scans covered all 2,597.510033 seconds and exited 0. The initial
+generic-profile scan took 895.02 s and emitted 96 scene cuts, no HUD events.
+With corrected automatic detection, the scan took 1,011.89 s (detection itself
+37.94 s) and emitted 107 kill candidates, 16 death-banner candidates, one weak
+souls-gain candidate, and the same 96 scene cuts. These are **not unique player
+kill/death counts**: feed events include other players and OCR identity jitter;
+changing respawn countdowns can emit repeated death evidence. Souls-gain parsing
+still uses the original layout's counter region, so the new layout's economy
+signal is not claimed as calibrated. The detector's requested kill/death path
+does transfer. `detection.jsonl` and `detection-after.jsonl` preserve timestamps
+and event types without OCR participant names.
+
+The app limits Nano Banana share thumbnails to four attempts per job (two per
+render), independently of the 60-call overall cap. The third render can
+therefore fall back to local covers. The verifier preserves its raw share kit
+and places successfully generated Hype covers, if any, in Cinematic's separate
+`ai-thumbnail-alternates/`, with explicit reuse provenance. It never resets
+either image ledger or claims those alternatives were newly generated.
 Final output verification and visual review are recorded below when complete.
 
 Branch: `ext/DEADLOCK-1`. Implementation milestone: `35ff180`.
