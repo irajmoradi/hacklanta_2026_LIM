@@ -59,6 +59,8 @@ suite (exit 0). Two live attempts were deliberately stopped during ingest while
 correcting detection, before any paid call; their sanitized error snapshots are
 retained. The harness now preflights detection before starting paid analysis.
 
+The full runner suite passed: **1,458 passed, 20 skipped in 772.67 s**, exit 0,
+using the `pytest-full.log` command above. Skips are not counted as passes.
 Final output verification and visual review are recorded below when complete.
 
 Branch: `ext/DEADLOCK-1`. Implementation milestone: `35ff180`.

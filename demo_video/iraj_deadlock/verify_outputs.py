@@ -36,27 +36,31 @@ def event_samples(data, duration):
     for entry in data['render_evidence'].get('sam', []):
         i = entry['segment']
         timing = timeline[i]
-        add(timing['start']+timing['duration']/2, f'SAM segment {i}')
+        add(timing['start']+entry['time'], f'SAM segment {i}')
     return sorted(events, key=lambda event: event['time'])
 
 
 def contacts(video, events, folder):
     folder.mkdir(exist_ok=True)
+    meta = probe_video(video)
+    portrait = meta['height'] > meta['width']
+    columns, rows, cell_height = (2, 2, 900) if portrait else (3, 4, 340)
+    per_page = columns*rows
     pages = []
-    for page_start in range(0, len(events), 12):
-        sheet = Image.new('RGB', (1440, 4*340), '#151515')
-        for cell, event in enumerate(events[page_start:page_start+12]):
+    for page_start in range(0, len(events), per_page):
+        sheet = Image.new('RGB', (columns*480, rows*cell_height), '#151515')
+        for cell, event in enumerate(events[page_start:page_start+per_page]):
             raw = subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(event['time']),
                 '-i', str(video), '-frames:v', '1', '-vf', 'scale=480:-2',
                 '-f', 'image2pipe', '-vcodec', 'png', '-threads', '1', '-'],
                 capture_output=True, check=True, timeout=60).stdout
             frame = Image.open(io.BytesIO(raw)).convert('RGB')
-            frame = ImageOps.contain(frame, (480, 290))
-            x, y = cell%3*480, cell//3*340
+            frame = ImageOps.contain(frame, (480, cell_height-50))
+            x, y = cell%columns*480, cell//columns*cell_height
             sheet.paste(frame, (x+(480-frame.width)//2, y))
-            ImageDraw.Draw(sheet).text((x+5, y+294),
+            ImageDraw.Draw(sheet).text((x+5, y+cell_height-46),
                 f'{event["time"]:.3f}s | {event["label"][:65]}', fill='white')
-        path = folder/f'contact-{page_start//12+1:02d}.jpg'
+        path = folder/f'contact-{page_start//per_page+1:02d}.jpg'
         sheet.save(path, quality=94)
         pages.append(str(path))
     return pages
