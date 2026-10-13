@@ -25,7 +25,7 @@ BASE = 'http://127.0.0.1:8022'
 # The initial audit consumed 19 calls before two correctness fixes. Its ledger
 # remains in the total. Separate final nice/mean jobs retain image budget for
 # every deliverable, including Reroll, without resetting any spent ledger.
-CAPS = dict(valorant=19, valorant_nice=9, valorant_mean=11, deadlock=21)
+CAPS = dict(valorant=19, valorant_nice=14, valorant_mean=11, deadlock=16)
 
 
 def dump(path, data):
@@ -61,6 +61,7 @@ def stage(job_id, name, options):
 def main():
     assert os.getenv('LIM_FINAL2_LIVE') == '1'
     assert os.environ['MAX_GEMINI_CALLS_PER_JOB'] == '30'
+    assert os.environ['EDITOR_AGENT_CALL_BUDGET'] == '0'
     ROOT.mkdir(exist_ok=True, parents=True)
     while not (ROOT/'source_selection.json').exists():
         time.sleep(3)
@@ -88,7 +89,7 @@ def main():
             ('valorant_mean', 'valorant', ROOT/'valorant_10min.mp4', [('mean_vertical',30,0), ('mean_vertical_reroll',30,1)]),
             ('deadlock', 'deadlock', Path('/srv/demo_in/deadlock_ccby_aXZYyd4SoWM.mp4'), [('nice_landscape',45,0), ('mean_vertical',30,0)])]:
             os.environ['MAX_GEMINI_CALLS_PER_JOB'] = str(CAPS[record])
-            os.environ['GEMINI_TOP_N'] = '12' if game == 'deadlock' else '4'
+            os.environ['GEMINI_TOP_N'] = '7' if game == 'deadlock' else '4'
             if record not in ids:
                 assert len(ids) < 4, 'No additional paid jobs permitted'
                 started = time.monotonic()
@@ -110,7 +111,7 @@ def main():
                     style='meme_edit' if mean else 'hype_montage',
                     preset='vertical' if mean else 'landscape', max_duration=duration,
                     seed=seed, chaos=.8 if mean else .6, clean=False, reaction_size='large',
-                    editing_instructions='Keep fights readable. Use varied bold effects, all four reaction speakers, complete caption phrases, music and beat sync.')
+                    editor_agent=False, editing_instructions='')
                 current = requests.get(f'{BASE}/api/jobs/{job_id}', timeout=30).json()
                 started = time.monotonic()
                 job, planning = stage(job_id, 'plan' if current.get('has_clips') else 'analyze', options)

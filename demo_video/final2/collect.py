@@ -1,5 +1,6 @@
 """Offline packaging and event-by-event visual review sheets; no provider calls."""
 import io
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -25,14 +26,29 @@ def sheet(items, output, columns=4):
     canvas.save(output, quality=88)
 
 
+def summary_row(name, facts):
+    return (f"| {name} | {facts['duration']:.3f} / {facts['cap']} | "
+            f"{facts['master_bytes']/1e6:.1f} / {facts['discord_bytes']/1e6:.1f} | "
+            f"{', '.join(facts['speakers'])} | {len(facts['sam'])} / {len(facts['sam_skipped'])} | "
+            f"{facts['ai_cards']}/2 | {facts['ai_thumbnails']}/2 |")
+
+
 def main():
-    summary = ['# FINAL-2 outputs', '', '| Cut | Seconds / cap | MB / Discord MB | Speakers | SAM | AI cards | AI thumbnail candidates |',
+    summary = ['# FINAL-2 outputs', '', '| Cut | Seconds / cap | MB / Discord MB | Speakers | SAM applied / rejected | AI cards | AI thumbnail candidates |',
                '|---|---|---|---|---|---|---|']
     for directory in sorted(ROOT.glob('*_*')):
         if not (directory/'job.json').exists():
             continue
         job = json.loads((directory/'job.json').read_text())
         master = directory/'master.mp4'
+        with master.open('rb') as stream:
+            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        verified = directory/'verification.json'
+        if verified.exists():
+            previous = json.loads(verified.read_text())
+            if previous.get('master_sha256') == digest:
+                summary.append(summary_row(directory.name, previous))
+                continue
         info = probe(master)
         duration = float(info['format']['duration'])
         cap = job['options']['max_duration']
@@ -53,6 +69,10 @@ def main():
         audio_streams = [s for s in info['streams'] if s['codec_type'] == 'audio']
         assert audio_streams, 'Master must contain audio'
         plan, evidence = job['render_plan'], job['render_evidence']
+        assert all(len(t['content'].split()) > 1 and t['duration'] >= .75
+                   for s in plan['segments'] for t in s['texts'])
+        assert all(e['duration'] <= .5 for s in plan['segments'] for e in s['timed_effects']
+                   if e['name'] in ('damage_flash', 'damage_pulse'))
         points = [(min(1,duration/2), 'intro')]
         for i, (segment, timing) in enumerate(zip(plan['segments'], evidence['timeline'])):
             origin = timing['start']
@@ -81,18 +101,29 @@ def main():
         candidates = job['share_kit']['metadata'].get('thumbnail_candidates', [])
         speakers = sorted({r['speaker'] for r in evidence['reactions']})
         facts = dict(duration=duration, cap=cap, speakers=speakers, sam=evidence['sam'],
+            sam_skipped=evidence.get('sam_skipped', []),
+            editorial_caption_flashes=False,
             ai_cards=sum(not c['fallback'] for c in cards),
             ai_thumbnails=sum(c['provider']=='gemini' for c in candidates),
             warnings=job.get('warnings', []), event_samples=len(points),
             master_bytes=master.stat().st_size, discord_bytes=discord.stat().st_size,
+            master_sha256=digest,
             decode_verified=True, audio_codec=audio_streams[0]['codec_name'],
             source_attribution=(ROOT/'ATTRIBUTION.txt').read_text() if directory.name.startswith('deadlock') else None)
         (directory/'verification.json').write_text(json.dumps(facts, indent=2))
-        summary.append(f"| {directory.name} | {duration:.3f} / {cap} | {master.stat().st_size/1e6:.1f} / {discord.stat().st_size/1e6:.1f} | {', '.join(speakers)} | {len(evidence['sam'])} | {facts['ai_cards']}/2 | {facts['ai_thumbnails']}/{len(candidates)} |")
+        summary.append(summary_row(directory.name, facts))
         print('PACKAGED',directory.name,flush=True)
     summary += ['', 'Each folder contains full job warnings, stage timings, share kit, event sample manifest and contact sheets.',
                 '', (ROOT/'ATTRIBUTION.txt').read_text()]
     (ROOT/'SUMMARY.md').write_text('\n'.join(summary))
+    mean, reroll = [ROOT/name/'job.json' for name in ('valorant_mean_vertical', 'valorant_mean_vertical_reroll')]
+    if mean.exists() and reroll.exists():
+        before, after = json.loads(mean.read_text()), json.loads(reroll.read_text())
+        assert before['id'] == after['id'] and before['seed'] != after['seed']
+        assert before['clips'] == after['clips']
+        assert before['planner_plan']['effects'] != after['planner_plan']['effects']
+        (ROOT/'reroll_verification.json').write_text(json.dumps(dict(job=before['id'],
+            seeds=[before['seed'], after['seed']], analysis_reused=True, effects_changed=True), indent=2))
 
 
 if __name__ == '__main__':

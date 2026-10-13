@@ -44,10 +44,22 @@ injects analysis/plans. There is no stock analysis-import endpoint, so Valorant
 uses a fresh analysis of source 960–1560 seconds: the ten-minute window containing
 the most saved DEMO-02 clip starts (28). Deadlock uses the provided CC BY source.
 
-Two durable jobs each have a 30-attempt provider ceiling, including images,
-for a hard total ceiling of 60. Alternate cuts and the changed-seed Reroll reuse
-the respective jobs through `/plan`. Image/card caches and image-specific
-budgets retain stock behavior. `jobs.json` supports resuming completed variants.
+Durable job ceilings sum to 60, including every image attempt. The initial
+visual audit spent 19 attempts before the caption/SAM-evidence corrections;
+those attempts remain charged. Final allocations are 14 for Valorant nice,
+11 for Valorant mean plus Reroll, and 16 for Deadlock nice plus mean. The final
+Valorant analyses score four local windows each, while Deadlock scores seven;
+all also perform whole-video analysis. Alternate cuts and the changed-seed
+Reroll reuse analysis through `/plan`. Separate nice/mean Valorant jobs leave
+the stock four-image thumbnail budget sufficient for Reroll. No ledger is reset.
+`budget_policy.json`, `jobs.json` and `live_calls.json` preserve the accounting.
+Five attempts in Valorant nice were consumed by the stock automatic Director:
+nonempty editing instructions invoke it even with no explicit Director flag,
+and its independent default ceiling is 12. That run was stopped at 10 total
+attempts, then resumed with its existing analysis, blank optional instructions,
+`editor_agent=false`, and `EDITOR_AGENT_CALL_BUDGET=0`. Its 14-attempt allocation
+includes those five calls plus analysis and the four final card/thumbnail calls.
+The hard aggregate ceiling remains 60; no spent calls or ledger rows are erased.
 
 SAM runs locally with `/srv/models/sam2.1_hiera_small.pt`, CPU, four samples per
 clip, a 120-second operation timeout and a 300-second clip budget. The team pack
@@ -65,6 +77,22 @@ captions, reactions, cards, music/beat sync and share kits are enabled.
 - Runtime preflight: SAM degraded=false, two real model samples in 13.14 seconds;
   Whisper tiny cached; exit 0. This makes zero Gemini calls.
 - Full suite and final media audit: results will be recorded below when complete.
+
+The first complete suite returned **1431 passed, 20 skipped, 3 failed**, exit 1,
+in 680.37 seconds; all three failures were the PyAV incompatibility below.
+A fresh run was intentionally interrupted to include the subsequent audit fixes
+(404 passed, 9 skipped, remote exit 2). The audit fixes passed
+`bash demo_video/final2/run_checks.sh "cd full_app && python -m pytest -q tests/test_cards_budget.py tests/test_wire1.py"`
+with **21 passed, exit 0**. `run_checks.sh` invokes `tools/remote_run.sh`, adding
+only an rsync protection rule for runner-only reaction media during live jobs.
+
+The initial video audit found a 67 ms `GG!` footer after trimming. Budgeting now
+discards one-word editorial text and phrases shortened below 0.75 seconds; real
+speech word captions are unaffected. It also found strict SAM mask rejection
+reported as successful application. The adapter now separates accepted masks
+from `sam_skipped` records and carries the exact rejection warnings. Synthetic
+tests cover both success and rejection. Superseded audit media are kept only
+under the runner's `superseded/` folder, not delivered as final masters.
 
 The initial full-suite run exposed an optional-dependency incompatibility:
 faster-whisper 1.2.1 passes `metadata_errors` to PyAV; PyAV 19 removed that
