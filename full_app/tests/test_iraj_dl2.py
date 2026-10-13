@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from pipeline.extensions import team_source
+from pipeline.extensions import finish_output, team_source
 from reactions.pack import Reaction, ReactionSelector, configure_render_speakers
 from server.capabilities import frontend_capabilities
 from server.legacy import EDIT_STYLES
@@ -79,3 +79,14 @@ def test_no_pack_advertises_no_names(monkeypatch):
     monkeypatch.delenv('REACTION_PACK', raising=False)
     assert frontend_capabilities()['reaction_speakers'] == []
     assert options_valid({'reaction_speakers': []}, EDIT_STYLES)['reaction_speakers'] == []
+
+
+def test_disabling_narration_clears_previous_render_metadata(tmp_path):
+    job = dict(options={'narration': False}, narration_track=[{'has_audio': True}],
+               render_evidence={'narration_graph': 'old mix', 'reactions': []},
+               timings={'narration': 1, 'render_v2': 2})
+    output = tmp_path / 'fresh.mp4'
+    assert finish_output(None, job, output, {}, tmp_path) == output
+    assert 'narration_track' not in job
+    assert job['render_evidence'] == {'reactions': []}
+    assert job['timings'] == {'render_v2': 2}

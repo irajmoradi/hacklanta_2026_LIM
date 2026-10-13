@@ -304,6 +304,10 @@ def private_source(pipeline, job, source, scratch, suffix=''):
 
 
 def finish_output(pipeline, job, output, plan, scratch):
+    # A rerender starts with fresh audio; never report a previous narrator track.
+    job.pop('narration_track', None)
+    job.get('render_evidence', {}).pop('narration_graph', None)
+    job.get('timings', {}).pop('narration', None)
     if job['options'].get('narration'):
         build = pipeline.hook('narration', 'build', job)
         render = pipeline.hook('narration.render', 'render', job)
