@@ -625,3 +625,15 @@ progress {
 .director-diff > div { min-width: 0; }
 .director-diff pre { margin: 4px 0; }
 .montage-track button { color: #10121a; font-size: 10px; padding: 0; overflow: hidden; }
+.metadata-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin:16px 0; }
+.metadata-grid dt { font-size:11px; color:#aaa; }
+.metadata-grid dd { margin:4px 0; overflow-wrap:anywhere; font-size:13px; }
+.job-details { margin-top:24px; }
+.job-details details { margin:12px 0; }
+.job-details summary { cursor:pointer; padding:12px 0; }
+.job-details pre { max-height:320px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
+.job-details textarea { min-height:320px; width:100%; font-family:monospace; }
+.edit-settings textarea { width:100%; min-height:85px; }
+.edit-settings textarea, .job-details textarea { display:block; color:#edf0f8; background:#1a1e2b; border:1px solid #363d52; border-radius:7px; padding:10px; margin:8px 0; resize:vertical; }
+.job-details label { display:block; margin:12px 0; }
+.job-details input[type="file"] { display:block; margin-top:8px; max-width:100%; }

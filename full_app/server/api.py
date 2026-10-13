@@ -199,7 +199,7 @@ def create_app(config=None, pipeline=None):
     def status(job_id):
         return jsonify(public(store.get(job_id)))
 
-    def start(job_id, target, data, legacy=False, analysis_request=False):
+    def start(job_id, target, data, legacy=False, analysis_request=False, refresh_plan=False):
         options = options_valid(data, EDIT_STYLES)
         job = owned(job_id)
         if 'edit_plan' in data and target != 'render':
@@ -213,7 +213,7 @@ def create_app(config=None, pipeline=None):
             options.setdefault('generate_thumbnails', True)
         if target == 'render':
             options['legacy_dimensions'] = legacy and 'preset' not in options
-        future = queue.submit(job_id, target, options, key, custom, analysis_request=analysis_request)
+        future = queue.submit(job_id, target, options, key, custom, analysis_request=analysis_request, refresh_plan=refresh_plan)
         if legacy:
             future.result()
             job = store.get(job_id)
@@ -233,7 +233,7 @@ def create_app(config=None, pipeline=None):
 
     @app.post('/api/jobs/<job_id>/plan')
     def plan(job_id):
-        return start(job_id, 'plan', body())
+        return start(job_id, 'plan', body(), refresh_plan=True)
 
     @app.post('/api/jobs/<job_id>/render')
     def render(job_id):
@@ -252,7 +252,7 @@ def create_app(config=None, pipeline=None):
             if job_id in queue.active:
                 raise Conflict('Job is busy')
             validated = plan_valid(data['edit_plan'], job['meta']['duration'], options['max_duration'])
-            queue.invalidate(job, 'render')
+            queue.invalidate(job, 'plan')
             job.update(edit_plan=validated, status='planned', stage='plan', error=None, _custom_plan=True)
             job['options'].update(options)
             if 'plan' not in job['completed']:
@@ -353,7 +353,14 @@ def create_app(config=None, pipeline=None):
     @app.get('/api/log/<job_id>')
     def log(job_id):
         store.get(job_id)
-        return Response('\n'.join(row[1] for row in store.events(job_id, 0)) + '\n', mimetype='text/plain')
+        rows, after = [], 0
+        while len(rows) < 1000:
+            page = store.events(job_id, after)
+            if not page:
+                break
+            rows.extend(page)
+            after = page[-1][0]
+        return Response('\n'.join(row[1] for row in rows) + '\n', mimetype='text/plain')
 
     @app.get('/api/jobs/<job_id>/events')
     def events(job_id):

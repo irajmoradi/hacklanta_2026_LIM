@@ -5,7 +5,7 @@ export const extensionDefaults = {
   narration: false, narration_persona: "hype_caster", privacy_blur: false,
   keep_my_name: "", music: "off", music_asset_id: "", chat: false,
   chat_asset_id: "", chat_offset: 0, twitch_vod_id: "", fx_intensity: 0.5,
-  share_kit: false, team_mode: "best",
+  gemini_image: false, plan_refinement: false, share_kit: false, team_mode: "best",
 };
 export type ExtensionOptions = typeof extensionDefaults;
 export interface Capabilities {

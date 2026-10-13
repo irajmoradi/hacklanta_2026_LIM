@@ -58,7 +58,8 @@ describe("jobs API", () => {
     const { game, profile, ...flags } = options;
     expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({
       ...flags,
-      prompt: `Game: ${game}. Profile: ${profile}.`,
+      preset: "landscape", max_duration: 60, editing_instructions: "",
+      prompt: `\nGame: ${game}. Profile: ${profile}.`,
     });
     await api.save("abc", [demoClips[2], { ...demoClips[0], keep: false }]);
     expect(fetcher.mock.calls[2][1].method).toBe("PATCH");
@@ -69,7 +70,7 @@ describe("jobs API", () => {
     });
     await api.render("abc", "vertical", options);
     expect(JSON.parse(fetcher.mock.calls[3][1].body)).toEqual({
-      preset: "vertical", mode: "nice", style: "clean_edit",
+      preset: "vertical", mode: "nice", style: "clean_edit", max_duration: 30, editing_instructions: "",
       captions: false, reactions: false, sam: false,
     });
     await api.render(

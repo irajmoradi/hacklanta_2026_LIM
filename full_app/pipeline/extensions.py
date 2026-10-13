@@ -346,6 +346,9 @@ def finish_output(pipeline, job, output, plan, scratch):
                             image_client = GeminiVideoClient(api_key=RUNTIME_KEY.get())
                             image_client.budget = CallBudget(Path(job['dir']) / 'gemini-budget.sqlite3')
                         except Exception:
+                            if image_client is not None:
+                                image_client.close()
+                                image_client = None
                             pipeline.warn(job, 'AI thumbnails unavailable; using local covers')
                     kit = build(export, job.get('clips') or [], share_plan, job.get('game', 'generic'),
                                 client=image_client, job=job)

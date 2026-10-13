@@ -525,3 +525,39 @@ Replay the supplied analysis on runner 1 without any model calls:
 `tools/remote_run.sh "cd full_app && python -m pipeline.wire1_demo"`.
 It writes `/srv/demo_out/wire1/`; see [wiring audit](wiring_audit.md) for evidence,
 feature limitations and test results.
+
+## PARITY-UI instruction routing and thumbnail lifecycle
+
+Planner v2 targets 70% highlight output seconds in nice mode, 70% lowlight seconds
+in mean mode, with the other label receiving 30%. The preferred-label hook and
+climax count toward that budget. Clips remain grounded in available evidence;
+minimum lengths, scarce labels, variety and short story budgets can prevent the
+ratio. Planner notes explain deviations and underfill. No new analysis call is
+needed for mode/duration replanning.
+
+`editing_instructions` is distinct from analysis `prompt`. With
+`plan_refinement=True`, `pipeline/extensions.py` uses Gemini's typed Refinement
+schema for caption/effect patches and includes the editing instruction in that
+request. The existing provider transport reserves every attempt against
+`gemini-budget.sqlite3`; clients close in finally. Failed refinement retains the
+deterministic draft and adds a safe note/warning. Otherwise, nonempty editing
+instructions on planner-v2 jobs are the first instruction of the queued editor
+agent (Director), which uses the same durable job call budget. The legacy planner
+uses editing instructions in its editor template. Merely supplying analysis text
+does not invoke this additional Director pass.
+
+Share-kit generation constructs a dedicated Gemini image client only for
+`gemini_image=True`, including when analysis uses a local provider. Runtime
+credentials are carried in a ContextVar during render, never serialized into the
+job. The image client inherits the job's `gemini-budget.sqlite3`; social also uses
+its durable four-call thumbnail ledger in the real job directory. The executed
+share plan plus `client` and mutable `job` reach `build_share_kit`, and the image
+client closes even when export fails. Missing clients use local candidates with
+warnings. Both candidates and all aspect variants are advertised in share-kit
+covers/thumbnails.
+
+**FISH-1 / integrator handoff (outside PARITY-UI allowed paths):** add
+`gemini_image=True` alongside `social=True` in `pipeline/experience.py`'s
+`FULL_EXPERIENCE`. The UI Full experience button already sends the explicit flag;
+API-only Full experience needs that one-line preset change. No edit to that
+concurrently owned file was made here. Zero live calls were used for PARITY-UI.

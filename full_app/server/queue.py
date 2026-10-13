@@ -46,7 +46,7 @@ class JobQueue:
                     job.update(status='error', error='Stored job no longer passes admission; submit a valid plan')
                     self.store.save(job)
 
-    def submit(self, job_id, target, options, key=None, custom_plan=None, recover=False, analysis_request=False):
+    def submit(self, job_id, target, options, key=None, custom_plan=None, recover=False, analysis_request=False, refresh_plan=False):
         with self.lock:
             job = self.store.get(job_id)
             if job_id in self.active:
@@ -70,6 +70,8 @@ class JobQueue:
                 invalidate = 'plan'
             elif changed:
                 invalidate = 'render'
+            if refresh_plan and invalidate != 'analyze':
+                invalidate = 'plan'
             # A cached plan that will be discarded must not be admitted against
             # the new budget. Explicit plans and reused plans still validate
             # before any persisted state (or credentials) are changed.

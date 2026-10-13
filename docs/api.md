@@ -261,3 +261,26 @@ mocks in-process unless `ISOLATE_STAGES=True` is explicitly selected. Isolated
 progress reports contain only stage, timings and warnings; keys travel over stdin,
 never through the progress file or command line. A forced stop may prevent a
 provider's remote-file cleanup; configure provider-side retention separately.
+
+## PARITY-UI options and plan import
+
+`prompt` remains the analysis instruction field. The React client appends game
+and profile context to user text. `editing_instructions` is a separate string of
+at most 8000 characters; changing it invalidates planning, not analysis.
+`plan_refinement` and `gemini_image` are strict boolean extension options and are
+advertised by `/api/info`. React sends `max_duration` on analyze, plan and render
+requests. UI limits are 10-600 seconds; API compatibility remains 1-3600 seconds.
+
+`PUT /api/jobs/<id>/plan` accepts exactly
+`{"edit_plan": <render-plan object>, "max_duration": <seconds>}`. The authenticated
+job must be idle. The same strict `plan_valid` boundary used by rendering checks
+source bounds, duration, effects and v1/v2 fields before any job changes. Filesystem
+music paths and unknown fields are rejected. Successful import invalidates output,
+marks the plan complete and returns the job; it does not call analysis or render.
+A rejected import leaves the existing plan/output intact. `POST /api/jobs/<id>/plan`
+now explicitly refreshes the plan even if options are unchanged. Legacy endpoint
+idempotency is unchanged.
+
+Upload/status responses additionally expose `source_filename` (basename only)
+and `source_size` (primary upload bytes). `GET /api/log/<id>` returns all retained
+job events, up to 1000, as plain text; it no longer stops at the first 100 events.

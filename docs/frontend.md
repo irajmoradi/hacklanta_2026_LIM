@@ -184,3 +184,46 @@ checks include actual synthetic video playback, desktop/mobile overflow, import,
 changed-settings gating, share-cover decoding and screenshots under ignored
 `browser-artifacts/`. Live new-module integration and real team renders await the
 backend contract above; mock mode does not validate their output quality.
+
+## PARITY-UI controls and advanced review
+
+Edit settings restores **Max duration (seconds)** (10-600), **Analysis instructions**,
+and **Editing instructions**. An untouched duration defaults to 60 seconds for
+landscape and 30 for vertical/square; an explicit duration survives preset changes.
+Mean selects Meme Edit and nice selects Hype Montage until the user explicitly
+chooses a style. Analysis text is retained and game/profile context is appended.
+Changing analysis instructions requires Analyze again. Editing instructions and
+duration changes replan without repeating analysis.
+
+With Story planner v2, **Gemini plan refinement** sends editing instructions to
+bounded caption/effect refinement. With refinement off, nonempty editing
+instructions become the Director's first instruction on the draft. This can use
+model calls even when the refinement toggle is off. Legacy planning sends them
+to its editor prompt. Refinement cannot change cuts/timing; use the Director for
+structural edits. Credentials remain server-configured; there is no browser key
+storage or new key-entry control.
+
+The source metadata grid shows filename, file size, duration, resolution, FPS and
+video/audio codecs after upload. **Job log** polls the server's retained event log
+while open. **Raw plan JSON** displays the complete render plan, including v2
+fields, and accepts pasted JSON or a JSON file. **Validate & apply JSON** sends it
+through the server's typed render boundary before replacing the plan; invalid
+imports retain the current plan. **Export plan JSON** downloads the accepted plan,
+not an unapplied text draft. **Refresh plan** regenerates the plan from saved clips
+and current settings; rendering remains a separate button. Planner shortage notes
+appear alongside the JSON.
+
+**AI thumbnails** enables Share kit and requests two cover candidates after
+rendering. Full experience enables this toggle. Each candidate's landscape,
+square and portrait variants appear with its provider in the share kit. Manual
+mode defaults to local covers; missing credentials/provider failures retain local
+covers and warnings. Image calls share the job budget and four-image ledger.
+
+Try `/` with Flask on port 8000, upload a video, set instructions/duration, analyze,
+open Job log and Raw plan JSON, export/reimport a plan, then render. `/?mock=1`
+exercises controls without provider calls; typed plan import requires the jobs API.
+
+Offline UI checks: `tools/remote_run.sh "cd full_app/production_frontend && npm ci --no-audit --no-fund && npm run build && npm test && npm run test:browser"`.
+`e2e/parity.spec.ts` intercepts every API request and generates its video using
+ffmpeg. It captures settings.png, job-log.png and plan-json.png under
+`production_frontend/browser-artifacts/`; no paid calls or copyrighted media.

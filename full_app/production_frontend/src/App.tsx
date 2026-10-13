@@ -7,6 +7,7 @@ import {
   type Preset,
   type ReviewClip,
 } from "./api";
+import { JobDetails } from "./components/JobDetails";
 import { Director } from "./components/Director";
 import { ClipEditor, Timeline } from "./components/ReviewTimeline";
 import "./styles/editor.css";
@@ -44,6 +45,8 @@ export default function App() {
     });
     return () => { active = false; };
   }, [api]);
+  const styleChosen = useRef(false);
+  const [sourceSize, setSourceSize] = useState<number>();
   const [options, setOptions] = useState(initialOptions);
   const [job, setJob] = useState<Job>();
   const [clips, setClips] = useState<ReviewClip[]>([]);
@@ -126,6 +129,7 @@ export default function App() {
     setNeedsAnalysis(false);
     directorPlan.current = undefined; setAffectedClip(undefined);
     lastPlan.current = undefined; rangeEnd.current = undefined;
+    setSourceSize(file?.size);
     setSource(file ? URL.createObjectURL(file) : ""); setFilename(label);
     setOptions(o => ({ ...o, music_asset_id: "", chat_asset_id: "" }));
   }
@@ -157,6 +161,7 @@ export default function App() {
     });
   }
   function validateSettings() {
+    if (options.max_duration !== undefined && (!Number.isFinite(options.max_duration) || options.max_duration < 10 || options.max_duration > 600)) throw new Error("Max duration must be between 10 and 600 seconds.");
     if (options.music === "upload" && !options.music_asset_id) throw new Error("Attach your music track before continuing.");
     if (options.chat && !options.chat_asset_id && !options.twitch_vod_id) throw new Error("Supply a Twitch VOD ID or chat replay before continuing.");
   }
@@ -173,7 +178,14 @@ export default function App() {
     setClips(next);
   };
   const save = async () => {
-    await api.save(job!.id, clips);
+    if (directorPlan.current) {
+      const plan = {...directorPlan.current, segments: clips.flatMap((clip, index) => clip.keep ? [{
+        ...directorPlan.current!.segments[index], source_start: clip.start, source_end: clip.end, title: clip.caption,
+      }] : [])};
+      const next = await api.importPlan(job!.id, plan, options.max_duration ?? (preset === 'landscape' ? 60 : 30));
+      directorPlan.current = next.plan; lastPlan.current = next.plan; setJob(next);
+      setClips(clipsFromPlan(next.plan!, clips));
+    } else await api.save(job!.id, clips);
     dirtyRef.current = false;
     setDirty(false);
     setSaved(true);
@@ -192,11 +204,15 @@ export default function App() {
         );
   };
   const option = <K extends keyof Options>(key: K, value: Options[K]) => {
+    if (key === "style") styleChosen.current = true;
     setOptions((o) => ({ ...o, [key]: value,
+      ...(key === "mode" && !styleChosen.current ? {style: value === "mean" ? "meme_edit" : "hype_montage"} : {}),
+      ...(key === "gemini_image" && value ? {share_kit: true} : {}),
+      ...(key === "plan_refinement" && value ? {planner_v2: true} : {}),
       ...(key === 'chaos' ? {planner_v2: true} : {}),
       ...(key === 'mode' && o.chaos === (o.mode === 'mean' ? .6 : .35)
         ? {chaos: value === 'mean' ? .6 : .35} : {}) }));
-    if (clips.length && ["game", "profile", "style", "provider", "use_signals", "audio_ai", "planner_v2", "window_scoring", "chat", "chat_offset", "twitch_vod_id", "fx_intensity"].includes(key)) setNeedsAnalysis(true);
+    if (clips.length && ["analysis_instructions", "game", "profile", "style", "provider", "use_signals", "audio_ai", "planner_v2", "window_scoring", "chat", "chat_offset", "twitch_vod_id", "fx_intensity"].includes(key)) setNeedsAnalysis(true);
   };
   const kept = clips.filter((c) => c.keep);
   const media = source || job?.source_url;
@@ -263,6 +279,12 @@ export default function App() {
               <SourceInputs capabilities={capabilities} upload={upload} team={uploadTeam} importVod={importVod}
                 teamMode={options.team_mode ?? "best"} setTeamMode={v => option("team_mode", v)} />
               {filename && <p className="source-name" role="status">Source: {filename}</p>}
+              {job && <dl className="metadata-grid" aria-label="Source metadata">
+                {Object.entries({Filename: filename, Size: sourceSize === undefined ? "Unavailable" : `${(sourceSize / 1024 ** 2).toFixed(2)} MB`,
+                  Duration: `${job.duration.toFixed(2)} s`, Resolution: job.meta?.width ? `${job.meta.width} × ${job.meta.height}` : "Unavailable",
+                  FPS: job.meta?.fps ?? "Unavailable", "Video codec": job.meta?.video_codec ?? "Unavailable", "Audio codec": job.meta?.audio_codec ?? "Unavailable"})
+                  .map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{String(value)}</dd></div>)}
+              </dl>}
               {capabilityNotice && <p className="notice">{capabilityNotice}</p>}
               {mode === "jobs" && !capabilities.options.includes("privacy_blur") && <p className="hint">More features are available in demo mode. Disabled settings need backend support; privacy blur is not active on this server.</p>}
               <EditSettings options={options} change={option} capabilities={capabilities} legacy={mode === "legacy"}
@@ -277,7 +299,7 @@ export default function App() {
                     setDirty(false);
                     setSaved(false);
                     directorPlan.current = undefined;
-                    await api.analyze(job!.id, options);
+                    await api.analyze(job!.id, options, preset);
                     setNeedsAnalysis(false);
                     await refresh();
                   })
@@ -417,6 +439,11 @@ export default function App() {
             />
           </section>
         </div>
+        {job && <JobDetails key={`details-${job.id}`} api={api} job={job} disabled={working} maxDuration={options.max_duration ?? (preset === "landscape" ? 60 : 30)}
+          onImport={next => { setJob(next); directorPlan.current = next.plan; lastPlan.current = next.plan;
+            setClips(clipsFromPlan(next.plan!, clips)); dirtyRef.current = false; setDirty(false); setSaved(true); }}
+          onRefresh={() => void run(async () => { validateSettings(); if (dirtyRef.current) await save();
+            directorPlan.current = undefined; await api.plan(job.id, options, preset); await refresh(); })} />}
         <section className="panel export">
           <div>
             <h2>
@@ -454,7 +481,7 @@ export default function App() {
             onClick={() =>
               void run(async () => {
                 validateSettings();
-                await save();
+                if (!directorPlan.current) await save();
                 await api.render(
                   job!.id,
                   preset,

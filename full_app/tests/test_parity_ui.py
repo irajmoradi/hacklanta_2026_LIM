@@ -50,6 +50,19 @@ def test_plan_import_is_atomic_typed_and_does_not_call_providers(setup, video):
     assert pipeline.calls == ['render']
 
 
+def test_refresh_plan_and_log_include_latest_events(setup, video):
+    app, client, pipeline = setup
+    job = upload(client, video)
+    client.post(f'/api/jobs/{job}/analyze', json={})
+    wait(app, job)
+    client.post(f'/api/jobs/{job}/plan', json={})
+    wait(app, job)
+    assert pipeline.calls == ['analyze', 'plan', 'plan']
+    for i in range(120):
+        app.extensions['job_store'].append_event(job, 'test', {'step': i})
+    assert '"step": 119' in client.get(f'/api/log/{job}').text
+
+
 @pytest.mark.parametrize('mode,preferred', [('nice', 'highlight'), ('mean', 'lowlight')])
 def test_label_duration_ratio_and_shortages(mode, preferred):
     clips = [dict(id=str(i), start=i*20, end=i*20+10, score=i,
