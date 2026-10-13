@@ -56,11 +56,13 @@ def main():
         discord = directory/'discord.mp4'
         if not discord.exists():
             bitrate = min(2200000, int(18_500_000*8/duration)-128000)
+            credit = (ROOT/'ATTRIBUTION.txt').read_text() if directory.name.startswith('deadlock') else ''
             subprocess.run(['ffmpeg','-v','error','-y','-threads','2','-i',str(master),
                 '-vf',"scale='if(gt(iw,ih),1280,720)':'if(gt(iw,ih),720,1280)'",
                 '-c:v','libx264','-preset','veryfast','-b:v',str(bitrate),
                 '-maxrate',str(bitrate),'-bufsize',str(bitrate*2),'-threads','2',
-                '-c:a','aac','-b:a','128k','-movflags','+faststart',str(discord)],check=True)
+                '-c:a','aac','-b:a','128k','-metadata','comment='+credit,
+                '-movflags','+faststart',str(discord)],check=True)
         assert discord.stat().st_size < 20_000_000
         # Decode every delivered frame/audio packet, not just review samples.
         for media in (master, discord):
@@ -99,6 +101,11 @@ def main():
             sheet(thumbs, directory/'thumbnails.jpg')
         cards = [json.loads(p.read_text()) for p in (directory/'cards').glob('*.json')]
         candidates = job['share_kit']['metadata'].get('thumbnail_candidates', [])
+        if directory.name.startswith('deadlock'):
+            credit = (ROOT/'ATTRIBUTION.txt').read_text()
+            posting = '\n\n'.join(f"{platform}\n{data['description']}\n\n{credit}"
+                for platform, data in job['share_kit']['metadata']['platforms'].items())
+            (directory/'share/posting_with_credit.txt').write_text(posting, encoding='utf-8')
         speakers = sorted({r['speaker'] for r in evidence['reactions']})
         facts = dict(duration=duration, cap=cap, speakers=speakers, sam=evidence['sam'],
             sam_skipped=evidence.get('sam_skipped', []),
