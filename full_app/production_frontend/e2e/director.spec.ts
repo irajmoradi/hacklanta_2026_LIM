@@ -28,7 +28,7 @@ test('Director streams a trim, renders its plan, and respects reduced motion', a
   await page.getByLabel('Upload gameplay').setInputFiles({name: 'fixture.mp4', mimeType: 'video/mp4', buffer: Buffer.from('mock upload')});
   await page.getByRole('button', {name: /Find my moments/}).click();
   await page.getByRole('button', {name: 'More hype', exact: true}).click();
-  await page.getByLabel('Editing instruction').press('Enter');
+  await page.getByRole('textbox', {name: 'Editing instruction', exact: true}).press('Enter');
   await expect(page.getByText('Director is editing…')).toBeVisible();
   await page.evaluate(() => (window as any).directorEvents.dispatchEvent(new MessageEvent('agent_step', {data: JSON.stringify({
     step: 1, tool: 'trim_clip', args: {clip_id: 'clutch', segment_index: 0}, rationale: 'Cut the waiting; keep the winning shot.',

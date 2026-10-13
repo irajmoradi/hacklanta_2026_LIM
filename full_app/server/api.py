@@ -73,6 +73,7 @@ def create_app(config=None, pipeline=None):
                         else IsolatedPipeline(resources))
     queue = JobQueue(store, pipeline if pipeline is not None else default_pipeline,
                      app.config['JOB_WORKERS'], app.config['JOB_CAPACITY'], lease)
+    queue.editor_model_factory = app.config.get('EDITOR_AGENT_MODEL_FACTORY')
     streams = threading.BoundedSemaphore(app.config['SSE_MAX_SUBSCRIBERS'])
     uploads = threading.BoundedSemaphore(app.config['MAX_UPLOADS'])
     queue.start_retention(resources, app.config['RETENTION_INTERVAL'])
@@ -181,6 +182,8 @@ def create_app(config=None, pipeline=None):
                 metadata(path)
                 sources.append(str(path))
             job = dict(id=job_id, _owner=g.owner, dir=str(directory), source=str(source), meta=meta,
+                       source_filename=Path(video.filename.replace('\\', '/')).name,
+                       source_size=source.stat().st_size,
                        sources=sources, source_count=len(sources),
                        status='uploaded', stage='upload', progress=1, completed=['upload'],
                        options={'privacy': False, **({'multipov': True} if len(sources) > 1 else {})}, clips=None, candidates=[], edit_plan=None, output=None,
@@ -196,7 +199,7 @@ def create_app(config=None, pipeline=None):
     def status(job_id):
         return jsonify(public(store.get(job_id)))
 
-    def start(job_id, target, data, legacy=False, analysis_request=False):
+    def start(job_id, target, data, legacy=False, analysis_request=False, refresh_plan=False):
         options = options_valid(data, EDIT_STYLES)
         job = owned(job_id)
         if 'edit_plan' in data and target != 'render':
@@ -210,7 +213,7 @@ def create_app(config=None, pipeline=None):
             options.setdefault('generate_thumbnails', True)
         if target == 'render':
             options['legacy_dimensions'] = legacy and 'preset' not in options
-        future = queue.submit(job_id, target, options, key, custom, analysis_request=analysis_request)
+        future = queue.submit(job_id, target, options, key, custom, analysis_request=analysis_request, refresh_plan=refresh_plan)
         if legacy:
             future.result()
             job = store.get(job_id)
@@ -230,13 +233,32 @@ def create_app(config=None, pipeline=None):
 
     @app.post('/api/jobs/<job_id>/plan')
     def plan(job_id):
-        return start(job_id, 'plan', body())
+        return start(job_id, 'plan', body(), refresh_plan=True)
 
     @app.post('/api/jobs/<job_id>/render')
     def render(job_id):
         data = body()
         data.setdefault('preset', 'landscape')
         return start(job_id, 'render', data)
+
+    @app.put('/api/jobs/<job_id>/plan')
+    def import_plan(job_id):
+        data = body()
+        if set(data) != {'edit_plan', 'max_duration'}:
+            raise ValueError('Provide edit_plan and max_duration')
+        options = options_valid({'max_duration': data['max_duration']}, EDIT_STYLES)
+        with queue.lock:
+            job = owned(job_id)
+            if job_id in queue.active:
+                raise Conflict('Job is busy')
+            validated = plan_valid(data['edit_plan'], job['meta']['duration'], options['max_duration'])
+            queue.invalidate(job, 'plan')
+            job.update(edit_plan=validated, status='planned', stage='plan', error=None, _custom_plan=True)
+            job['options'].update(options)
+            if 'plan' not in job['completed']:
+                job['completed'].append('plan')
+            store.save(job)
+            return jsonify(public(job))
 
     @app.post('/api/jobs/<job_id>/agent')
     def agent(job_id):
@@ -331,7 +353,14 @@ def create_app(config=None, pipeline=None):
     @app.get('/api/log/<job_id>')
     def log(job_id):
         store.get(job_id)
-        return Response('\n'.join(row[1] for row in store.events(job_id, 0)) + '\n', mimetype='text/plain')
+        rows, after = [], 0
+        while len(rows) < 1000:
+            page = store.events(job_id, after)
+            if not page:
+                break
+            rows.extend(page)
+            after = page[-1][0]
+        return Response('\n'.join(row[1] for row in rows) + '\n', mimetype='text/plain')
 
     @app.get('/api/jobs/<job_id>/events')
     def events(job_id):

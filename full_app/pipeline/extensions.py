@@ -1,4 +1,4 @@
-"""Adapters for optional sprint modules; no additional paid provider calls."""
+"""Adapters for optional sprint modules; paid refinements/images require opt-in."""
 import os
 from pathlib import Path
 
@@ -172,7 +172,7 @@ def team_source(pipeline, job, scratch):
         return source, {**job['edit_plan'], 'segments': segments}
 
 
-def planner_plan(pipeline, job):
+def planner_plan(pipeline, job, key=None):
     plan_edit = pipeline.hook('planner', 'plan_edit', job)
     if not plan_edit:
         return None
@@ -240,6 +240,24 @@ def planner_plan(pipeline, job):
                        fill_target=True, max_clip_length=10,
                        min_clip_length=min(1, min(c['end']-c['start'] for c in clips)),
                        aspect={v: k for k, v in ASPECT_PRESETS.items()}[options.get('preset', 'landscape')])
+    if options.get('plan_refinement'):
+        from planner.refinement import Refinement, refine_captions
+        from planner.models import RenderPlan
+        from services.gemini_client import GeminiVideoClient
+        from services.call_budget import CallBudget
+        client = None
+        try:
+            client = GeminiVideoClient(api_key=key)
+            client.budget = CallBudget(Path(job['dir']) / 'gemini-budget.sqlite3')
+            def refine(prompt):
+                return client._generate([prompt + '\nEditing instructions:\n' +
+                    options.get('editing_instructions', '')], Refinement).model_dump()
+            result = refine_captions(RenderPlan.model_validate(candidate_dict(result)), refine)
+        except Exception:
+            pipeline.warn(job, 'Plan refinement unavailable; deterministic draft retained')
+        finally:
+            if client is not None:
+                client.close()
     native = candidate_dict(result)
     job['planner_plan'] = native
     job['seed'] = native['seed']
@@ -318,7 +336,25 @@ def finish_output(pipeline, job, output, plan, scratch):
                 export.mkdir(exist_ok=True)
                 shutil.copyfile(output, export / 'final_edit.mp4')
                 share_plan = {**plan, 'captions': job.get('subtitle_events', [])}
-                kit = build(export, job.get('clips') or [], share_plan, job.get('game', 'generic'))
+                image_client = None
+                try:
+                    if job['options'].get('gemini_image'):
+                        from services.gemini_client import GeminiVideoClient
+                        from services.call_budget import CallBudget
+                        from .orchestrator import RUNTIME_KEY
+                        try:
+                            image_client = GeminiVideoClient(api_key=RUNTIME_KEY.get())
+                            image_client.budget = CallBudget(Path(job['dir']) / 'gemini-budget.sqlite3')
+                        except Exception:
+                            if image_client is not None:
+                                image_client.close()
+                                image_client = None
+                            pipeline.warn(job, 'AI thumbnails unavailable; using local covers')
+                    kit = build(export, job.get('clips') or [], share_plan, job.get('game', 'generic'),
+                                client=image_client, job=job)
+                finally:
+                    if image_client is not None:
+                        image_client.close()
                 target = Path(job['dir']) / 'share'
                 if target.exists():
                     shutil.rmtree(target)
@@ -328,6 +364,10 @@ def finish_output(pipeline, job, output, plan, scratch):
                 posting = next(iter(metadata['platforms'].values()))
                 link = lambda name: f"/api/jobs/{job.get('id', Path(job['dir']).name)}/share/{name}"
                 covers = [dict(url=link(v['file']), label=k) for k, v in metadata['thumbnails'].items()]
+                if metadata.get('thumbnail_candidates'):
+                    covers = [dict(url=link(v['file']), label=f"Candidate {i+1} · {k} · {c['provider']}")
+                              for i, c in enumerate(metadata['thumbnail_candidates'])
+                              for k, v in c['variants'].items()]
                 job['share_kit'] = dict(metadata=metadata, titles=posting['titles'], description=posting['description'],
                     chapters=(target / 'chapters.txt').read_text(), covers=covers, thumbnails=covers,
                     downloads=[dict(url=link(p.name), label=p.name) for p in sorted(target.iterdir()) if p.is_file()])

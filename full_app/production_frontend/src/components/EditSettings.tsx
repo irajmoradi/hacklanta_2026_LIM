@@ -23,6 +23,8 @@ export function EditSettings({ options, change, capabilities, legacy, preset, se
     ["privacy_blur", "Privacy blur", "Blur kill feed, chat and party HUD regions in the export. Review the result."],
     ["narration", "AI narration", "Add cached speech or an offline computer-voice caster when available."],
     ["chat", "Twitch chat signal", "Use replay activity to find crowd favorites."],
+    ["gemini_image", "AI thumbnails", "Generate two covers for your share kit (uses image calls)."],
+    ["plan_refinement", "Gemini plan refinement", "Refine captions and effects using editing instructions (uses a model call)."],
     ["share_kit", "Share kit", "Prepare covers and posting copy after rendering."],
   ] as const;
   return <details className="edit-settings" open>
@@ -38,7 +40,7 @@ export function EditSettings({ options, change, capabilities, legacy, preset, se
       onChange={e => change('clean', e.target.checked)} />Clean reactions (exclude explicit clips)</label>
     <button type="button" disabled={!supports("full_experience")} onClick={() => {
       change("full_experience", true);
-      for (const key of ["planner_v2", "audio_ai", "captions", "reactions", "sam", "sam_reframe", "beat_sync", "transitions", "cards", "narration", "share_kit", "use_signals"] as const) change(key, true);
+      for (const key of ["planner_v2", "audio_ai", "captions", "reactions", "sam", "sam_reframe", "beat_sync", "transitions", "cards", "narration", "share_kit", "gemini_image", "use_signals"] as const) change(key, true);
       change("privacy_blur", false); change("music", "energetic");
     }}>Full experience</button>
     <label>Game<select value={o.game} onChange={e => change("game", e.target.value)}>
@@ -58,6 +60,13 @@ export function EditSettings({ options, change, capabilities, legacy, preset, se
     <label>Canvas preset<select value={preset} disabled={legacy} onChange={e => setPreset(e.target.value as Preset)}>
       <option value="landscape">Landscape - 16:9</option><option value="vertical">Vertical - 9:16</option><option value="square">Square - 1:1</option>
     </select></label>
+    <label>Max duration (seconds)<input type="number" min="10" max="600" step="1"
+      value={o.max_duration ?? (preset === "landscape" ? 60 : 30)} onChange={e => change("max_duration", Number(e.target.value))} /></label>
+    <label>Analysis instructions<textarea maxLength={8000} value={o.analysis_instructions ?? ""}
+      placeholder="Which moments should we look for?" onChange={e => change("analysis_instructions", e.target.value)} /></label>
+    <label>Editing instructions<textarea maxLength={8000} value={o.editing_instructions ?? ""}
+      placeholder="How should the montage feel?" onChange={e => change("editing_instructions", e.target.value)} /></label>
+    <p className="hint">Story planner: instructions go to Gemini refinement when enabled; otherwise the Director edits the draft. Both use the job call budget.</p>
     <label>Provider<select disabled={legacy} value={o.provider} onChange={e => change("provider", e.target.value)}>
       <option value="gemini">Gemini</option><option value="local">Local VLM</option>
     </select></label>

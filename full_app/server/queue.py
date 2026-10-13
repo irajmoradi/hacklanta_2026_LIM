@@ -46,7 +46,7 @@ class JobQueue:
                     job.update(status='error', error='Stored job no longer passes admission; submit a valid plan')
                     self.store.save(job)
 
-    def submit(self, job_id, target, options, key=None, custom_plan=None, recover=False, analysis_request=False):
+    def submit(self, job_id, target, options, key=None, custom_plan=None, recover=False, analysis_request=False, refresh_plan=False):
         with self.lock:
             job = self.store.get(job_id)
             if job_id in self.active:
@@ -66,10 +66,12 @@ class JobQueue:
             invalidate = None
             if changed & analysis_keys:
                 invalidate = 'analyze'
-            elif changed & {'chaos', 'seed', 'mode', 'style', 'prompt', 'max_duration', 'planner', 'fx', 'editor_agent', 'cards', 'transitions'}:
+            elif changed & {'chaos', 'seed', 'mode', 'style', 'prompt', 'editing_instructions', 'plan_refinement', 'max_duration', 'planner', 'fx', 'editor_agent', 'cards', 'transitions'}:
                 invalidate = 'plan'
             elif changed:
                 invalidate = 'render'
+            if refresh_plan and invalidate != 'analyze':
+                invalidate = 'plan'
             # A cached plan that will be discarded must not be admitted against
             # the new budget. Explicit plans and reused plans still validate
             # before any persisted state (or credentials) are changed.
@@ -168,9 +170,11 @@ class JobQueue:
                     getattr(self.pipeline, stage)(job, self.keys.get(job_id))
                 if stage == 'plan':
                     plan_valid(job['edit_plan'], job['meta']['duration'], job['options'].get('max_duration', 180))
-                    if job['options'].get('editor_agent'):
+                    if job['options'].get('editor_agent') or ((job['options'].get('planner') or job.get('_local_replan')) and
+                            job['options'].get('editing_instructions', '').strip() and not job['options'].get('plan_refinement')):
                         from .editor import run, apply_result
-                        result = run(self, job, job['options'].get('prompt') or 'Improve this draft and review its preview')
+                        result = run(self, job, job['options'].get('editing_instructions') or job['options'].get('prompt') or 'Improve this draft and review its preview',
+                                     model_factory=getattr(self, 'editor_model_factory', None))
                         apply_result(self, job, result)
                 with self.lock:
                     if self.store.get(job_id)['status'] == 'cancelled':

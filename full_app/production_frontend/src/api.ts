@@ -3,6 +3,9 @@ import * as legacy from "./legacyApi";
 import { baseCapabilities, demoCapabilities, extensionDefaults, normalizeKit, signalChips, validateVod, type Capabilities, type ExtensionOptions, type ShareKit } from "./features";
 export type Preset = "landscape" | "vertical" | "square";
 export interface Options extends Partial<ExtensionOptions> {
+  max_duration?: number;
+  analysis_instructions?: string;
+  editing_instructions?: string;
   game: string;
   profile: string;
   mode: "nice" | "mean";
@@ -14,6 +17,7 @@ export interface Options extends Partial<ExtensionOptions> {
   sam: boolean;
 }
 export interface ReviewClip {
+  planIndex?: number;
   id: string;
   start: number;
   end: number;
@@ -25,6 +29,10 @@ export interface ReviewClip {
   why?: string[];
 }
 export interface Job {
+  source_filename?: string;
+  source_size?: number;
+  meta?: Record<string, unknown>;
+  notes?: string[];
   seed?: number;
   id: string;
   status: string;
@@ -39,6 +47,7 @@ export interface Job {
   warnings?: string[];
   plan?: legacy.EditPlan;
   share_kit?: ShareKit;
+  planningSettings?: Record<string, unknown>;
   planningStyle?: string;
   planningMode?: string;
 }
@@ -54,10 +63,14 @@ export class ApiError extends Error {
   constructor(message: string, public code?: string, public status?: number) { super(message); }
 }
 export function clipsFromPlan(plan: legacy.EditPlan, previous: ReviewClip[]): ReviewClip[] {
+  const used = new Set<string>();
   return plan.segments.map((s, i) => {
     const original = previous.find(c => c.id === String(s.clip_id ?? s.id))
       ?? previous.find(c => c.start < s.source_end && c.end > s.source_start);
-    return { ...original, id: String(s.clip_id ?? s.id ?? original?.id ?? `segment-${i}`),
+    let id = String(s.clip_id ?? s.id ?? original?.id ?? `segment-${i}`);
+    while (used.has(id)) id += `-${i}`;
+    used.add(id);
+    return { ...original, id, planIndex: i,
       start: s.source_start, end: s.source_end, caption: String(s.title ?? original?.caption ?? 'Edited moment'),
       score: original?.score ?? 0, reaction: original?.reaction ?? 'None', keep: true };
   });
@@ -107,6 +120,10 @@ export function normalizeJob(value: unknown): Job {
   const raw = object(value);
   const j = raw.job ? object(raw.job) : raw;
   return {
+    meta: object(j.meta),
+    source_filename: text(j.source_filename),
+    source_size: typeof j.source_size === 'number' ? j.source_size : undefined,
+    notes: list(object(j.planner_plan).notes).filter((v): v is string => typeof v === "string"),
     id: String(j.id ?? j.job_id),
     seed: typeof j.seed === 'number' ? j.seed : undefined,
     status: text(j.status) ?? "uploaded",
@@ -125,6 +142,7 @@ export function normalizeJob(value: unknown): Job {
     plan: editPlan(j.plan ?? j.edit_plan),
     share_kit: normalizeKit(j.share_kit),
     planningMode: text(object(j.planning_settings).mode) ?? text(object(j.options).mode),
+    planningSettings: object(j.planning_settings),
     planningStyle: text(object(j.planning_settings).style) ?? text(object(j.options).style),
   };
 }
@@ -188,6 +206,7 @@ export const demoClips: ReviewClip[] = [
 ];
 export class EditorApi {
   private cached?: Job;
+  private planningSettings = new Map<string, Record<string, unknown>>();
   private planningStyles = new Map<string, string>();
   private planningModes = new Map<string, string>();
   capabilities: Capabilities = baseCapabilities;
@@ -268,11 +287,12 @@ export class EditorApi {
     if (this.mode === "legacy")
       return { ...this.cached!, ...(await legacy.fetchStatus(id)), id };
     const job = normalizeJob(await request(`/api/jobs/${encodeURIComponent(id)}`));
+    if (job.planningSettings) this.planningSettings.set(id, job.planningSettings);
     if (job.planningStyle) this.planningStyles.set(id, job.planningStyle);
     if (job.planningMode) this.planningModes.set(id, job.planningMode);
     return job;
   }
-  async analyze(id: string, options: Options): Promise<void> {
+  async analyze(id: string, options: Options, preset: Preset = "landscape"): Promise<void> {
     if (this.mode === "mock") {
       this.cached = {
         ...this.cached!,
@@ -290,7 +310,7 @@ export class EditorApi {
     if (this.mode === "legacy") {
       const data = await legacy.analyzeVideo({
         job_id: id,
-        prompt: `Game: ${options.game}. Profile: ${options.profile}.`,
+        prompt: `${options.analysis_instructions ?? ""}\nGame: ${options.game}. Profile: ${options.profile}.`,
         splits: 1,
         attitude: options.mode,
       });
@@ -307,7 +327,9 @@ export class EditorApi {
     await request(`/api/jobs/${encodeURIComponent(id)}/analyze`, "POST", {
       mode, style, provider, use_signals, captions, reactions, sam,
       ...this.extended(options),
-      prompt: `Game: ${game}. Profile: ${profile}.`,
+      preset, max_duration: options.max_duration ?? (preset === "landscape" ? 60 : 30),
+      editing_instructions: options.editing_instructions ?? "",
+      prompt: `${options.analysis_instructions ?? ""}\nGame: ${game}. Profile: ${profile}.`,
     });
   }
   async save(id: string, clips: ReviewClip[]): Promise<void> {
@@ -333,6 +355,8 @@ export class EditorApi {
     await request(`/api/jobs/${encodeURIComponent(id)}/plan`, 'POST', {
       chaos: options.chaos ?? (options.mode === 'mean' ? .6 : .35), seed, planner: true, editor_agent: false,
       preset, mode: options.mode, style: options.style,
+      max_duration: options.max_duration ?? (preset === "landscape" ? 60 : 30),
+      editing_instructions: options.editing_instructions ?? "",
     });
     return seed;
   }
@@ -358,10 +382,10 @@ export class EditorApi {
     if (this.mode === "legacy") {
       const plan = await legacy.planEdit({
         job_id: id,
-        max_duration: 180,
+        max_duration: options.max_duration ?? 60,
         edit_style: options.style,
         prompt:
-          "Use these reviewed ranges in this exact order: " +
+          (options.editing_instructions ?? "") + "\nUse these reviewed ranges in this exact order: " +
           JSON.stringify(this.cached!.clips.filter((c) => c.keep)),
       });
       // Preserve effects where possible while enforcing the reviewed ranges and ordering.
@@ -386,13 +410,19 @@ export class EditorApi {
     }
     // Changed automatic cards/joins need a fresh planner budget. Director plans
     // remain authoritative; ordinary reviewed clips were saved by the review flow.
+    const prior = this.planningSettings.get(id);
     const refreshExperience =
+      (prior !== undefined && (prior.max_duration !== (options.max_duration ?? (preset === "landscape" ? 60 : 30)) ||
+        (prior.editing_instructions ?? "") !== (options.editing_instructions ?? "") ||
+        Boolean(prior.plan_refinement) !== Boolean(options.plan_refinement))) ||
       (options.chaos !== undefined && options.chaos !== (plan?.chaos ?? .35)) ||
       (options.seed !== undefined && options.seed !== (plan?.seed ?? 0)) ||
       (options.cards !== undefined && (Boolean(plan?.intro) !== options.cards || Boolean(plan?.outro) !== options.cards)) ||
       (options.transitions !== undefined && (options.transitions ? plan?.transition !== "varied" : plan?.transition === "varied"));
     await request(`/api/jobs/${encodeURIComponent(id)}/render`, "POST", {
       preset, mode: options.mode, style: options.style,
+      max_duration: options.max_duration ?? (preset === "landscape" ? 60 : 30),
+      editing_instructions: options.editing_instructions ?? "",
       captions: options.captions, reactions: options.reactions, sam: options.sam,
       ...this.extended(options),
       ...(reviewed && (authoritative || !refreshExperience && (!this.planningModes.has(id) || this.planningModes.get(id) === options.mode) && (!this.planningStyles.has(id) || this.planningStyles.get(id) === options.style))
@@ -402,7 +432,7 @@ export class EditorApi {
               segments: reviewed
                 .filter((c) => c.keep)
                 .map((c, index) => {
-                  const original = (authoritative ? plan?.segments[index] : undefined) ?? plan?.segments.find(
+                  const original = (authoritative ? plan?.segments[c.planIndex ?? index] : undefined) ?? plan?.segments.find(
                     (s) => s.source_start < c.end && s.source_end > c.start,
                   );
                   return {
@@ -416,6 +446,24 @@ export class EditorApi {
           }
         : {}),
     });
+  }
+  async plan(id: string, options: Options, preset: Preset): Promise<void> {
+    if (this.mode !== "jobs") return;
+    await request(`/api/jobs/${encodeURIComponent(id)}/plan`, "POST", {
+      ...this.extended(options), preset, mode: options.mode, style: options.style,
+      max_duration: options.max_duration ?? (preset === "landscape" ? 60 : 30),
+      editing_instructions: options.editing_instructions ?? "",
+    });
+  }
+  async importPlan(id: string, value: unknown, maxDuration: number): Promise<Job> {
+    if (this.mode !== "jobs") throw new Error("Plan import requires the jobs API.");
+    return normalizeJob(await request(`/api/jobs/${encodeURIComponent(id)}/plan`, "PUT", {edit_plan: value, max_duration: maxDuration}));
+  }
+  async log(id: string): Promise<string> {
+    if (this.mode === "mock") return "Demo workspace: no provider calls.\nAnalysis and planning simulated.";
+    const response = await fetch(`/api/log/${encodeURIComponent(id)}`);
+    if (!response.ok) throw new Error("Could not load job log");
+    return response.text();
   }
   async agent(id: string, instruction: string): Promise<AgentResult> {
     if (this.mode !== 'jobs') throw new Error('Director requires the jobs backend.');
