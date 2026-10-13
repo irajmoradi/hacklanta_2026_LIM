@@ -1,0 +1,32 @@
+{
+  "method": "Every generated contact sheet inspected visually; full video/audio decode and continuous-interval generated-text reservation checks performed by render_saved.py. This is sampled visual QA, not frame-by-frame human playback.",
+  "valorant_nice_landscape": {
+    "sheets": ["contact_01.jpg", "contact_02.jpg", "contact_03.jpg"],
+    "sampled_frames": 55,
+    "findings": [
+      "The NO SHOT sequence at 13.08-13.23 seconds retains its pop and has no Signal candidate caption.",
+      "The opening Phoenix sequence and later elimination sequence have no full model-description subtitles.",
+      "Word pops and corner reactions remain separated in the reviewed samples.",
+      "Intro and outro artwork fill the landscape frame; generated lettering remains intact.",
+      "Intentional clutch bars, freeze graphics and intense colour effects from the saved edit remain. These are distinct from card letterboxing."
+    ],
+    "leaked_labels_seen": false,
+    "editorial_overlap_seen": false,
+    "card_letterboxing_seen": false
+  },
+  "valorant_mean_vertical": {
+    "sheets": ["contact_01.jpg", "contact_02.jpg"],
+    "detail_frames": ["detail_intro.png", "detail_outro.png"],
+    "sampled_frames": 33,
+    "findings": [
+      "Both cards use full-height blurred artwork behind the complete sharp card; the original black padding bands are gone. Full-size detail frames preserve the title, fish and car.",
+      "The opening death sequence has no model-description caption and no NEXT TIME/caption collision; the conflicting lower-priority arrow is omitted.",
+      "Phoenix and spray-down sequences have no dry multi-line descriptions.",
+      "The BRUH pop stays above the corner reaction in the reviewed samples.",
+      "Intentional gameplay clutch bars remain at roughly 11 and 15 seconds; these are saved effects, not padding around AI cards."
+    ],
+    "leaked_labels_seen": false,
+    "editorial_overlap_seen": false,
+    "card_letterboxing_seen": false
+  }
+}
