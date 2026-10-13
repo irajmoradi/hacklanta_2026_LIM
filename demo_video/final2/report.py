@@ -33,13 +33,14 @@ def main():
                      f"{len(facts['sam_skipped'])} | {timing['total']:.2f} |")
         records.append((name, facts, job, timing))
     lines += ['', 'API wall times cover the final attempt (plan/analyze, render and download), '
-              'not earlier cancelled audit attempts or offline packaging. Nice Valorant resumes '
+              'not earlier cancelled/failed audit attempts or offline packaging. Both nice cuts resume '
               'analysis; Reroll and mean Deadlock reuse their job analysis. Raw stage times retain '
-              'earlier analysis measurements and include nested timers, so do not sum them.', '',
+              'the latest recorded value per stage key, including earlier analysis/render stages '
+              'not rerun in a variant, and include nested timers; do not sum them.', '',
               f"Live Gemini attempts: **{calls['total']} / 60**, including cancelled audit work, "
               'Director and image attempts. Durable per-job totals: `' +
               json.dumps(calls['jobs'], sort_keys=True) + '`.', '',
-              'Full runner validation: **1437 pytest passed, 20 skipped; 44 frontend tests '
+              'Full runner validation: **1438 pytest passed, 20 skipped; 44 frontend tests '
               'passed; production build passed; exit 0**. All ten delivered video files '
               'were decoded completely with ffmpeg -xerror. Reroll verification confirms '
               'identical analysis/job, changed seed and changed effects.', '',
@@ -62,6 +63,13 @@ def main():
         lines += ['- ' + w for w in facts['warnings']] or ['- None.']
         lines += ['', 'Visual findings:', '']
         lines += ['- ' + note for note in reviews[name]['observations']]
+    lines += ['', '## Earlier audit attempts', '']
+    for snapshot in sorted(ROOT.glob('*-error.json')):
+        job = json.loads(snapshot.read_text())
+        lines += [f"`{job['id']}`: {job['status']}; full snapshot: "
+                  f"[out/{snapshot.name}](out/{snapshot.name}).", '']
+        lines += ['- ' + w for w in job.get('warnings', [])] or ['- No warnings recorded.']
+        lines.append('')
     lines += ['', '## Limits and attribution', '',
               'Strict SAM rejection means no spotlight was composited for that target; '
               'procedural boxes/arrows are not SAM evidence. Editorial phrases are present '

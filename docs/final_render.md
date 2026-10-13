@@ -67,7 +67,7 @@ is copied into the runner worktree at launch, because the remote test sync
 removes runner-only files. Privacy is off; full experience, FX, performance mode,
 captions, reactions, cards, music/beat sync and share kits are enabled.
 
-## Validation so far
+## Validation
 
 - Focused runner command:
   `bash tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_cards_budget.py tests/test_cards.py tests/test_style_readability.py tests/test_wire1.py"`
@@ -76,7 +76,16 @@ captions, reactions, cards, music/beat sync and share kits are enabled.
   That fixture now explicitly uses plain cards; separate tests exercise AI cards.
 - Runtime preflight: SAM degraded=false, two real model samples in 13.14 seconds;
   Whisper tiny cached; exit 0. This makes zero Gemini calls.
-- Full suite and final media audit: results will be recorded below when complete.
+- Complete runner command before the beat-tail correction:
+  `bash demo_video/final2/run_checks.sh "set -o pipefail; cd full_app && python -m pytest -q 2>&1 | tee /srv/demo_out/final2/pytest.log && cd production_frontend && npm ci --silent && npm test -- --run && npm run build"`
+  — **1437 passed, 20 skipped** in 657.29 seconds; **44 frontend tests passed**;
+  TypeScript/Vite production build passed; **remote and local exit 0**.
+- Final complete runner command after `1f30244`:
+  `bash demo_video/final2/run_checks.sh "set -o pipefail; cd full_app && python -m pytest -q 2>&1 | tee /srv/demo_out/final2/pytest-final.log && cd production_frontend && npm test -- --run && npm run build"`
+  — **1438 passed, 20 skipped** in 678.62 seconds; **44 frontend tests passed**;
+  TypeScript/Vite production build passed; **remote and local exit 0**.
+- Final media audit: [delivery report](../demo_video/final2/REPORT.md) and
+  [manual review](../demo_video/final2/visual_review.json).
 
 The first complete suite returned **1431 passed, 20 skipped, 3 failed**, exit 1,
 in 680.37 seconds; all three failures were the PyAV incompatibility below.
@@ -94,6 +103,17 @@ from `sam_skipped` records and carries the exact rejection warnings. Synthetic
 tests cover both success and rejection. Superseded audit media are kept only
 under the runner's `superseded/` folder, not delivered as final masters.
 
+The first Deadlock render exposed a second timing boundary: beat snapping could
+shorten a segment beyond a late SFX start, causing FFmpeg `atrim` to receive
+`duration=-0.016792`. An offline reproduction used the saved plan and cached
+cards with no provider calls. `1f30244` trims all local events against the same
+snapped durations before rendering. The synthetic regression initially used a
+single clip (which intentionally is not beat-snapped): 21 passed / 1 failed,
+exit 1. With two clips it exercises the real boundary: **22 passed in 41.42 s,
+exit 0**, using the focused `run_checks.sh` command above. The failed live
+attempt exited 1; its public error snapshot and spent calls remain in the audit.
+The final retry reuses its analysis and cached cards through the stock API.
+
 The initial full-suite run exposed an optional-dependency incompatibility:
 faster-whisper 1.2.1 passes `metadata_errors` to PyAV; PyAV 19 removed that
 argument ([upstream changelog](https://pyav.basswood.io/docs/stable/development/changelog.html)).
@@ -101,6 +121,32 @@ The runner venv uses PyAV 18.0.0; default application requirements are unchanged
 Preflight now tests audio decoding as well as model loading.
 
 ## Artifacts and attribution
+
+Final results and per-cut warnings: [REPORT.md](../demo_video/final2/REPORT.md).
+All five masters include their cards inside the requested caps; all five Discord
+copies are below 20,000,000 bytes. Final usage is **59/60 live attempts**. The
+final `launch.py` retry exited 0. Offline `collect.py` and `detail_frames.py`
+exited 0; every master and compressed copy passed complete FFmpeg decoding,
+and local master SHA-256 values and compressed sizes match runner records.
+
+Code/test files changed: `full_app/fx/bold.py`,
+`full_app/pipeline/experience.py`, `full_app/pipeline/rendering.py`,
+`full_app/tests/test_style_readability.py`, `full_app/tests/test_cards_budget.py`,
+and `full_app/tests/test_wire1.py`. Run/evidence helpers and the report are under
+`demo_video/final2/`; this document is the only other changed path.
+
+Milestones: `60cb857`, `8c2dcaa`, `ce2d01f`, `a3e8642`, `9de663b`,
+`2e25327`, `1f30244`, followed by the delivery-report commit. The final Valorant
+masters use the earlier audited rendering revision; Deadlock includes the
+subsequent beat-tail fix. All final production code passed the final full suite.
+
+To review without paid calls, open `demo_video/final2/out/SUMMARY.md` and each
+folder's `discord.mp4` or `master.mp4`. Reproduction commands above are live
+smoke tests only where explicitly marked; the existing manifest resumes rather
+than resetting spent budgets. Known limits include cached local Deadlock outros,
+strict SAM rejections, lower-caption overlap, sparse speech transcription, and
+highlight-heavy stock selection in the Deadlock mean cut. Details and exact
+warnings are preserved per cut in the report.
 
 Runner artifacts: `/srv/demo_out/final2/`; local deliverables:
 `demo_video/final2/out/` (gitignored). Each cut includes its master, Discord copy
