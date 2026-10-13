@@ -25,7 +25,13 @@ def source(tmp_path):
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='production Linux resource limits')
-def test_six_landscape_segments_and_cards_under_worker_limits(source, tmp_path):
+@pytest.mark.parametrize('segment_duration', [1, 10])
+def test_six_landscape_segments_and_cards_under_worker_limits(source, tmp_path, segment_duration):
+    if segment_duration > 2:
+        extended = tmp_path / 'extended.mp4'
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-stream_loop', '-1', '-i', str(source),
+                        '-t', str(segment_duration), '-c', 'copy', str(extended)], check=True)
+        source = extended
     # Limit is inherited by ffmpeg, exactly as in server.stage_worker.
     code = '''
 import resource, sys
@@ -35,20 +41,21 @@ from pathlib import Path
 from render.engine import Renderer, probe
 from render.plan import RenderPlan
 from services.ffmpeg_runner import FFmpegRunner
-plan = RenderPlan(segments=[dict(source_start=0, source_end=1) for _ in range(6)],
+length = float(sys.argv[3])
+plan = RenderPlan(segments=[dict(source_start=0, source_end=length) for _ in range(6)],
     resolution=1080, transition='varied', transition_duration=.1,
     intro=dict(text='INTRO', duration=.5), outro=dict(text='OUTRO', duration=.5))
 renderer = Renderer(FFmpegRunner(Path(sys.argv[2]), Path(sys.argv[1]), *plan.size, plan.fps))
 output = renderer.render(plan)
 info = probe(output)
-assert abs(float(info['format']['duration']) - 6.3) < .11, info
+assert abs(float(info['format']['duration']) - (6*length+.3)) < .11, info
 video, audio = info['streams'][:2]
 assert (video['width'], video['height']) == (1920, 1080)
 assert abs(float(video['duration'])-float(audio['duration'])) < .11
 joins = [g for g in renderer.filter_graphs if 'xfade=' in g]
 assert len(joins) == 7 and all(g.count('xfade=') == 1 for g in joins)
 '''
-    result = subprocess.run([sys.executable, '-c', code, str(source), str(tmp_path/'limited')],
+    result = subprocess.run([sys.executable, '-c', code, str(source), str(tmp_path/'limited'), str(segment_duration)],
                             env={**os.environ, 'OPENBLAS_NUM_THREADS': '1', 'OMP_NUM_THREADS': '1'},
                             capture_output=True, text=True, timeout=240)
     assert result.returncode == 0, result.stdout + result.stderr
