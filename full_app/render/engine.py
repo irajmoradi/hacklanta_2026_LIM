@@ -69,7 +69,8 @@ class Renderer:
             raise RenderFailure() from error
 
     def _render(self, plan):
-        plan = RenderPlan.model_validate(plan)
+        plan = RenderPlan.model_validate(plan).model_copy(deep=True)
+        self.text_boxes = {}
         self.filter_graphs = []
         self.executed_plan = plan
         self.segment_timeline = []
@@ -116,6 +117,38 @@ class Renderer:
                 return render_segment_in(index, segment, duration, segment_directory)
 
             def render_segment_in(index, segment, duration, directory):
+                words = segment.words if plan.captions.enabled else []
+                texts = segment.texts if plan.captions.enabled else []
+                if plan.captions.enabled and plan.captions.transcribe and not words:
+                    # Speech analysis needs audio only. Decode the retimed source
+                    # before the video encode, then burn ASS in that same pass.
+                    from .placements import tempo
+                    def build_audio(output):
+                        self.runner._run(['ffmpeg', '-v', 'error', '-y',
+                            '-ss', str(segment.source_start), '-threads', '2', '-i', str(self.source),
+                            '-vn', '-af', tempo(segment.speed).rstrip(','), '-t', str(duration),
+                            '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', str(output)], 'caption audio')
+                    if has_audio:
+                        if self.runner.perf:
+                            audio = self.runner.cache.get('caption_audio', [self.source],
+                                [segment.source_start, duration, segment.speed], '.wav', build_audio)
+                        else:
+                            audio = directory / 'speech.wav'
+                            build_audio(audio)
+                        words = transcribe(audio, plan.captions.model)
+                    if not words:
+                        import warnings
+                        warnings.warn('Word captions: no speech words available; keeping editorial text lines', RuntimeWarning)
+                    segment.words = words
+                    if words:
+                        texts = []
+                from .text_layout import resolve_segment, trim_transition_text
+                segment.words, segment.texts = words, texts
+                trim_transition_text(segment,
+                    overlap if index > 0 or plan.intro else 0.,
+                    duration - (overlap if index < len(plan.segments)-1 or plan.outro else 0.))
+                self.text_boxes[index] = resolve_segment(segment, plan.preset)
+                words, texts = segment.words, segment.texts
                 points = []
                 if segment.sam and segment.sam.subject_track:
                     points = smooth_track(segment.sam.subject_track)
@@ -164,31 +197,6 @@ class Renderer:
                 audio_input = "0:a:0" if has_audio else "1:a:0"
                 from .placements import tempo
                 graph += f";[{audio_input}]atrim=duration={duration*segment.speed},asetpts=PTS-STARTPTS,{tempo(segment.speed)}aresample=48000,apad[outa]"
-                words = segment.words if plan.captions.enabled else []
-                texts = segment.texts if plan.captions.enabled else []
-                if plan.captions.enabled and plan.captions.transcribe and not words:
-                    # Speech analysis needs audio only. Decode the retimed source
-                    # before the video encode, then burn ASS in that same pass.
-                    from .placements import tempo
-                    def build_audio(output):
-                        self.runner._run(['ffmpeg', '-v', 'error', '-y',
-                            '-ss', str(segment.source_start), '-threads', '2', '-i', str(self.source),
-                            '-vn', '-af', tempo(segment.speed).rstrip(','), '-t', str(duration),
-                            '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', str(output)], 'caption audio')
-                    if has_audio:
-                        if self.runner.perf:
-                            audio = self.runner.cache.get('caption_audio', [self.source],
-                                [segment.source_start, duration, segment.speed], '.wav', build_audio)
-                        else:
-                            audio = directory / 'speech.wav'
-                            build_audio(audio)
-                        words = transcribe(audio, plan.captions.model)
-                    if not words:
-                        import warnings
-                        warnings.warn('Word captions: no speech words available; keeping editorial text lines', RuntimeWarning)
-                    segment.words = words
-                    if words:
-                        texts = []
                 baked_captions = bool(words or segment.title or texts)
                 if baked_captions:
                     ass = directory / f'caption_{index}.ass'

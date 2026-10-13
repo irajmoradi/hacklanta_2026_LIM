@@ -47,6 +47,10 @@ Style: Title,DejaVu Sans,{font},&H0000FFFF,&H0000FFFF,&H00000000,&H80000000,-1,0
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = [header]
+    def fitted(text):
+        # Bound even very long unbroken tokens to a single safe-zone line.
+        size = min(font, width*.78/max(1, len(text)))
+        return r'{\q2\fs' + str(round(size, 2)) + '}' + safe_text(text)
     blocked = {w.casefold() for w in options.profanity}
     for word in sorted(words, key=lambda w: (w.start, w.end)):
         if word.start >= duration:
@@ -55,10 +59,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if options.mask_profanity:
             text = re.sub(r"\w+", lambda m: "*" * len(m[0]) if m[0].casefold() in blocked else m[0], text)
         pop = r"{\fscx85\fscy85\t(0,80,\fscx100\fscy100)}"
-        lines.append(f"Dialogue: 0,{ass_time(word.start)},{ass_time(min(word.end, duration))},Word,,0,0,0,,{pop}{safe_text(text)}\n")
+        lines.append(f"Dialogue: 0,{ass_time(word.start)},{ass_time(min(word.end, duration))},Word,,0,0,0,,{pop}{fitted(text)}\n")
     for event in texts:
         alignment = r'{\an5}' if event.position == 'center' else ''
-        lines.append(f"Dialogue: 1,{ass_time(event.start)},{ass_time(min(duration, event.start+event.duration))},Word,,0,0,0,,{alignment}{safe_text(event.content)}\n")
+        lines.append(f"Dialogue: 1,{ass_time(event.start)},{ass_time(min(duration, event.start+event.duration))},Word,,0,0,0,,{alignment}{fitted(event.content)}\n")
     if title:
         lines.append(f"Dialogue: 1,0:00:00.00,{ass_time(min(title_duration, duration))},Title,,0,0,0,,{safe_text(title)}\n")
     path.write_text("".join(lines), encoding="utf-8")

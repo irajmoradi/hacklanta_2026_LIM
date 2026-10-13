@@ -1,0 +1,11 @@
+{
+  "source": "/srv/demo_out/final2/deadlock_nice_landscape/cards/outro.json",
+  "fallback": true,
+  "reason": "provider",
+  "warning": "AI outro card unavailable (provider); using local fish/car card",
+  "cached_warning": "AI outro card unavailable; using cached local fish/car card",
+  "earlier_job_error": "Rendering failed; check media and renderer configuration.",
+  "finding": "The persisted image record contains no HTTP status, safety reason, timeout or budget error. The earlier job error is a render error, not evidence of why the image provider failed. The mean variant reuses the same cached fallback.",
+  "decision": "Retain the visible fish/car fallback and its durable no-retry cache; do not claim a diagnosed provider cause or spend calls retrying it.",
+  "regression": "tests/test_polish1.py::test_deadlock_style_provider_failure_remains_cached"
+}

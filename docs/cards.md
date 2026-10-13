@@ -31,7 +31,11 @@ Music is mixed by the native renderer over the complete timeline. Existing
 transition overlaps, caption offsets and narration segment offsets are preserved.
 Cards add approximately seven seconds to the selected gameplay duration, less
 transition overlaps; the planner's existing duration budget is unchanged.
-Portrait/square output pads the generated landscape image to preserve lettering.
+Portrait/square output composes the cached image at the target aspect: a blurred
+cover crop fills the frame behind the complete, sharp artwork. There are no
+black padding bands, and lettering stays intact. The current thumbnail provider
+fixes requests to 16:9; composition supports 9:16 and 1:1 without extra calls or
+invalidating the two-attempt cache. Native-aspect art also works unchanged.
 Legacy rendering reports AI cards as unsupported rather than silently claiming
 to have generated them.
 

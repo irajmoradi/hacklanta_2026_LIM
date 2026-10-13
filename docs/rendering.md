@@ -282,3 +282,33 @@ Coverage includes six 1080p landscape segments plus cards under inherited 8 GiB
 address-space/4 GiB output-file limits, pixel checks for RIP/pop/banner appearance
 and disappearance during a freeze, parallel prepared workers, one-pass captions,
 cache concurrency, and a real `server.stage_worker` error round trip.
+
+## POLISH-1 editorial text and safe zones
+
+Source descriptions remain analysis/share-kit/chapter metadata. The planner
+derives short editorial lines from event kinds; it never copies source captions.
+The pipeline also removes verbatim descriptions from saved plans. At render time,
+internal labels and editorial lines longer than five words are omitted. Actual
+transcribed speech is exempt from the editorial word limit. Refinement patches
+must obey the same limit. ASS captions fit one line inside the horizontal margins.
+
+`render/text_layout.py` resolves each clip on its output clock before composing
+filters. Word pops occupy the upper band; banners stay in the upper-middle band;
+the NEXT TIME arrow sits near the centre. Captions end at 80% height for portrait
+and 90% for landscape/square. Reactions reserve their right corner. Conservative
+rectangles include text outlines and motion. Reactions take priority, followed
+by speech, FX copy, and editorial captions/titles; colliding lower-priority text
+is omitted. Unknown text filters reserve the whole frame. Graphic hit markers,
+particles, and freeze arrows are not editorial text. Original input plans are
+not mutated; `render_plan` records the executed placements and
+`render_evidence.text_boxes` exposes clip-local reservations for audit.
+Text and reactions are trimmed out of both sides of transition windows so an
+outgoing reaction cannot collide with incoming speech during a crossfade.
+
+Regression tests cover all three presets, every frame of a synthetic timeline,
+speech priority, saved descriptions, provider failure caching, and pixel checks
+on encoded portrait/square cards:
+
+```sh
+tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_polish1.py"
+```

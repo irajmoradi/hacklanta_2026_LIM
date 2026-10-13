@@ -25,7 +25,7 @@ def rank_merge(candidates, scored, whole):
         clip = dict(start_seconds=c['start'], end_seconds=c['end'],
                     score=.5 + math.atan(candidate.get('score', 0)) / math.pi,
                     score_scale='unit', score_provenance='atan_signal',
-                    description=c.get('caption', 'Signal candidate'), type='good',
+                    description=c.get('caption') or '', type='good',
                     label=c.get('label', ''), suggested_reaction_label=c.get('suggested_reaction_label', c.get('label')),
                     source='signals', signals=c.get('signals', {}), events=c.get('events', []))
         if 'player_alive' in c:

@@ -73,7 +73,7 @@ for label in ('ELIMINATED', 'SKILL ISSUE', 'CLIPPED'):
         "drawtext=text='"+label+"':fontfile={fontpath}:fontsize=min(w\\,h)*.085:"
         'fontcolor=red:borderw=2:bordercolor=black:x=(w-tw)/2:y=h*.29-th/2',
         'after', FAIL, 'roast', 1.2, True)
-add('fail_arrow', word('NEXT TIME  >>>', 'yellow', '.72', '.08'), 'after', FAIL, 'roast', 1.1, True)
+add('fail_arrow', word('NEXT TIME  >>>', 'yellow', '.43', '.08'), 'after', FAIL, 'roast', 1.1, True)
 add('freeze', 'null', 'after', ALL, 'both', 1.0)
 
 # Rain uses original ASCII faces/flames/skulls, not copyrighted emoji glyphs.

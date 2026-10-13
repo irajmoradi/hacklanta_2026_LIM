@@ -131,6 +131,9 @@ def _render_job(pipeline, job, key):
         if options.get('captions') is False:
             for segment in plan['segments']:
                 segment.pop('title', None)
+        from render.text_layout import strip_descriptions
+        # `caption` on an API-reviewed clip is explicit user copy, not analysis.
+        strip_descriptions(plan, [c.get('description', '') for c in job.get('clips') or []])
         if not options.get('fx') or not pipeline.hook('fx', 'compose', job):
             for segment in plan['segments']:
                 segment.pop('fx', None)
@@ -272,6 +275,7 @@ def _render_job(pipeline, job, key):
             if job['render_plan'].get('music'):
                 job['render_plan']['music']['path'] = 'generated music bed'
             job['render_evidence'] = dict(filter_graphs=getattr(engine, 'filter_graphs', []),
+                text_boxes=getattr(engine, 'text_boxes', {}),
                 timeline=getattr(engine, 'segment_timeline', []), reactions=applied_reactions, sam=applied_sam,
                 sam_skipped=skipped_sam,
                 privacy=bool(options.get('privacy', False)), output=probe_video(output))
