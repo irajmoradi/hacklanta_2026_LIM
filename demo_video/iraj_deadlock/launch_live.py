@@ -16,8 +16,6 @@ def main():
     values.update(GOOGLE_GENAI_USE_VERTEXAI='true', GEMINI_MODEL='gemini-3.5-flash-lite',
                   MAX_GEMINI_CALLS_PER_JOB='60', GEMINI_ATTEMPTS='2', GEMINI_TOP_N='3',
                   IRAJ_DL_LIVE_SMOKE='1', GAME_DETECTION_VLM='0', OMP_THREAD_LIMIT='1')
-    if '--mean-only' in sys.argv:
-        values['DEADLOCK_EXPORT_MODE'] = 'mean'
     host = (repo/'tools/runner_ip').read_text().strip()
     script = 'live_smoke.py'
     command = "cd /srv/lim/lim-irajdl/full_app && ../.venv/bin/python -c 'import json,os,subprocess,sys; env=dict(os.environ,**json.load(sys.stdin)); env[\"PYTHONPATH\"]=os.getcwd(); sys.exit(subprocess.call([sys.executable,\"../demo_video/iraj_deadlock/" + script + "\"],env=env))'"

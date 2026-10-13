@@ -148,6 +148,15 @@
     "Lost urn, overextension, failed ability combo, or avoidable death losing souls/objectives."
   ],
   "detection_layout": {
+    "variants": [
+      {
+        "timer": [0.465, 0, 0.535, 0.04],
+        "mask_timer": true,
+        "souls": [0.043, 0.80, 0.13, 0.85],
+        "minimap": [0.79, 0.59, 0.985, 0.97],
+        "lane_hues": [[5, 38], [45, 84], [85, 115]]
+      }
+    ],
     "timer": [
       0.485,
       0,
