@@ -20,4 +20,6 @@ ATTRIBUTION: Verify the recorder is alive and in control during the action. Reje
 
 LOCAL SIGNALS: Feed events have unknown attribution and may include assists or other players. A persistent FRIENDLY GUARDIAN / ENEMY WALKER health bar is not an objective capture. Require a destruction outcome. An ultimate icon or available charge is not ultimate use: verify activation and impact in the video.
 
+EXCLUDE: Shop menus, item purchases, inventory browsing, upgrades and routine travel are not highlights or lowlights. A build purchase is not an objective or an outplay. Reject a candidate dominated by these screens even when its souls counter changes; retain visible gameplay and its outcome.
+
 REACTION HINTS: hype for confirmed multikills/clutches; awe for low-health outplays or steals; playful roast for clear mistakes; sympathy for unlucky failures. These are semantic hints, not required output enum values. Do not invent events or insult protected traits.

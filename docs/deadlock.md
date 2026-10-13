@@ -1,7 +1,8 @@
 # Deadlock real-footage calibration (DEADLOCK-1)
 
 Branch: `ext/DEADLOCK-1`. Implementation milestone: `35ff180`.
-Reproduction/live harness milestone: `a362ed3`. No push or merge performed.
+Reproduction/live harness milestone: `a362ed3`; full-VOD validation: `4e3001c`;
+shared-pack compatibility and retry audit: `1717347`. No push or merge performed.
 
 Changed files (all within the task allowlist):
 
@@ -203,8 +204,61 @@ Manually inspected source frames (file timestamps, not the HUD match clock):
 The HUD match clock is nine seconds ahead of the file clock in these inspected
 frames. Measurements and exported clip source ranges use file seconds.
 
-Remaining validation results and artifact sizes are recorded below after the
-full scan, full suite, and live smoke complete.
+The bounded stock retry completed analysis and both initial renders with **36
+paid generation attempts total**, including failed runs, automatic retries and
+the diagnostic. Its source metadata is 1,113.721905 seconds (container/audio
+duration, versus the 1,113.683-second video stream used by the offline scan).
+It detected Deadlock / 0.781, returned 30 candidates, three scored windows and
+34 retained clips. All 34 were labeled good; no validated lowlights were returned.
+The mean export therefore demonstrates the stock roast-mode highlight fallback,
+not verified deaths, whiffed ultimates or ganks.
+
+Successful analysis stage timings: probe 0.1510 s, profiles 34.5276 s, cached
+ingest 0.8332 s, signals 383.1414 s, window scoring 6.7093 s, whole-video analysis
+431.3902 s, rank/merge 0.0012 s. Cold ingest cost 1,561.4511 s in the preceding
+attempt. These are shared-runner measurements, not a latency guarantee.
+
+Visual QA of the first nice contact sheet found a wrongly selected shop-purchase
+sequence at 923–936 seconds. The raw model analysis and first exports are retained
+under `pre-review/`. The final harness uses stock `PATCH /api/jobs/<id>/clips` to
+set `keep=false` for overlapping candidates (IDs 3 and 31 in this run), then
+replans/rerenders both modes without further Gemini calls. `qa-review.json`
+records the exclusion. The Deadlock prompt now explicitly rejects shops,
+inventory and item purchases. This is an **editor-reviewed demo**; automatic
+model selection is not claimed to be error-free. The new prompt wording was
+added after live analysis, so the final exclusion is evidence of the stock edit
+workflow, not proof that the new wording eliminates all future menu errors.
+
+The final mean plan explicitly requests the team's `roast` reaction through the
+stock render endpoint's `edit_plan` field. This changes editorial tone, not event
+labels. `python demo_video/deadlock/launch_live.py --mean-only` regenerated that
+export successfully (exit 0) without new analysis or paid calls. Both final
+contact sheets were visually inspected, including separate frames during the
+brief reaction overlays.
+
+| Credited export | Duration | Dimensions | Bytes | Discord bytes |
+| --- | ---: | --- | ---: | ---: |
+| `nice-landscape.mp4` | 45.013 s | 1920 x 1080 | 43,980,957 | 13,754,903 |
+| `mean-vertical.mp4` | 30.016 s | 1080 x 1920 | 24,155,846 | 9,178,064 |
+
+Both are H.264/AAC at 30 fps. Final stock render stages took 122.8136 s (nice)
+and 199.4850 s (mean); reaction stages took 7.1336 s and 4.6772 s respectively.
+No render warnings were returned. Final media, contacts, reaction frames,
+`results.json`, `qa-review.json`, and `verification.json` are available in
+`/srv/demo_out/deadlock/` and the ignored local `demo_video/deadlock/out/`.
+
+Final verification commands actually run:
+
+```sh
+bash tools/remote_run.sh 'set -o pipefail; cd full_app && OMP_THREAD_LIMIT=1 python -m pytest -q 2>&1 | tee /srv/demo_out/deadlock/pytest-final.log'
+bash tools/remote_run.sh 'set -o pipefail; PYTHONPATH=full_app python demo_video/deadlock/verify_outputs.py /srv/demo_out/deadlock 2>&1 | tee /srv/demo_out/deadlock/verification.json'
+```
+
+Full suite: **1,072 passed, 20 skipped in 529.19 s**, exit 0. Artifact verifier:
+exit 0, all six stock/credited/Discord videos decoded without ffmpeg errors;
+durations, aspect ratios, privacy off, reaction rendering, mean roast label,
+review exclusion and Discord sizes passed. Paid attempt count remained **36/50**.
+Local harness `py_compile` and `git diff --check` also exited 0.
 
 ## Limits
 

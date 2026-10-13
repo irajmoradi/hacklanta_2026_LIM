@@ -18,7 +18,12 @@ def main():
         status = json.loads((root/f'{mode}-status.json').read_text())
         assert status['status'] == 'done'
         assert status['options']['privacy'] is False and status['options']['reactions'] is True
+        assert all(s['source_end'] <= 923 or s['source_start'] >= 936
+                   for s in status['edit_plan']['segments']), 'Reviewed shop interval returned to the plan'
         assert any(k.startswith('reactions_') for k in status['timings']), 'No reaction render recorded'
+        if mode == 'mean':
+            assert any(r['label'] == 'roast' for s in status['edit_plan']['segments']
+                       for r in s.get('reactions', [])), 'Mean reaction tone was not applied'
         for filename in (f'{mode}-stock.mp4', f'{mode}-{preset}.mp4', f'{mode}-{preset}-discord.mp4'):
             path = root/filename
             meta = probe_video(path)

@@ -73,7 +73,10 @@ def main():
     server = make_server('127.0.0.1', 8019, app, threaded=True)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     client = httpx.Client(base_url='http://127.0.0.1:8019', timeout=900)
-    summary = {}
+    selected_mode = os.getenv('DEADLOCK_EXPORT_MODE')
+    assert selected_mode in (None, 'mean')
+    summary = json.loads((ROOT/'results.json').read_text()) if selected_mode else {}
+    summary['success'] = False
     try:
         marker = ROOT/'job-id.txt'
         if marker.exists():
@@ -126,12 +129,38 @@ def main():
                        analysis_calls=calls(), analysis_timings=dict(data['timings']))
         assert data['game'] == 'deadlock' and data['game_confidence'] >= .7
         assert data.get('window_scores'), 'Gemini window scoring did not run'
+        # Visual QA of this supplied VOD found the model selected a shop menu.
+        # Use the stock editing API; preserve raw analysis and never relabel a
+        # highlight as a death/whiff simply to fill mean mode.
+        reviewed = []
+        for clip in data['clips']:
+            if clip['start_seconds'] < 936 and clip['end_seconds'] > 923:
+                clip['keep'] = False
+                reviewed.append(clip['id'])
+        if reviewed:
+            client.patch(url+'/clips', json={'clips': data['clips']}).raise_for_status()
+        summary['review_excluded'] = reviewed
+        (ROOT/'qa-review.json').write_text(json.dumps(dict(
+            interval=[923, 936], reason='Shop menu, visually inspected in first contact sheet',
+            excluded_ids=reviewed), indent=2))
         for mode, preset, duration in [('nice', 'landscape', 45), ('mean', 'vertical', 30)]:
+            if selected_mode and mode != selected_mode:
+                continue
             client.post(url+'/plan', json=dict(mode=mode, max_duration=duration, preset=preset,
                                               privacy=False, reactions=True, planner=True)).raise_for_status()
             data = wait()
-            client.post(url+'/render', json=dict(mode=mode, preset=preset, max_duration=duration,
-                                                privacy=False, reactions=True)).raise_for_status()
+            render_options = dict(mode=mode, preset=preset, max_duration=duration,
+                                  privacy=False, reactions=True)
+            if mode == 'mean':
+                # Editorial tone only: the source contains no model-validated
+                # lowlights. Do not invent failures; request the team's roast
+                # reaction through the stock explicit-plan interface.
+                plan = data['edit_plan']
+                for segment in plan['segments']:
+                    for reaction in segment.get('reactions', []):
+                        reaction['label'] = 'roast'
+                render_options['edit_plan'] = plan
+            client.post(url+'/render', json=render_options).raise_for_status()
             data = wait()
             assert data['status'] == 'done'
             (ROOT/f'{mode}-status.json').write_text(json.dumps(data, indent=2))
