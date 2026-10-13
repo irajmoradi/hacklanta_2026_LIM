@@ -1,60 +1,75 @@
-# FINAL-1 combined replay
+# FINAL-2 combined render
 
-The implementation exposes chaos/seed over HTTP and the production UI, sizes
-visible reaction heads after cropping transparent padding, and supports explicit
-pack metadata with an independent clean filter. The review Reroll button replans
-locally, reuses analysis, disables the paid Director, and displays new VFX/SFX.
+Branch: `ext/FINAL-2`. No push or merge.
 
-## Reproduce on runner 1
+## Implementation
 
-```sh
-tools/remote_run.sh "cd full_app && python -u ../demo_video/final/render_saved.py"
-tools/remote_run.sh "python demo_video/final/verify.py"
-tools/remote_run.sh "cd full_app && python -m pytest -q"
-tools/remote_run.sh "cd full_app/production_frontend && npm ci --silent && npm test && npm run build"
-```
+`60cb857` removes the full-frame red fill from both damage effects. Only three
+translucent edge borders remain; their recommended event duration is 0.4 seconds.
+Pixel tests exercise single and stacked damage layers in landscape and portrait,
+requiring at least 75% centre contrast. Every bold effect also gets a measured
+centre coverage/opacity check, with tighter limits on borders and banners than
+on intentional full-frame distortion effects.
 
-The replay also accepts `--only landscape`, `--only vertical`,
-`--only mean_vertical`, or `--only mean_vertical_reroll`. It reads the existing
-78-clip DEMO-02 analysis and source under `/srv/demo_out/demo02/`; provider access
-is explicitly blocked. No credential file is read. The mean target is increased
-from the old saved 20-second plan to 30 seconds using the same saved evidence.
+The rendering adapter now budgets both cards inside `max_duration`, after legacy
+time effects have been prepared and before music, SAM and card generation. It
+uses whole-frame allocations, symmetrically trims source ranges, clips local
+captions/effects/reactions/sounds/tracks, and retains selected clips where the
+budget permits. Transitions and beat sync may shorten the result further. Short
+requests shorten cards; requests without an explicit cap retain their defaults.
+Narration and share export consume the adjusted source ranges. No provider calls
+are introduced by budgeting.
 
-Outputs go to `/srv/demo_out/final/`, with local copies in
-`demo_video/final/out/` (gitignored). Each variant has a master, Discord copy,
-saved plan, final job with execution evidence, reaction frames and spotlight
-frames. Verification produces `clips.md`, `contact_sheet.jpg`, hashes, decode
-results, audio peaks and reroll reproducibility checks.
+## Reproduction
 
-## Choices and dependencies
+All scripts below live in `demo_video/final2/`. `prepare.py` and `collect.py` make
+no provider calls. `launch.py` is an **explicit paid live smoke test**. It reads
+only `GOOGLE_API_KEY` from the authorized local dotenv at runtime and sends it
+over SSH stdin, never saving it. Vertex express is selected with
+`GOOGLE_GENAI_USE_VERTEXAI=true`.
 
-- Nice chaos .35; mean chaos .6. Seed 2026; mean reroll seed 2027.
-- Full experience, privacy false, large matted heads from `/srv/packs/team`.
-  Clean is false for the demos; nice still prefers non-explicit clips.
-- All four speakers rotate before reuse, with event labels varied across clips.
-  The demo allows up to 2.8 seconds per reaction when there is room; actual
-  playback is bounded by each original pack clip's duration.
-- Local SAM 2.1 small: `/srv/models/sam2.1_hiera_small.pt`, config
-  `configs/sam2.1/sam2.1_hiera_s.yaml`, CPU, four mask samples per clip,
-  120-second request timeout and 300-second clip budget. The ordinary app keeps
-  its existing 12-sample default; `SAM_MAX_SAMPLES` is configurable in [1,240].
-  Landscape retains the entire frame, so subject crop tracking is disabled there;
-  SAM spotlights remain enabled. Vertical uses subject tracking and spotlights.
-- Optional dependencies were installed into the task runner venv using
-  `pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu`
-  and `SAM2_BUILD_CUDA=0 pip install -r full_app/sam/requirements-local.txt`.
-  No heavyweight dependency enters the default requirements.
-- Music is generated locally, with ducking and beat synchronization. The end
-  card accounts for beat trimming, frame rounding and crossfade overlap to hit
-  the requested 60/30-second total without extending source ranges.
-- SAM evidence records only successful real-model spotlights. Missing models or
-  exhausted budgets warn and skip; they are never reported as working inference.
-  Sparse masks and heuristic source event timing remain approximations.
-  Visual inspection of landscape spotlights found that the generic seed can
-  select the weapon or scenery, rather than isolating an enemy. These are real
-  SAM composites at event times, not reliable enemy tracking.
-- Speech captions may fall back to explicitly labelled editorial words. Local
-  narration only plays in safe gaps; it may skip clips with insufficient space.
+1. `bash tools/remote_run.sh "python demo_video/final2/prepare.py"`
+2. Install optional CPU Torch/SAM2 and faster-whisper in the runner venv, then run
+   `demo_video/final2/check_runtime.py` there.
+3. `python demo_video/final2/launch.py`
+4. On runner 1: `.venv/bin/python demo_video/final2/collect.py` from the worktree.
 
-See `demo_video/final/REPORT.md` for final measurements, test results, commit IDs
-and visual inspection findings.
+The harness serves the stock jobs API on loopback port 8022 and sends real HTTP
+uploads, analyze, plan and render requests. It never edits the job database or
+injects analysis/plans. There is no stock analysis-import endpoint, so Valorant
+uses a fresh analysis of source 960–1560 seconds: the ten-minute window containing
+the most saved DEMO-02 clip starts (28). Deadlock uses the provided CC BY source.
+
+Two durable jobs each have a 30-attempt provider ceiling, including images,
+for a hard total ceiling of 60. Alternate cuts and the changed-seed Reroll reuse
+the respective jobs through `/plan`. Image/card caches and image-specific
+budgets retain stock behavior. `jobs.json` supports resuming completed variants.
+
+SAM runs locally with `/srv/models/sam2.1_hiera_small.pt`, CPU, four samples per
+clip, a 120-second operation timeout and a 300-second clip budget. The team pack
+is copied into the runner worktree at launch, because the remote test sync
+removes runner-only files. Privacy is off; full experience, FX, performance mode,
+captions, reactions, cards, music/beat sync and share kits are enabled.
+
+## Validation so far
+
+- Focused runner command:
+  `bash tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_cards_budget.py tests/test_cards.py tests/test_style_readability.py tests/test_wire1.py"`
+  — **79 passed, exit 0**. Its initial run had 78 passed / 1 failed, exit 1:
+  the six-second narration fixture relied on seven seconds of extra AI cards.
+  That fixture now explicitly uses plain cards; separate tests exercise AI cards.
+- Runtime preflight: SAM degraded=false, two real model samples in 13.14 seconds;
+  Whisper tiny cached; exit 0. This makes zero Gemini calls.
+- Full suite and final media audit: results will be recorded below when complete.
+
+## Artifacts and attribution
+
+Runner artifacts: `/srv/demo_out/final2/`; local deliverables:
+`demo_video/final2/out/` (gitignored). Each cut includes its master, Discord copy
+under 20 MB, stock share kit, cards, full job/warnings, stage timings, verification
+JSON, and contact sheets sampled at every planned effect/reaction/card.
+
+Deadlock: **Deadlock Gameplay - Free To Use**, by **No Copyright Gameplay**,
+<https://www.youtube.com/watch?v=aXZYyd4SoWM>, Creative Commons Attribution
+(CC BY), as recorded in the supplied source attribution. Credit is included with
+both Deadlock deliverable folders and share kits; retain it when publishing.
