@@ -16,7 +16,7 @@ python -m sam input.mp4 freeze.mp4 --end 5 --effect spotlight_freeze --kill-time
 python -m sam input.mp4 vertical.mp4 --end 5 --effect background_blur --vertical
 ```
 
-The fallback runs motion and border-color saliency on small frames, selects a
+For outline, blur and reframe only, the fallback runs motion and border-color saliency on small frames, selects a
 connected subject region, and uses a stable central ellipse if the scene is blank.
 It is a heuristic, not semantic player/enemy recognition; HUD elements or camera
 motion can confuse it. No external media are needed to run the tests below.
@@ -86,7 +86,8 @@ export SAM_CLIP_BUDGET=60
 Obtain weights separately from upstream; this package never downloads weights.
 For SAM 2 small use its corresponding checkpoint and
 `SAM2_CONFIG=configs/sam2/sam2_hiera_s.yaml`. Local SAM 2 uses the fallback region's
-box as its spatial prompt. It does **not** interpret text; semantic text selection
+box as its spatial prompt for reframe/outline/blur. Spotlights use the event-local
+point and small box described below. It does **not** interpret text; semantic text selection
 belongs to the remote backend. The model persists for one clip in an isolated
 worker. Missing package, unavailable device, bad weights, or slow initialization
 all fall back. The optional requirements file lives under `sam/` so the Linux
@@ -114,8 +115,8 @@ runner's root `requirements*.txt` glob does not install heavyweight dependencies
   Track timestamps remain absolute; rendered clips start at zero. This version
   assumes constant frame rate and uses the decoder's reported FPS. Normalize VFR
   footage before using it. Effects preserve decoded frame count, except a freeze
-  inserts `round(freeze_seconds * fps)` frames after the kill frame. The freeze
-  darkens/blurs the background, keeps the cutout sharp, adds glow and a growing-to-
+  inserts at most `floor(0.6 * fps)` frames after the kill frame, only if targeting
+  passes. The freeze slightly dims/desaturates the background, keeps the cutout sharp, adds glow and a growing-to-
   settled `SICK KILL` text slam, then resumes original playback. Text uses OpenCV's
   Latin font; custom text should be ASCII.
 - Existing audio is trimmed/rebased and encoded as stereo AAC. A freeze inserts
@@ -151,3 +152,55 @@ response timeouts, total budgets, cleanup, and the per-clip circuit breaker with
 sleeping or wall-clock assertions. Loopback HTTP tests still exercise the real
 remote protocol and spawned worker. Media and worker integration tests carry the
 `slow` marker; pure compositor and deadline tests do not.
+
+## SAMFIX-1: conservative spotlights
+
+`spotlight` and `spotlight_freeze` use a separate event-local target path. They
+never display the motion/contrast fallback or its invented central ellipse.
+Pass absolute `kill_time`, an optional `profile` (name or GameProfile), and/or
+normalized `crosshair=(cx, cy)` in the **decoded input frame**. Existing game
+profiles contain no crosshair calibration, so their FPS center is explicitly
+assumed to be `(0.5, 0.5)`. A profile's `detection_layout.crosshair_center` overrides
+that assumption when supplied; an explicit `crosshair` takes priority. For cropped
+or transformed input, callers must transform the crosshair and optional normalized
+`hud_boxes` too. The saved replay uses a centered crop, disabling saliency reframe.
+
+```python
+sam.render_effect('input.mp4', 'spotlight.mp4', 10, 15,
+                  effect='spotlight', kill_time=12.3, profile='valorant')
+```
+
+The local predictor receives both a positive crosshair point and a small search
+box (18% of width, 32% of height). Up to seven samples, bounded by `max_samples`,
+cover the kill's +/-0.3 seconds at up to 768 pixels on the long edge. Remote
+adapters receive `point` and `box` in submitted-image pixel coordinates in addition
+to the existing image/text fields. A remote service must honor those prompts.
+
+The complete effect is skipped if any sampled mask is below 0.1% or above 25% of
+frame area; reaches the two-pixel frame boundary; intersects HUD bands (top 10%,
+bottom 12%), supplied HUD boxes, or the conservative FPS viewmodel region
+(x >= 38%, y >= 70%); is away from the crosshair; is fragmented; or has consecutive
+IoU below 0.40. Fewer than two samples, missing models, timeouts and exhausted
+budgets also skip. These deliberately strict geometry checks can reject a real
+enemy and cannot prove semantic identity. They favor skipping an uncertain effect.
+
+Accepted masks get morphological closing, feathering and a soft warm glow. The
+background is only 12% dimmer and 15% desaturated. The duration-preserving effect
+lasts at most 0.6 seconds; freeze insertion is also capped at 0.6 seconds and is
+omitted entirely on rejection. Other SAM effect/reframe defaults stay unchanged.
+Skipped renders retain ordinary gameplay and issue `RuntimeWarning` beginning
+`SAM spotlight skipped:`. The existing pipeline captures these into job warnings.
+Its legacy `render_evidence.sam` list records attempts, including skips; the demo
+adds explicit `accepted` and rejection reason fields without editing pipeline files.
+
+Offline validation and the two saved-analysis replays:
+
+```sh
+tools/remote_run.sh "cd full_app && python -m pytest -q tests/test_sam.py tests/test_sam_targeting.py tests/test_reactions.py tests/test_reaction_matte.py tests/test_reaction_sizes.py tests/test_final1.py"
+tools/remote_run.sh "python -u demo_video/samfix/render_saved.py"
+tools/remote_run.sh "python demo_video/samfix/verify.py"
+```
+
+Artifacts live in `/srv/demo_out/samfix/` and ignored local
+`demo_video/samfix/out/`. See `demo_video/samfix/REPORT.md` for actual outcomes,
+limitations and the final contact sheet. No Gemini calls or credentials are needed.

@@ -18,7 +18,7 @@ def layout(width: int, height: int, preset: str, reaction_size: str = 'large') -
     corner = PRESETS[preset]
     if reaction_size not in ('small', 'medium', 'large'):
         raise ValueError('Unknown reaction size')
-    fraction = {'landscape': .33, 'vertical': .27, 'square': .30}[preset]
+    fraction = {'landscape': .35, 'vertical': .28, 'square': .32}[preset]
     size = max(16, int(min(width, height) * fraction * {'small': .55, 'medium': .78, 'large': 1}[reaction_size]) // 2 * 2)
     margin = max(2, int(size * .025))
     return (size, width - size + margin if corner.endswith('right') else -margin,
@@ -37,13 +37,26 @@ def matte_bounds(path: str, modified: int, alpha: bool):
     raw = subprocess.run(command, capture_output=True, check=True).stdout
     if not raw:
         raise ValueError('Empty reaction matte')
-    visible = np.frombuffer(raw, np.uint8).reshape(-1, 256, 256).max(axis=0) > 24
+    visible = visible_matte(np.frombuffer(raw, np.uint8).reshape(-1, 256, 256))
     ys, xs = np.nonzero(visible)
     if not len(xs):
         raise ValueError('Empty reaction silhouette')
     # Small padding retains feathered hair edges.
     return (max(0, int(xs.min())-2)/256, max(0, int(ys.min())-2)/256,
             min(256, int(xs.max())+3)/256, min(256, int(ys.max())+3)/256)
+
+
+def visible_matte(frames):
+    """Union the opaque head, ignoring disconnected keying dust and faint halos."""
+    import cv2
+    import numpy as np
+    visible = np.zeros(frames.shape[1:], np.uint8)
+    for frame in frames:
+        count, labels, stats, _ = cv2.connectedComponentsWithStats((frame > 64).astype(np.uint8))
+        if count > 1:
+            biggest = 1+int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+            visible |= (labels == biggest).astype(np.uint8)
+    return visible
 
 
 def render_overlay(base_clip: str | Path, reaction: Reaction, preset: str = 'landscape', *, peak_time: float | None = None,
