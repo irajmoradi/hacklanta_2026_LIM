@@ -18,7 +18,7 @@ DEFAULTS = {
     "generic": {"kill_feed": box(.64, .03, .36, .27), "chat": box(0, .55, .4, .4)},
     "valorant": {"kill_feed": box(.64, .03, .36, .27), "chat": box(0, .55, .4, .4)},
     "overwatch2": {"kill_feed": box(.64, .02, .36, .28), "chat": box(0, .55, .4, .4)},
-    "deadlock": {"kill_feed": box(.62, .03, .38, .30), "chat": box(0, .55, .4, .4)},
+    "deadlock": {"kill_feed": box(.025, .18, .335, .27), "chat": box(0, .55, .4, .4)},
     "league": {"kill_feed": box(.75, .15, .25, .45), "chat": box(0, .45, .4, .4)},
 }
 

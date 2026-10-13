@@ -153,7 +153,8 @@ def detect_game(video_path: str | Path, *, sample_count: int = 16,
                 cues = layout_evidence(result.stdout, get_profile(name), reader)
                 # A feed can be empty between eliminations; its position is
                 # corroborating evidence rather than a mandatory persistent HUD.
-                layouts[name] += bool(cues) and all(cues.get(k) for k in ('timer', 'health', 'abilities', 'minimap'))
+                required = get_profile(name).detection_layout.get('required', ('timer', 'health', 'abilities', 'minimap'))
+                layouts[name] += bool(cues) and all(cues.get(k) for k in required)
     detected = detect_frames(frames)
     supported = [name for name, count in layouts.items() if count >= max(3, math.ceil(len(images)*.18))]
     if detected[0] == 'generic' and len(supported) == 1:

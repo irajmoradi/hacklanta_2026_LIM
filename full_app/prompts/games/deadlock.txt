@@ -8,10 +8,18 @@ DEAD: Bottom-center Respawn in banner with Shop & Upgrade; right-side INCOMING D
 
 SPECTATING: Camera following another hero after death; the grayed ability bar may remain visible.
 
-HIGHLIGHTS: Confirmed multikills, soul-denial outplays, urn delivery/steals, and decisive Patron or guardian fights.
+HUD: This third-person MOBA has a top portrait/team-souls bar and timer, bottom-centre abilities, a bottom-right four-lane minimap, bottom-left mint souls counter and health left of centre. The calibrated feed is upper-left with cream/red participant panels. HUD versions vary; never impose Valorant's crosshair/ammo or round-win rules.
 
-LOWLIGHTS / ROASTS: Lost urn, overextension, failed ability combo, or avoidable death losing souls/objectives.
+HIGHLIGHTS: Prioritize decisive team fights, isolated picks that open an objective, confirmed multikills, low-health clutch escapes, urn delivery/steals, and Guardian/Walker/Shrine/Patron takedowns. Keep the setup, ability interaction and visible outcome in one coherent beat. Give additional weight to an objective steal or a pick converted into objective pressure, not routine lane farming.
+
+SOUL DENIAL: A deliberate shot on an opponent's unsecured soul orb can be an outplay when the orb interaction is visibly confirmed. A souls-counter jump is only economy evidence: creeps, team objectives and kills can all pay souls. It does not establish a kill, deny or steal by itself.
+
+LOWLIGHTS / ROASTS: Death after overextension, getting ganked without an escape, a visibly whiffed ultimate, a failed ability combo, or losing an urn/objective after a clear mistake. Show the consequence and stop at death. Cooldown numbers, an empty feed or ordinary missed shots alone are insufficient evidence. Do not fabricate a death or whiff to fill a mean-mode duration target.
 
 ATTRIBUTION: Verify the recorder is alive and in control during the action. Reject uncertain POV, spectator footage and kill cams. Global announcements or feed text alone do not prove the player earned a kill. A lowlight may end at the recorder death; exclude the subsequent spectator interval. Confirm eliminations visually and retain enough lead-in to explain the outcome.
+
+LOCAL SIGNALS: Feed events have unknown attribution and may include assists or other players. A persistent FRIENDLY GUARDIAN / ENEMY WALKER health bar is not an objective capture. Require a destruction outcome. An ultimate icon or available charge is not ultimate use: verify activation and impact in the video.
+
+EXCLUDE: Shop menus, item purchases, inventory browsing, upgrades and routine travel are not highlights or lowlights. A build purchase is not an objective or an outplay. Reject a candidate dominated by these screens even when its souls counter changes; retain visible gameplay and its outcome.
 
 REACTION HINTS: hype for confirmed multikills/clutches; awe for low-health outplays or steals; playful roast for clear mistakes; sympathy for unlucky failures. These are semantic hints, not required output enum values. Do not invent events or insult protected traits.

@@ -1,6 +1,6 @@
 # Shared game profiles
 
-The package supplies game-specific regions, vocabulary, and detection. It does not change Flask routes or the current Gemini prompts.
+The package supplies game-specific regions, vocabulary, detection and scoring prompt fragments.
 Profiles are JSON data loaded into standard-library dataclasses; no Python ML,
 OCR, image or model dependency is required to import the package.
 
@@ -28,7 +28,7 @@ returns `('generic', 0.0)` for insufficient or ambiguous evidence.
 | --- | --- | --- | --- |
 | Valorant | Upper-right feed; right combat report / killed-by panel; bottom-left spectator label; bottom-center health | Aces, clutches, multikills, spike plays | Whiffs, failed utility, exposed positioning, failed defuse |
 | Overwatch 2 | Upper-right feed; upper-left eliminated-by banner; respawn timer at upper right; bottom kill cam; lower-left health | Team kills, ult combos, environmental kills, payload/point contests | Wasted ult, stagger, missed save, abandoning objective |
-| Deadlock | Upper-right feed; right incoming-damage report; lower-center respawn/shop banner; lower-left health | Multikills, soul denial, urn delivery/steals, Patron fights | Lost urn, overextension, failed combo, costly deaths |
+| Deadlock | Upper-left cream/red feed; right incoming-damage report; lower-center respawn banner; health left of centre, souls bottom left, four-lane minimap bottom right | Picks/team fights, multikills, soul denial, urn steals, Guardian/Walker/Patron fights | Lost urn, whiffed ultimate, getting ganked, costly deaths |
 | League of Legends | Right feed; upper-center announcements; bottom-center champion HUD; gray screen + respawn timer | Multikills/pentakills, shutdowns, low-HP outplays, Baron/Dragon steals, towers | Failed smite, bad dive, consequential missed skillshot |
 | Generic | Broad approximate regions; explicit death or spectator evidence | Confirmed player multikills, outplays, objectives | Observable mistakes with consequences |
 
@@ -40,7 +40,8 @@ HUDs can also be visible while spectating or watching a kill cam.
 The existing clip-finder rules informed the Valorant, OW2, and Deadlock state
 descriptions. Regions are conservative search areas, not verified pixel-perfect
 contracts for every game patch. FIX-5 calibrates the Valorant layout against the
-owner-provided demo VOD; other profiles retain synthetic-only calibration.
+owner-provided demo VOD; DEADLOCK-1 calibrates Deadlock against the supplied CC BY
+No Copyright Gameplay recording. OW2 and League retain synthetic-only calibration.
 
 ## Region and OCR contracts
 
@@ -107,9 +108,17 @@ numbers lost by full-frame sparse OCR. Paired red/teal rows corroborate the
 upper-right kill-feed position; an empty feed is normal between eliminations.
 The fallback only resolves otherwise generic results. A single matching frame,
 blank screen, or partial HUD cannot activate it. Other profiles keep keyword
-detection. Injected OCR readers retain their original full-frame-only contract.
+detection, except Deadlock's fallback described below. Injected OCR readers retain their original full-frame-only contract.
 The visual helper lazily uses the app's existing OpenCV/NumPy dependencies;
 Tesseract remains optional, and no weights or model downloads are introduced.
+
+DEADLOCK-1 adds timer OCR, mint souls-counter text, four colored minimap lanes and
+top portrait-bar corroboration, required together with the same repeated-frame
+threshold. It resolves only otherwise generic results. Its calibrated feed is
+upper-left `(0.025, 0.18, 0.36, 0.45)`; cream/red rows support candidate events
+without claiming player attribution. Objective outcomes require explicit text,
+and souls gains are weak economy evidence. See [Deadlock validation and demo](deadlock.md)
+for full-source measurements, stock API reproduction, attribution and limitations.
 
 Custom OCR adapters accept PNG `bytes` and return `Sequence[OCRToken]`, each with
 text, a normalized `Box`, and confidence in `[0,1]`. Preserve reading order for

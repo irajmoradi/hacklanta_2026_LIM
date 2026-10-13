@@ -188,6 +188,15 @@ def detect_candidates(video_path: str | Path, profile: str = "auto", *, curve_si
     """
     config = Config(**cfg)
     regions = regions_for(profile, config.ocr_regions)
+    # Keep legacy defaults for other profiles; Deadlock's larger fights make
+    # continuous camera motion less discriminative than HUD/economy evidence.
+    deadlock = profile.lower().replace(' ', '').replace('_', '').replace('-', '') == 'deadlock'
+    if deadlock:
+        from profiles import get_profile
+        weights = get_profile('deadlock').signal_weights
+        for feature, multiplier in (('motion', weights['motion']), ('ocr', weights['ocr'])):
+            if feature not in cfg.get('weights', {}):
+                config.weights[feature] *= multiplier
     path = Path(video_path).resolve(strict=True)
     duration, stream, has_audio = _probe(path)
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -200,5 +209,8 @@ def detect_candidates(video_path: str | Path, profile: str = "auto", *, curve_si
     for event in events:
         if event["type"] in {"kill", "death"}:
             ocr[min(len(ocr) - 1, int(event["time"]))] += 1
+        elif deadlock and event['type'] in {'objective_taken', 'souls_gain'}:
+            ocr[min(len(ocr) - 1, int(event['time']))] += (
+                weights['objective'] / weights['ocr'] if event['type'] == 'objective_taken' else .25)
     return fuse({"scene": scene, "rms": rms, "onset": onset,
                  "sustained": sustained, "motion": motion, "ocr": ocr}, events, duration, config, curve_sink=curve_sink)
