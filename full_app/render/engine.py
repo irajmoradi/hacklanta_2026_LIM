@@ -10,7 +10,7 @@ from .analysis import detect_beats, motion_track, smooth_track, snap_durations
 from .captions import transcribe, write_ass
 from .graph import join_graph, music_graph, reframe_graph
 from .plan import RenderPlan
-from .contracts import RenderFailure
+from .contracts import RenderFailure, RenderInputFailure
 
 
 def probe(path):
@@ -61,6 +61,8 @@ class Renderer:
     def render(self, plan):
         try:
             return self._render(plan)
+        except ValueError as error:
+            raise RenderInputFailure(error) from error
         except (OSError, subprocess.SubprocessError, RuntimeError) as error:
             if isinstance(error, RenderFailure):
                 raise
@@ -200,6 +202,14 @@ class Renderer:
                                             duration, self.runner.cache if self.runner.perf else None)
                     args += inputs
                     graph += mix
+                prepared = prepared_processors[index] if prepared_processors else None
+                compose = getattr(prepared, 'compose', None)
+                if compose:
+                    # An immutable prepared overlay can append its inputs and
+                    # graph before encoding, sharing the caption/effects pass.
+                    args, graph = compose(args, graph, directory=directory,
+                        size=plan.size, fps=plan.fps, duration=duration,
+                        cache=self.runner.cache if self.runner.perf else None)
                 args += ["-filter_complex", graph, "-map", "[outv]", "-map", "[outa]",
                          "-t", str(duration)]
                 self.encode(args, path, directory)
@@ -209,8 +219,8 @@ class Renderer:
                                             for t in texts if t.start < duration]
                 if segment.title:
                     segment_captions[index].append(dict(start=0, end=min(3, duration), text=segment.title))
-                if prepared_processors:
-                    path, duration = prepared_processors[index](path, index, segment, duration, directory)
+                if callable(prepared):
+                    path, duration = prepared(path, index, segment, duration, directory)
                 return path, duration
             work = list(enumerate(zip(plan.segments, durations)))
             # Stateful selectors prepare in timeline order. Their returned workers
@@ -281,6 +291,53 @@ class Renderer:
             return output
 
     def join_bounded(self, paths, durations, plan, overlap, directory):
+        """Encode only disjoint bodies and short two-input transition windows.
+
+        A long timeline never enters an xfade buffer. Encoded chunks have exact
+        frame durations and are copied together, so total encoded video is O(n).
+        """
+        if plan.transition == 'cut':
+            return self.join_pairs(paths, durations, plan, overlap, directory)
+        from .graph import TRANSITIONS
+        from perf.media import concatenate
+        jobs, lengths = [], []
+
+        def chunk(index, inputs, graph, duration):
+            output = directory / f'window_{index}.mp4'
+            return self.encode([*inputs, '-filter_complex', graph, '-map', '[outv]',
+                                '-map', '[outa]', '-t', str(duration)], output, directory)
+
+        for i, (path, duration) in enumerate(zip(paths, durations)):
+            start = overlap if i else 0
+            body = duration - start - (overlap if i < len(paths)-1 else 0)
+            index = len(jobs)
+            inputs = ['-ss', str(start), '-i', str(path)]
+            graph = join_graph([body], 'cut', 0, plan.fps)
+            jobs.append(lambda idx=index, ins=inputs, g=graph, d=body: chunk(idx, ins, g, d))
+            lengths.append(body)
+            if i == len(paths)-1:
+                continue
+            transition = (list(TRANSITIONS)[i % len(TRANSITIONS)]
+                          if plan.transition == 'varied' else plan.transition)
+            index = len(jobs)
+            inputs = ['-ss', str(duration-overlap), '-t', str(overlap), '-i', str(path),
+                      '-t', str(overlap), '-i', str(paths[i+1])]
+            graph = join_graph([overlap, overlap], transition, overlap, plan.fps)
+            jobs.append(lambda idx=index, ins=inputs, g=graph: chunk(idx, ins, g, overlap))
+            lengths.append(overlap)
+        if self.runner.perf:
+            from perf.parallel import render_all
+            from perf.encoders import best
+            chunks = render_all(jobs, best(threads=2))
+        else:
+            chunks = [job() for job in jobs]
+        try:
+            return concatenate(chunks, directory / 'joined.mp4', durations=lengths)
+        except ValueError:
+            # Hardware/processor stream incompatibility retains bounded memory.
+            return self.join_pairs(paths, durations, plan, overlap, directory)
+
+    def join_pairs(self, paths, durations, plan, overlap, directory):
         """Balanced intermediate joins: two decoders / one xfade per process.
 
         Each level encodes the timeline once; unlike an incremental accumulator,

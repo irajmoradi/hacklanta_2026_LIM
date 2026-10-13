@@ -38,13 +38,17 @@ def copy_cut(source, output, start, end):
     return True
 
 
-def concatenate(paths, output):
+def concatenate(paths, output, durations=None):
     """Reject unlike stream parameters rather than silently produce a broken montage."""
     fields = ("codec_name", "codec_type", "profile", "level", "width", "height", "pix_fmt", "r_frame_rate",
               "time_base", "sample_rate", "channels", "channel_layout", "extradata")
     paths = [Path(p).resolve() for p in paths]
     if not paths:
         raise ValueError("no clips")
+    if durations is not None:
+        import math
+        if len(durations) != len(paths) or any(not math.isfinite(d) or d <= 0 for d in durations):
+            raise ValueError('concat durations must match positive clip durations')
     signatures = [tuple(tuple(s.get(k) for k in fields) for s in probe(p)["streams"]) for p in paths]
     if any(s != signatures[0] for s in signatures[1:]):
         raise ValueError("concat requires identical stream parameters and codec extradata")
@@ -52,6 +56,8 @@ def concatenate(paths, output):
         listing = Path(tmp) / "concat.txt"
         if any("\n" in str(p) or "\r" in str(p) for p in paths):
             raise ValueError("newline in media path")
-        listing.write_text("".join("file '" + p.as_posix().replace("'", "'\\''") + "'\n" for p in paths), encoding="utf-8")
+        listing.write_text("".join("file '" + p.as_posix().replace("'", "'\\''") + "'\n" +
+            (f'duration {durations[i]:.9f}\n' if durations is not None else '')
+            for i, p in enumerate(paths)), encoding="utf-8")
         run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", listing, "-c", "copy", output])
     return Path(output)

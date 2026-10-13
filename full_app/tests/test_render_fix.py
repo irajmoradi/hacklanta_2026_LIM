@@ -130,3 +130,36 @@ def test_renderer_errors_are_render_category(tmp_path, monkeypatch):
         engine.render(RenderPlan(segments=[dict(source_start=0, source_end=1)]))
     assert caught.value.category == caught.value.code == 'render'
     assert 'Gemini' not in str(caught.value)
+    from services.provider_errors import classify, ProviderFailure
+    transported = ProviderFailure(classify(caught.value).code)
+    assert transported.code == 'render' and 'Gemini' not in str(transported)
+
+
+def test_prepared_overlay_shares_segment_encode(source, tmp_path):
+    class Overlay:
+        def compose(self, args, graph, **context):
+            assert context['cache'] is not None
+            graph = graph.replace('[outv]', '[before_overlay]')
+            graph += ';[before_overlay]drawbox=x=0:y=0:w=100:h=100:c=red:t=fill[outv]'
+            return args, graph
+    class Processor:
+        def prepare(self, index, segment, duration):
+            return Overlay()
+    renderer = Renderer(FFmpegRunner(tmp_path/'overlay', source, 1280, 720, 30), Processor())
+    renderer.render(RenderPlan(resolution=720, captions=dict(enabled=True), segments=[
+        dict(source_start=0, source_end=.5, words=[dict(start=0, end=.4, text='ONE PASS')])]))
+    graphs = [g for g in renderer.filter_graphs if 'ass=' in g]
+    assert len(graphs) == 1 and 'drawbox=' in graphs[0]
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='production worker')
+def test_worker_transports_render_failure(tmp_path):
+    job = dict(dir=str(tmp_path), source=str(tmp_path/'missing.mp4'),
+               meta=dict(width=1280, height=720, fps=30), clips=[], warnings=[],
+               edit_plan=dict(render_version=2, segments=[dict(source_start=0, source_end=1)]),
+               options=dict(privacy=False, reactions=False, captions=False, sam=False))
+    payload = dict(stage='render', job=job, key=None, memory=8*1024**3, file_bytes=4*1024**3)
+    result = subprocess.run([sys.executable, '-m', 'server.stage_worker'],
+        input=json.dumps(payload), capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == {'_stage_error': 'render'}

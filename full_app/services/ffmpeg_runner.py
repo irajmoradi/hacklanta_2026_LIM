@@ -51,7 +51,7 @@ class FFmpegRunner:
         print(f"  [ffmpeg] {label}: {' '.join(cmd[:8])}...")
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            raise RenderFailure(f'Rendering failed ({label or "FFmpeg"}).') from RuntimeError(result.stderr[-500:])
+            raise RenderFailure() from RuntimeError(f'{label}: {result.stderr[-500:]}')
         return result
 
     def extract_segment(self, index: int, start: float, end: float,
