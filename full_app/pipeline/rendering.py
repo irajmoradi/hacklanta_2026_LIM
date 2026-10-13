@@ -132,8 +132,8 @@ def _render_job(pipeline, job, key):
             for segment in plan['segments']:
                 segment.pop('title', None)
         from render.text_layout import strip_descriptions
-        strip_descriptions(plan, [c.get(k, '') for c in job.get('clips') or []
-                                 for k in ('description', 'caption')])
+        # `caption` on an API-reviewed clip is explicit user copy, not analysis.
+        strip_descriptions(plan, [c.get('description', '') for c in job.get('clips') or []])
         if not options.get('fx') or not pipeline.hook('fx', 'compose', job):
             for segment in plan['segments']:
                 segment.pop('fx', None)
