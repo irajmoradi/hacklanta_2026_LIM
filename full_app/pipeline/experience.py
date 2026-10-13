@@ -10,7 +10,7 @@ EXTENSION_FLAGS.add('ai_cards')
 
 FULL_EXPERIENCE = dict(planner=True, profiles=True, use_signals=True, audio_ai=True,
     captions=True, reactions=True, sam=True, sam_reframe=True, music=True,
-    beat_sync=True, transitions=True, cards=True, narration=True, social=True,
+    beat_sync=True, transitions=True, cards=True, narration=False, social=True,
     privacy=False, ai_cards=True, gemini_image=True, window_scoring=True)
 
 

@@ -469,9 +469,11 @@ test remains in place.
 
 The production UI **Full experience** button enables the deterministic planner,
 game profiles, local gameplay/audio signals, captions, reactions, subject crop,
-SAM spotlight, music, beat sync, varied transitions, intro/outro, narration and
+SAM spotlight, music, beat sync, varied transitions, intro/outro and
 share kit. The API equivalent is `{"full_experience": true}` in analyze/plan/render
-options. Explicit booleans override the preset. Privacy is **false** in new jobs,
+options. Narration defaults to **false**, including Full experience. Use the AI
+narration toggle and persona selector, or `narration=true` with `narration_persona`,
+to opt in explicitly. Explicit booleans override the API preset. Privacy is **false** in new jobs,
 the UI, and the full preset; `privacy=true` / the unchecked Privacy blur control
 is the only way to opt in. The saved-analysis replay also explicitly sets false.
 Ordinary callers retain previous defaults except privacy. Window scoring retains
@@ -489,7 +491,11 @@ intro offset and crossfade overlap, and never extends source ranges.
 
 Automatic plans with reactions enabled get one short event per selected segment,
 with event labels where available and mode-specific varied fallback labels. Full
-experience rotates through eligible pack speakers before reuse; a montage with
+experience rotates through eligible pack speakers before reuse. `reaction_speakers`
+restricts eligibility to exact pack names, e.g. `["Iraj"]`; omitted or `[]` means
+everyone. The UI multi-select uses `frontend_capabilities.reaction_speakers`.
+Unknown names are rejected; an unavailable eligible clip is skipped, never
+replaced by another speaker. A montage with
 fewer clips than speakers cannot show everyone. Explicit custom plans retain
 their reaction placements. SAM spotlight preserves duration, highlights a bounded
 window around a known kill timestamp (otherwise midpoint), and skips unavailable

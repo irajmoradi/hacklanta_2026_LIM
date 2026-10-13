@@ -26,7 +26,8 @@ def wait(app, job_id):
     raise AssertionError('Job timed out')
 
 
-def test_full_experience_http_feature_coverage(video, tmp_path, monkeypatch):
+@pytest.mark.parametrize('owner_only', [False, True])
+def test_full_experience_http_feature_coverage(video, tmp_path, monkeypatch, owner_only):
     import render.engine
     from render.plan import Word
     import sam
@@ -65,7 +66,7 @@ def test_full_experience_http_feature_coverage(video, tmp_path, monkeypatch):
         url = '/api/jobs/' + job_id
         assert client.post(url+'/analyze', json=dict(full_experience=True, use_signals=False,
             window_scoring=False, profiles=False, audio_ai=False, ai_cards=False,
-            mode='mean', max_duration=6)).status_code == 202
+            mode='mean', max_duration=6, **({'reaction_speakers': ['speaker-0']} if owner_only else {'narration': True}))).status_code == 202
         planned = wait(app, job_id)
         assert planned['options']['privacy'] is False
         assert planned['edit_plan']['intro'] and planned['edit_plan']['outro']
@@ -82,10 +83,16 @@ def test_full_experience_http_feature_coverage(video, tmp_path, monkeypatch):
         assert 'sidechaincompress' in graphs and 'ass=' in graphs
         assert plan['music']['beat_sync'] and plan['music']['beats']
         assert all(s['words'] and s['sam']['subject_track'] for s in plan['segments'])
-        assert len(evidence['reactions']) == len(plan['segments'])
-        assert len({r['speaker'] for r in evidence['reactions']}) == min(3, len(plan['segments']))
+        if owner_only:
+            assert {r['speaker'] for r in evidence['reactions']} == {'speaker-0'}
+            assert not job.get('narration_track') and 'narration_graph' not in evidence
+            assert 'narration' not in job['timings']
+        else:
+            assert len(evidence['reactions']) == len(plan['segments'])
+            assert len({r['speaker'] for r in evidence['reactions']}) == min(3, len(plan['segments']))
         assert evidence['sam'] and evidence['privacy'] is False
-        assert any(s['has_audio'] for s in job['narration_track'])
+        if not owner_only:
+            assert any(s['has_audio'] for s in job['narration_track'])
         assert job['share_kit']['downloads']
         assert evidence['output']['audio_codec'] == 'aac'
         assert model.find_clips.call_count == 1 and model.plan_edit.call_count == 0

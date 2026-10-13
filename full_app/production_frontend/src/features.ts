@@ -1,4 +1,5 @@
 export const extensionDefaults = {
+  reaction_speakers: [] as string[],
   chaos: .35, seed: 0, reaction_size: 'large', clean: false,
   full_experience: false, beat_sync: true, transitions: false, cards: false,
   audio_ai: false, planner_v2: false, window_scoring: false, sam_reframe: false,
@@ -9,6 +10,7 @@ export const extensionDefaults = {
 };
 export type ExtensionOptions = typeof extensionDefaults;
 export interface Capabilities {
+  reaction_speakers?: string[];
   options: string[];
   team_upload: boolean;
   url_import: boolean;
@@ -20,6 +22,7 @@ export const baseCapabilities: Capabilities = {
   url_import: false, music_upload: false, chat_upload: false,
 };
 export const demoCapabilities: Capabilities = {
+  reaction_speakers: ['Iraj', 'Alex'],
   options: [...Object.keys(extensionDefaults), "game"], team_upload: true,
   url_import: true, music_upload: true, chat_upload: true,
 };

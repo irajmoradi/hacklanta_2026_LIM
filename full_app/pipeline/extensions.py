@@ -107,6 +107,8 @@ def extra_signals(pipeline, job):
 
 def team_source(pipeline, job, scratch):
     """Compose aligned angles on each selected primary-source interval."""
+    from reactions.pack import configure_render_speakers
+    configure_render_speakers(job['options'].get('reaction_speakers', []), scratch)
     if not job['options'].get('multipov'):
         return None
     sources = job.get('sources', [job['source']])
