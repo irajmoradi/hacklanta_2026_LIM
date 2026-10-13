@@ -21,6 +21,11 @@ def budget_duration(plan, maximum):
     bound. Keep every selected clip when possible, with symmetric source trims.
     """
     plan = copy.deepcopy(plan)
+    # Editorial captions are complete phrases; speech words remain untouched.
+    for segment in plan['segments']:
+        if 'texts' in segment:
+            segment['texts'] = [t for t in segment['texts']
+                               if len(t['content'].split()) > 1 and t['duration'] >= .75]
     if maximum is None:
         return plan
     fps = plan.get('fps', 30)
@@ -58,6 +63,8 @@ def budget_duration(plan, maximum):
                 end = entry.get('end', start+(entry.get('duration') or old))
                 left, right = max(0., start-offset), min(length, end-offset)
                 if left >= right:
+                    continue
+                if key == 'texts' and right-left < .75:
                     continue
                 entry[start_key] = left
                 if key in ('words', 'fx'):

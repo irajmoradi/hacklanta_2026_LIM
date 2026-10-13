@@ -9,6 +9,16 @@ from pipeline import Pipeline
 from services.probe import probe_video
 
 
+def test_budget_drops_single_word_and_trimmed_editorial_flashes():
+    plan = dict(segments=[dict(source_start=0, source_end=10, texts=[
+        dict(start=9, duration=1, content='GG!'),
+        dict(start=0, duration=1, content='A complete phrase'),
+        dict(start=1, duration=1, content='A readable phrase')])])
+    result = budget_duration(plan, 9)
+    assert [t['content'] for t in result['segments'][0]['texts']] == ['A readable phrase']
+    assert all(len(t['content'].split()) > 1 for t in budget_duration(plan, None)['segments'][0]['texts'])
+
+
 @pytest.mark.parametrize('maximum', [1, 3, 30, 45, 60])
 @pytest.mark.parametrize('transition', ['cut', 'varied'])
 def test_budget_caps_cards_and_validates_local_events(maximum, transition):

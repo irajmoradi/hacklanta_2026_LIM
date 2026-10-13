@@ -148,7 +148,7 @@ def _render_job(pipeline, job, key):
                     bed = generate(options.get('music_mood', 'chill' if options.get('style') in ('clean_edit', 'cinematic') else 'energetic'),
                                    min(600, length), min(599, length*.8), output_dir=scratch)
                     plan['music'] = dict(path=str(bed.path), beats=bed.beats, duck=True, beat_sync=options.get('beat_sync', True))
-        applied_reactions, applied_sam = [], []
+        applied_reactions, applied_sam, skipped_sam = [], [], []
         with pipeline.stage(job, 'subject_track'):
             track = pipeline.hook('sam', 'subject_track', job) if options.get('sam_reframe') else None
             if track:
@@ -219,11 +219,20 @@ def _render_job(pipeline, job, key):
                             native = native_clips[index]
                             local_peak = native['peak']-native['start']
                         local_peak = min(max(0, local_peak), max(0, duration-1/validated.fps))
-                        spotlight(path, output, 0, duration, effect='spotlight',
-                                  kill_time=local_peak, freeze_seconds=0)
+                        with warnings.catch_warnings(record=True) as mask_warnings:
+                            warnings.simplefilter('always', RuntimeWarning)
+                            spotlight(path, output, 0, duration, effect='spotlight',
+                                      kill_time=local_peak, freeze_seconds=0)
+                        rejected = [str(w.message) for w in mask_warnings
+                                    if str(w.message).startswith('SAM spotlight skipped:')]
+                        for warning in mask_warnings:
+                            pipeline.warn(job, str(warning.message))
                         # Duration-preserving spotlight keeps beats, captions and narration aligned.
                         path = output
-                        applied_sam.append(dict(segment=index, time=local_peak, effect='spotlight'))
+                        if rejected:
+                            skipped_sam.append(dict(segment=index, time=local_peak, reasons=rejected))
+                        else:
+                            applied_sam.append(dict(segment=index, time=local_peak, effect='spotlight'))
             if selector and apply and not segment.reactions and 'reactions' not in original_segments[index]:
                 with pipeline.stage(job, f'reactions_{index}'):
                     path = apply(path, clip_metadata[index], selector, validated.preset,
@@ -261,6 +270,7 @@ def _render_job(pipeline, job, key):
                 job['render_plan']['music']['path'] = 'generated music bed'
             job['render_evidence'] = dict(filter_graphs=getattr(engine, 'filter_graphs', []),
                 timeline=getattr(engine, 'segment_timeline', []), reactions=applied_reactions, sam=applied_sam,
+                sam_skipped=skipped_sam,
                 privacy=bool(options.get('privacy', False)), output=probe_video(output))
             if options.get('reactions') and selector and not applied_reactions and all('reactions' in s for s in original_segments):
                 pipeline.warn(job, 'Reactions requested but no eligible pack events were rendered')

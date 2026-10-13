@@ -45,6 +45,9 @@ def test_full_experience_http_feature_coverage(video, tmp_path, monkeypatch):
     monkeypatch.setattr(sam, 'clip_masks', lambda *a, **k: SimpleNamespace(degraded=False))
     import sam.effects
     monkeypatch.setattr(sam.effects, 'clip_masks', lambda *a, **k: original_masks(*a, **{**k, 'config': sam.Config()}))
+    import sam.targeting
+    monkeypatch.setattr(sam.targeting, 'target_masks', lambda source, start, end, kill_time, **kw:
+                        original_masks(source, start, end, config=sam.Config()))
     monkeypatch.setattr(sam, 'subject_track', lambda source, start, end: [(start, .45, .5, .2, .3), (end-.1, .55, .5, .2, .3)])
     monkeypatch.setattr(render.engine, 'transcribe', lambda *a: [Word(start=.05, end=.4, text='spoken')])
     voice = tmp_path / 'voice.wav'
@@ -102,6 +105,26 @@ def test_full_experience_explicit_overrides():
     assert options_valid(dict(full_experience=True, privacy_blur=True), EDIT_STYLES)['privacy'] is True
     with pytest.raises(ValueError):
         options_valid(dict(full_experience='true'), EDIT_STYLES)
+
+
+@pytest.mark.parametrize('rejected', [False, True])
+def test_spotlight_evidence_distinguishes_strict_rejection(video, tmp_path, monkeypatch, rejected):
+    import sam
+    import warnings
+    from services.probe import probe_video
+    monkeypatch.setenv('SAM_BACKEND', 'local')
+    monkeypatch.setattr(sam, 'clip_masks', lambda *a, **k: SimpleNamespace(degraded=False))
+    def effect(source, output, *args, **kwargs):
+        shutil.copyfile(source, output)
+        if rejected:
+            warnings.warn('SAM spotlight skipped: fragmented', RuntimeWarning)
+    monkeypatch.setattr(sam, 'render_effect', effect)
+    job = dict(source=str(video), dir=str(tmp_path), meta=probe_video(video), clips=[], warnings=[],
+        options=dict(sam=True, captions=False), edit_plan=dict(render_version=2, resolution=720,
+        fps=10, segments=[dict(source_start=0, source_end=.5)]))
+    Pipeline().render(job, None)
+    assert bool(job['render_evidence']['sam']) is not rejected
+    assert bool(job['render_evidence']['sam_skipped']) is rejected
 
 
 def test_unavailable_features_are_reported_and_silent_video_has_word_fallback(video, tmp_path, monkeypatch):
