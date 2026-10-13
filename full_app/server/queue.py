@@ -170,7 +170,7 @@ class JobQueue:
                     getattr(self.pipeline, stage)(job, self.keys.get(job_id))
                 if stage == 'plan':
                     plan_valid(job['edit_plan'], job['meta']['duration'], job['options'].get('max_duration', 180))
-                    if job['options'].get('editor_agent') or (job['options'].get('planner') and
+                    if job['options'].get('editor_agent') or ((job['options'].get('planner') or job.get('_local_replan')) and
                             job['options'].get('editing_instructions', '').strip() and not job['options'].get('plan_refinement')):
                         from .editor import run, apply_result
                         result = run(self, job, job['options'].get('editing_instructions') or job['options'].get('prompt') or 'Improve this draft and review its preview',

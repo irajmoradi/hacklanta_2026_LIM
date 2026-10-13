@@ -227,3 +227,39 @@ Offline UI checks: `tools/remote_run.sh "cd full_app/production_frontend && npm 
 `e2e/parity.spec.ts` intercepts every API request and generates its video using
 ffmpeg. It captures settings.png, job-log.png and plan-json.png under
 `production_frontend/browser-artifacts/`; no paid calls or copyrighted media.
+
+### PARITY-UI verification record
+
+Branch: `ext/PARITY-UI`. All changes are within the task's allowed paths. No push,
+merge, external key read, or live provider call was performed.
+
+| Command from worktree root | Exit | Observed result |
+| --- | --- | --- |
+| `bash tools/remote_run.sh 'cd full_app && python -m pytest -q'` | 0 | 1271 passed, 21 skipped, 513.29 seconds |
+| `bash tools/remote_run.sh 'cd full_app && python -m pytest -q tests/test_parity_ui.py tests/test_jobs.py tests/test_planner.py'` | 0 | 81 passed; final backend follow-up regressions after the full run |
+| `bash tools/remote_run.sh 'cd full_app/production_frontend && npm run build && npm test && npm run test:browser'` | 0 | Production build, 44 Vitest tests, 4 Playwright tests passed |
+| `git diff --check` | 0 | No whitespace errors |
+
+Earlier iterations returned exit 1 for a planner variety regression, old API
+payload expectations, and browser selectors. These were fixed and the affected
+checks rerun successfully. The full suite uses its existing optional-dependency
+and live-test skips. Frontend browser routes are fixtures; Python tests mock
+providers and block ordinary network connections.
+
+Reviewed screenshots are committed at
+`full_app/production_frontend/qa/parity/settings.png`, `job-log.png`, and
+`plan-json.png`. They show the new settings, expanded event log, and editable
+typed-plan view. Synthetic video and runner output directories are not committed.
+
+Implementation files: `server/{api,capabilities,queue,validation}.py`,
+`pipeline/{extensions,orchestrator}.py`, `planner/planner.py`,
+`production_frontend/src/{App,api,features}` and `styles/editor.css`, plus
+`components/{EditSettings,JobDetails}.tsx`. Tests are `tests/test_parity_ui.py`,
+frontend `api.test.ts` and `parity.test.tsx`, and browser `director.spec.ts` and
+`parity.spec.ts`. API, pipeline and frontend documentation were updated.
+
+Remaining integration: FISH-1 adds `gemini_image=True` to `FULL_EXPERIENCE` in
+`pipeline/experience.py`. The UI already sends it explicitly. Provider output
+quality was not evaluated live. The 70/30 target is approximate when footage,
+clip lengths or story structure constrain selection. Imported repeated-source
+segments retain distinct UI IDs and their own effects through polling/reordering.

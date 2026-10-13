@@ -121,6 +121,19 @@ def test_editing_instructions_are_first_director_instruction(setup, video, monke
     assert run.call_args.args[2] == 'Short captions'
 
 
+def test_local_v2_replan_keeps_legacy_editing_instructions(setup, video, monkeypatch):
+    app, client, pipeline = setup
+    run = Mock(return_value={'fallback': True, 'plan': None, 'trace': []})
+    monkeypatch.setattr('server.editor.run', run)
+    job = upload(client, video)
+    client.post(f'/api/jobs/{job}/analyze', json={'editing_instructions': 'Short captions'})
+    wait(app, job)
+    run.assert_not_called()  # Legacy editor handles its own instruction prompt.
+    client.post(f'/api/jobs/{job}/plan', json={'mode': 'mean'})
+    assert wait(app, job)['_local_replan']
+    assert run.call_args.args[2] == 'Short captions'
+
+
 @pytest.mark.parametrize('enabled,fail', [(False, False), (True, False), (True, True)])
 def test_thumbnail_client_lifecycle_budget_and_candidates(tmp_path, monkeypatch, enabled, fail):
     job = planning_job(tmp_path)
