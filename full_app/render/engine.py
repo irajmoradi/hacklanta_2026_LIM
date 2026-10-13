@@ -10,6 +10,7 @@ from .analysis import detect_beats, motion_track, smooth_track, snap_durations
 from .captions import transcribe, write_ass
 from .graph import join_graph, music_graph, reframe_graph
 from .plan import RenderPlan
+from .contracts import RenderFailure
 
 
 def probe(path):
@@ -28,6 +29,9 @@ class Renderer:
     def encode(self, arguments, output, directory):
         from services.ffmpeg_runner import HAS_NVENC
         arguments = list(arguments)
+        # Decoder auto-threading multiplies address space for every graph input.
+        arguments = [value for arg in arguments for value in
+                     (['-threads', '2', arg] if arg == '-i' else [arg])]
         if hasattr(self, 'filter_graphs'):
             self.filter_graphs.extend(arguments[i+1] for i, a in enumerate(arguments[:-1]) if a in ('-filter_complex', '-vf'))
         if "-filter_complex" in arguments:
@@ -52,9 +56,17 @@ class Renderer:
             result = subprocess.run(command, cwd=directory, capture_output=True, text=True)
             if result.returncode == 0:
                 return output
-        raise RuntimeError(f"Render v2 FFmpeg failed: {result.stderr[-2000:]}")
+        raise RenderFailure() from RuntimeError(result.stderr[-2000:])
 
     def render(self, plan):
+        try:
+            return self._render(plan)
+        except (OSError, subprocess.SubprocessError, RuntimeError) as error:
+            if isinstance(error, RenderFailure):
+                raise
+            raise RenderFailure() from error
+
+    def _render(self, plan):
         plan = RenderPlan.model_validate(plan)
         self.filter_graphs = []
         self.executed_plan = plan
@@ -97,6 +109,11 @@ class Renderer:
                 timeline.append(duration)
             def render_segment(item):
                 index, (segment, duration) = item
+                segment_directory = directory / f'segment_{index}'
+                segment_directory.mkdir()
+                return render_segment_in(index, segment, duration, segment_directory)
+
+            def render_segment_in(index, segment, duration, directory):
                 points = []
                 if segment.sam and segment.sam.subject_track:
                     points = smooth_track(segment.sam.subject_track)
@@ -112,24 +129,65 @@ class Renderer:
                 if segment.speed != 1:
                     graph = graph.replace('[0:v]', '[retimed]')
                     graph = f'[0:v]trim=duration={duration*segment.speed},setpts=(PTS-STARTPTS)/{segment.speed}[retimed];' + graph
-                if segment.timed_effects:
+                # Text belongs on the final output clock, after all temporal FX.
+                from .placements import is_text_effect
+                timed_visual = [e for e in segment.timed_effects if not is_text_effect(e.name)]
+                timed_text = [e for e in segment.timed_effects if is_text_effect(e.name)]
+                if timed_visual:
                     from .placements import effects_graph
                     graph = graph.replace('[v]', '[placement_input]')
-                    graph += effects_graph(segment.timed_effects, plan.size, plan.fps, duration)
-                vf, _ = build_vf_chain(segment.video_effects, *plan.size, plan.fps)
+                    graph += effects_graph(timed_visual, plan.size, plan.fps, duration)
+                visual = [e for e in segment.video_effects if not is_text_effect(e)]
+                text_effects = [e for e in segment.video_effects if is_text_effect(e)]
+                vf, _ = build_vf_chain(visual, *plan.size, plan.fps)
                 if segment.fx:
                     from fx import Request, Timing, compose
+                    # Banner/word filters must observe the final clock even when
+                    # the planner lists them ahead of a freeze/impact effect.
+                    from .placements import is_text_fx
+                    ordered_fx = sorted(segment.fx, key=lambda e: is_text_fx(e['name']))
                     extra = compose([Request(e['name'], Timing(duration, e['start'], e['end'], plan.fps),
-                                             e.get('params', {})) for e in segment.fx])
+                                             e.get('params', {})) for e in ordered_fx])
                     vf = ','.join(p for p in (vf, extra) if p)
                 graph += f";[v]{vf + ',' if vf else ''}fps={plan.fps},setpts=PTS-STARTPTS[outv]"
+                if timed_text:
+                    from .placements import effects_graph
+                    graph = graph.replace('[outv]', '[text_input]')
+                    graph += effects_graph(timed_text, plan.size, plan.fps, duration).replace(
+                        '[placement_input]', '[text_input]').replace('[v]', '[outv]')
+                text_vf, _ = build_vf_chain(text_effects, *plan.size, plan.fps)
+                if text_vf:
+                    graph = graph.replace('[outv]', '[before_text]')
+                    graph += f';[before_text]{text_vf}[outv]'
                 audio_input = "0:a:0" if has_audio else "1:a:0"
                 from .placements import tempo
                 graph += f";[{audio_input}]atrim=duration={duration*segment.speed},asetpts=PTS-STARTPTS,{tempo(segment.speed)}aresample=48000,apad[outa]"
                 words = segment.words if plan.captions.enabled else []
                 texts = segment.texts if plan.captions.enabled else []
-                baked_captions = self.runner.perf and (words or segment.title or texts) and not (
-                    plan.captions.enabled and plan.captions.transcribe and not words)
+                if plan.captions.enabled and plan.captions.transcribe and not words:
+                    # Speech analysis needs audio only. Decode the retimed source
+                    # before the video encode, then burn ASS in that same pass.
+                    from .placements import tempo
+                    def build_audio(output):
+                        self.runner._run(['ffmpeg', '-v', 'error', '-y',
+                            '-ss', str(segment.source_start), '-threads', '2', '-i', str(self.source),
+                            '-vn', '-af', tempo(segment.speed).rstrip(','), '-t', str(duration),
+                            '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', str(output)], 'caption audio')
+                    if has_audio:
+                        if self.runner.perf:
+                            audio = self.runner.cache.get('caption_audio', [self.source],
+                                [segment.source_start, duration, segment.speed], '.wav', build_audio)
+                        else:
+                            audio = directory / 'speech.wav'
+                            build_audio(audio)
+                        words = transcribe(audio, plan.captions.model)
+                    if not words:
+                        import warnings
+                        warnings.warn('Word captions: no speech words available; keeping editorial text lines', RuntimeWarning)
+                    segment.words = words
+                    if words:
+                        texts = []
+                baked_captions = bool(words or segment.title or texts)
                 if baked_captions:
                     ass = directory / f'caption_{index}.ass'
                     write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title, texts=texts)
@@ -145,40 +203,29 @@ class Renderer:
                 args += ["-filter_complex", graph, "-map", "[outv]", "-map", "[outa]",
                          "-t", str(duration)]
                 self.encode(args, path, directory)
-                words = segment.words if plan.captions.enabled else []
-                if plan.captions.enabled and plan.captions.transcribe and not words:
-                    words = transcribe(path, plan.captions.model) if has_audio else []
-                    if not words:
-                        import warnings
-                        # Gameplay without commentary has no speech: keep the editorial lines whole rather than
-                        # flashing them one word at a time as if they were a transcript.
-                        warnings.warn('Word captions: no speech words available; keeping editorial text lines', RuntimeWarning)
-                    segment.words = words
-                    if words:
-                        texts = []
-                if (words or segment.title or texts) and not baked_captions:
-                    ass = directory / f"caption_{index}.ass"
-                    write_ass(ass, words, plan.size, plan.preset, plan.captions, duration, segment.title, texts=texts)
-                    captioned = directory / f"captioned_{index}.mp4"
-                    self.encode(["-i", str(path), "-vf", f"ass={ass.name}", "-t", str(duration)],
-                                captioned, directory)
-                    path = captioned
                 segment_captions[index] = [dict(start=w.start, end=min(w.end, duration), text=w.text)
                                            for w in words if w.start < duration]
                 segment_captions[index] += [dict(start=t.start, end=min(t.start+t.duration, duration), text=t.content)
                                             for t in texts if t.start < duration]
                 if segment.title:
                     segment_captions[index].append(dict(start=0, end=min(3, duration), text=segment.title))
-                if self.segment_processor:
-                    path, duration = self.segment_processor(path, index, segment, duration, directory)
+                if prepared_processors:
+                    path, duration = prepared_processors[index](path, index, segment, duration, directory)
                 return path, duration
             work = list(enumerate(zip(plan.segments, durations)))
-            if self.runner.perf and self.segment_processor is None:
+            # Stateful selectors prepare in timeline order. Their returned workers
+            # own independent state and paths, so expensive post-processing overlaps.
+            prepare = getattr(self.segment_processor, 'prepare', None)
+            prepared_processors = [prepare(i, s, d) for i, (s, d) in work] if prepare else []
+            if self.runner.perf:
                 from perf.parallel import render_all
                 from perf.encoders import best
                 results = render_all([lambda item=item: render_segment(item) for item in work], best(threads=2))
             else:
                 results = [render_segment(item) for item in work]
+            if self.segment_processor and not prepare:
+                results = [self.segment_processor(path, i, plan.segments[i], duration,
+                           directory / f'segment_{i}') for i, (path, duration) in enumerate(results)]
             cursor = sum(timeline) - overlap * len(timeline)
             for index, (path, duration) in enumerate(results):
                 self.segment_timeline.append(dict(start=cursor, duration=duration))
@@ -205,6 +252,8 @@ class Renderer:
                     joined = concatenate(paths, directory / 'joined.mp4')
                 except ValueError:
                     pass  # A segment processor may change codecs or stream layout.
+            if joined is None and len(paths) > 2:
+                joined = self.join_bounded(paths, timeline, plan, overlap, directory)
             if joined is None:
                 joined = self.encode(args, directory / "joined.mp4", directory)
             if plan.music:
@@ -230,6 +279,35 @@ class Renderer:
             output = self.workspace / "final_edit.mp4"
             joined.replace(output)
             return output
+
+    def join_bounded(self, paths, durations, plan, overlap, directory):
+        """Balanced intermediate joins: two decoders / one xfade per process.
+
+        Each level encodes the timeline once; unlike an incremental accumulator,
+        this is O(n log n) work. Original boundary indices preserve varied FX.
+        """
+        from .graph import TRANSITIONS
+        nodes = [(p, d, i) for i, (p, d) in enumerate(zip(paths, durations))]
+        level = 0
+        while len(nodes) > 1:
+            following = []
+            for index in range(0, len(nodes), 2):
+                if index + 1 == len(nodes):
+                    following.append(nodes[index])
+                    continue
+                left, right = nodes[index:index+2]
+                transition = (list(TRANSITIONS)[(right[2]-1) % len(TRANSITIONS)]
+                              if plan.transition == 'varied' else plan.transition)
+                duration = left[1] + right[1] - overlap
+                graph = join_graph([left[1], right[1]], transition, overlap, plan.fps)
+                output = directory / f'join_{level}_{index}.mp4'
+                self.encode(['-i', str(left[0]), '-i', str(right[0]),
+                             '-filter_complex', graph, '-map', '[outv]', '-map', '[outa]',
+                             '-t', str(duration)], output, directory)
+                following.append((output, duration, left[2]))
+            nodes = following
+            level += 1
+        return nodes[0][0]
 
     def card(self, card, name, plan, directory):
         duration = round(card.duration * plan.fps) / plan.fps

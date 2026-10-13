@@ -13,12 +13,16 @@ class Cache:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
+        self._keys = {}
 
     def get(self, kind, sources, options, suffix, build):
         stamps = [(str(Path(p).resolve()), Path(p).stat().st_size, Path(p).stat().st_mtime_ns) for p in sources]
         key = hashlib.sha256(json.dumps([1, kind, stamps, options], sort_keys=True).encode()).hexdigest()
         target = self.root / (key + suffix)
         with self._lock:
+            key_lock = self._keys.setdefault(key, threading.RLock())
+        # Different assets can build concurrently; identical requests coalesce.
+        with key_lock:
             if target.exists() and target.stat().st_size:
                 return target
             fd, name = tempfile.mkstemp(dir=self.root, suffix=suffix)
