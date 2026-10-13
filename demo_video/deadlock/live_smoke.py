@@ -5,6 +5,7 @@ are environment-only. Media, statuses and logs remain outside the repository.
 """
 import json
 import os
+from dataclasses import fields
 from pathlib import Path
 import shutil
 import sqlite3
@@ -57,6 +58,15 @@ def main():
     ROOT.mkdir(parents=True, exist_ok=True)
     pack = Path('reaction_packs/team')
     shutil.copytree('/srv/packs/team', pack, dirs_exist_ok=True)
+    # The shared pack may have newer optional matte metadata than this branch.
+    # Project only the runner copy to the branch's stock loader schema; preserve
+    # the supplied original media and never modify /srv/packs/team.
+    from reactions.pack import Reaction
+    manifest = pack/'pack.json'
+    data = json.loads(manifest.read_text())
+    supported = {field.name for field in fields(Reaction)}
+    data['clips'] = [{k: v for k, v in clip.items() if k in supported} for clip in data['clips']]
+    manifest.write_text(json.dumps(data, indent=2))
     os.environ['REACTION_PACK'] = str(pack.resolve())
     app = create_app(dict(WORKSPACE=str(ROOT/'jobs'), JOB_WORKERS=1,
                           STAGE_TIMEOUT_SECONDS=5400, API_RATE_LIMIT=10000))

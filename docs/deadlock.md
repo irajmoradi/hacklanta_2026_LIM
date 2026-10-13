@@ -19,6 +19,8 @@ demo_video/deadlock/.gitignore
 demo_video/deadlock/measure.py
 demo_video/deadlock/launch_live.py
 demo_video/deadlock/live_smoke.py
+demo_video/deadlock/diagnose_live.py
+demo_video/deadlock/verify_outputs.py
 docs/game_profiles.md
 docs/deadlock.md
 ```
@@ -82,13 +84,21 @@ Measurements scan the full stream at 2 fps with 960-pixel OCR frames every two
 seconds. Missing/failed Tesseract is an error in the measurement harness, while
 the application retains graceful fallback. Baseline injects the old full-frame
 reader and selects the unchanged generic keyword parser on this source.
+The recorded baseline was actually run with the pre-existing equivalent helper:
+
+```sh
+bash tools/remote_run.sh 'OMP_THREAD_LIMIT=1 PYTHONPATH=full_app python full_app/tests/measure_fix5.py /srv/demo_in/deadlock_ccby_aXZYyd4SoWM.mp4 --baseline > /srv/demo_out/deadlock/baseline.jsonl 2>&1; cat /srv/demo_out/deadlock/baseline.jsonl'
+bash tools/remote_run.sh 'OMP_THREAD_LIMIT=1 PYTHONPATH=full_app python demo_video/deadlock/measure.py /srv/demo_in/deadlock_ccby_aXZYyd4SoWM.mp4 > /srv/demo_out/deadlock/after.jsonl 2>&1; cat /srv/demo_out/deadlock/after.jsonl'
+```
 
 The explicitly authorized live smoke is `python demo_video/deadlock/launch_live.py`
 on Windows, **after syncing with the runner**. It reads GOOGLE_API_KEY at runtime
 from the user-specified `.env`, sends it over SSH stdin, and configures Vertex
 express. It never writes credentials. The single resumable job has a durable
-50-attempt cap, SDK retries disabled, one application attempt, 12 top candidate
-windows and no VLM game-detection call. Ordinary tests block provider access.
+50-attempt cap, SDK retries disabled and no VLM game-detection call. Initial runs
+used one application attempt and 12 top windows. After the provider failure
+described below, the final launcher uses up to two application attempts and
+three top windows, retaining the same ledger. Ordinary tests block provider access.
 
 The smoke uses stock `POST /api/jobs`, `/analyze` with `game=auto`, `/plan`, and
 `/render`, `ingest=true`, privacy off, local planner and the runner's team reaction pack. It
@@ -98,11 +108,25 @@ remove it. The launcher recopies it on a resumed run. It reuses the marker and
 budget ledger under `/srv/demo_out/deadlock`, never creates a fresh job to reset
 the call budget, and resumes completed analysis.
 
+The shared pack acquired optional `alpha_file`/`mask_file` fields from the parallel
+matte work. This branch's stock `Reaction` dataclass does not support them, so
+the harness projects **only the runner copy's manifest** to that dataclass's
+fields. All 80 original reaction clips validate. The supplied MP4 clips and this
+branch's existing light-background/circular overlay behavior are used; newer
+matte rendering is not claimed. `/srv/packs/team` and reaction implementation
+files are unchanged.
+
 Outputs, status snapshots, counts and timings live in `/srv/demo_out/deadlock/`.
 Local copies belong under gitignored `demo_video/deadlock/out/`. Nice landscape
 targets 45 seconds; mean vertical targets 30. Credited exports and separate
 Discord encodes are produced after the stock renderer. Discord copies must be
 less than 20,000,000 bytes and credited outputs must decode without errors.
+After the live process exits, independently check all six stock/credited/Discord
+files, target durations/aspects, reaction stages and privacy settings:
+
+```sh
+bash tools/remote_run.sh 'PYTHONPATH=full_app python demo_video/deadlock/verify_outputs.py /srv/demo_out/deadlock'
+```
 
 ## Validation record
 
@@ -127,7 +151,31 @@ timeout. It had spent 12 window-scoring calls. The harness now enables the
 existing stock ingest path (normalized media plus analysis proxy/chunks), then
 retries the same job without resetting its ledger. The uploaded original remains
 the render source. No provider or pipeline files were modified. The failure
-snapshot is preserved as `previous-error-status.json`.
+snapshot is preserved as `initial-error-status.json` (`previous-error-status.json`
+always describes the latest failed attempt).
+
+Initial failed attempt stage times: probe 0.1752 s, profiles 37.4936 s,
+signals 418.3822 s, window scoring 177.5137 s, whole-video stage 300.3522 s.
+The API returned its sanitized provider-error message; the observed ffmpeg
+process and 300.3522-second stage identify the chunk-processing timeout.
+
+The first ingest-enabled attempt also exited 1 with a sanitized provider error
+in whole-video analysis. Its stages were: probe 0.1780 s, profiles 47.2018 s,
+ingest 1,561.4511 s, signals 369.1498 s, window scoring 41.9656 s and whole-video
+383.3121 s. The ledger reached 27 calls. `ingest-error-status.json` preserves it.
+The exact underlying exception was not exposed by the stock API and is not
+claimed to be proven. A subsequent explicitly marked one-call diagnostic on the
+last prepared chunk succeeded (four in-bounds clips; three out-of-range model
+ranges dropped by the existing bounds checks), taking the ledger to 28. Its
+PowerShell invocation reported exit 1 because stderr warnings became native
+error records despite the successful diagnostic result; the launcher now merges
+SSH stderr into stdout and prints the real remote exit code explicitly.
+
+The diagnostic command was `python demo_video/deadlock/launch_live.py --diagnostic`.
+It uses the same durable ledger, saves returned clips only in the output folder,
+and prints exception types/stack locations rather than provider exception text.
+The stock retry uses cached ingest, three scored windows, and up to two attempts
+per operation within the unchanged global 50-call cap.
 
 Full-source scans both exited 0, with uninterrupted OCR:
 
