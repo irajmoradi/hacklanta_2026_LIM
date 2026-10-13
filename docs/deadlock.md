@@ -62,6 +62,16 @@ retained. The harness now preflights detection before starting paid analysis.
 The full runner suite passed: **1,458 passed, 20 skipped in 772.67 s**, exit 0,
 using the `pytest-full.log` command above. Skips are not counted as passes.
 
+The final full-suite repeat passed **1,458 passed, 20 skipped in 674.91 s**,
+exit 0, after the completed live run and harness changes:
+
+```sh
+bash tools/remote_run.sh 'set -o pipefail; cd full_app && OMP_THREAD_LIMIT=1 python -m pytest -q 2>&1 | tee /srv/demo_out/iraj_deadlock/pytest-final.log'
+```
+
+Local `python -m compileall -q demo_video/iraj_deadlock` and `git diff --check`
+also exited 0. These checks used no paid API calls.
+
 Both offline scans covered all 2,597.510033 seconds and exited 0. The initial
 generic-profile scan took 895.02 s and emitted 96 scene cuts, no HUD events.
 With corrected automatic detection, the scan took 1,011.89 s (detection itself
@@ -167,7 +177,7 @@ document, and the harness/measurement/review scripts plus editorial manifest in
 frames, runtime ledgers, logs and secrets are not committed.
 
 Branch: **ext/IRAJ-DL**. Milestones: `07d157e`, `9dbb506`, `8bdb4f0`,
-`b6183f0`, `f873f1c`; final review/verification changes follow those milestones.
+`b6183f0`, `f873f1c`; final review/verification milestone: `b1386dd`.
 No push or merge was performed. Remaining product issues are inaccurate model
 timestamps, overly dark Cinematic treatment, thumbnail text overlap/generated
 claims, and the optional-feature fallbacks listed above.
