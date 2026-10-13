@@ -197,8 +197,9 @@ chromatic aberration retains audio effects and normalized output geometry.
 
 # FX-2 stacked effects
 
-Every timed registry effect is rendered in list order, so overlapping windows
-compose rather than replace one another. Timed text gates use their placement
+Timed visual effects retain list order; text, word pops and banners follow the
+visual/temporal effects so overlapping windows compose without freezing text.
+Timed text gates use their placement
 clock even after two seconds. Zoom punch, deterministic shake, chromatic shift,
 freeze and deep fry use CPU FFmpeg filters; slow motion uses segment speed and
 `atempo`, preserving output-local placement clocks. Freeze holds the event frame
@@ -222,3 +223,62 @@ calls, and writes MP4s, sub-20-MB Discord versions, JSON plans, metadata and a
 per-clip effects table under `/srv/demo_out/fx2/`. The Discord encoder also checks
 decoded float samples and, if AAC overshoots full scale, lowers audio gain and
 remuxes the existing video until the headroom check passes.
+
+## RENDER-FIX: bounded joins and segment processing
+
+Transitions with three or more inputs use disjoint clip bodies and short boundary
+windows. Each boundary decodes just the outgoing tail and incoming head, runs one
+xfade/acrossfade, and encodes one overlap. Body and boundary jobs have bounded
+parallelism. The validated concat demuxer copies compatible chunks together with
+explicit frame-quantized durations, avoiding cumulative AAC padding drift.
+Decoder threads are capped at two per input. No transition process opens the
+whole montage on the windowed path or buffers a long incoming stream. Join chunks
+normalize pixels/range and color tags to limited-range SDR BT.709, so untagged
+cards and tagged gameplay/reaction footage produce matching H.264 headers.
+An incompatible codec signature
+falls back to balanced, two-input intermediate joins (slower but still bounded).
+`varied` transitions retain their original timeline boundary indices.
+
+Supplied captions and audio-only transcription now share the segment's video
+encode with effects and timed text, in both performance modes. Transcription
+decodes retimed source audio, excluding meme SFX, before writing ASS. Caption
+audio uses the existing perf cache; unrelated cache keys build concurrently while
+identical keys retain atomic publication. Missing speech retains editorial lines.
+Optional music and final mastering copy video; narration remains owned by the
+pipeline and is not consolidated by this change.
+
+Every segment has a separate scratch directory. A legacy `segment_processor`
+callback still runs in timeline order after concurrent base renders, preserving
+shared reaction-selector history. To parallelize its expensive work safely, use
+an object with `prepare(index, segment, duration)`. Preparation runs in order and
+returns an independent worker callable with the existing
+`(path, index, segment, duration, directory) -> (path, duration)` signature.
+Workers may run concurrently; metadata aggregation and selection state must be
+prepared beforehand or synchronized by the adapter.
+
+A prepared object may instead expose
+`compose(args, graph, *, directory, size, fps, duration, cache) -> (args, graph)`.
+It can append reaction inputs/overlay/audio filters while keeping `[outv]` and
+`[outa]` as output labels. This shares the segment encode. If it is also callable,
+the callable executes afterward for work that requires rendered pixels. It must
+use only its isolated directory or the atomic cache, preserve the clip clock,
+and allocate unique filter labels. This is an integration seam, not automatic
+conversion of existing reaction/SAM callbacks.
+
+`RenderFailure` carries `code=category='render'`. It registers a safe message in
+the existing stage-error allowlist and subclasses that transport's exception,
+so the actual worker JSON and parent reconstruction retain the render category.
+FFmpeg diagnostics are chained as the cause, not exposed as a provider message.
+Renderer input failures retain `ValueError` compatibility with the same render
+category. A future central stage-error module could own this registration.
+
+Regression command (Linux runner, generated test media only):
+
+```sh
+tools/remote_run.sh "cd full_app && OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 python -m pytest -q tests/test_render_fix.py tests/test_perf_render_fix.py tests/test_render_v2.py tests/test_perf.py"
+```
+
+Coverage includes six 1080p landscape segments plus cards under inherited 8 GiB
+address-space/4 GiB output-file limits, pixel checks for RIP/pop/banner appearance
+and disappearance during a freeze, parallel prepared workers, one-pass captions,
+cache concurrency, and a real `server.stage_worker` error round trip.

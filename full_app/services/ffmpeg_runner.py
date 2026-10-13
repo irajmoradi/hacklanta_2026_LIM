@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 from models.effects import VIDEO_EFFECTS, SOUND_EFFECTS, build_vf_chain
+from render.contracts import RenderFailure
 
 
 def _detect_nvenc() -> bool:
@@ -50,7 +51,7 @@ class FFmpegRunner:
         print(f"  [ffmpeg] {label}: {' '.join(cmd[:8])}...")
         result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
-            raise RuntimeError(f"FFmpeg failed ({label}): {result.stderr[-500:]}")
+            raise RenderFailure() from RuntimeError(f'{label}: {result.stderr[-500:]}')
         return result
 
     def extract_segment(self, index: int, start: float, end: float,

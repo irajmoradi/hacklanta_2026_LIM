@@ -3,6 +3,15 @@ import re
 from models.effects import build_vf_chain
 
 
+def is_text_effect(name):
+    from models.effects import VIDEO_EFFECTS
+    return VIDEO_EFFECTS.get(name, {}).get('category') == 'text'
+
+
+def is_text_fx(name):
+    return name == 'kill_counter' or name.startswith(('banner_', 'word_'))
+
+
 def tempo(speed):
     filters = []
     while speed > 2:

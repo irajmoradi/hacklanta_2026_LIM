@@ -1,0 +1,141 @@
+{
+  "live_calls": 0,
+  "privacy": false,
+  "memory_gib": 0,
+  "cores": 12,
+  "results": [
+    {
+      "preset": "landscape",
+      "target": 60,
+      "load_before": [
+        21.97802734375,
+        19.69384765625,
+        19.49169921875
+      ],
+      "options": {
+        "captions": true,
+        "game": "auto",
+        "max_duration": 60,
+        "mode": "nice",
+        "planner": true,
+        "privacy": false,
+        "profiles": true,
+        "reactions": true,
+        "social": true,
+        "style": "hype_montage",
+        "use_signals": true,
+        "window_scoring": true,
+        "preset": "landscape",
+        "audio_ai": true,
+        "sam": true,
+        "sam_reframe": true,
+        "music": true,
+        "beat_sync": true,
+        "transitions": true,
+        "cards": true,
+        "narration": true,
+        "full_experience": true,
+        "perf": true,
+        "fx": true
+      },
+      "status": "ok",
+      "output": {
+        "duration": 60.608,
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "video_codec": "h264",
+        "audio_codec": "aac"
+      },
+      "seconds": 237.844,
+      "load_after": [
+        14.283203125,
+        19.1650390625,
+        19.50732421875
+      ],
+      "warnings": [
+        "SAM model unavailable: spotlight skipped; subject crop uses motion/contrast fallback"
+      ],
+      "timings": {
+        "music": 0.1866,
+        "subject_track": 45.2126,
+        "reactions_0": 2.549,
+        "reactions_1": 8.2439,
+        "reactions_2": 9.5405,
+        "reactions_3": 9.6177,
+        "reactions_4": 6.2684,
+        "reactions_5": 7.5212,
+        "reactions_6": 6.6228,
+        "render_v2": 184.7562,
+        "narration": 3.36,
+        "social": 4.007,
+        "render": 237.7244
+      }
+    },
+    {
+      "preset": "vertical",
+      "target": 30,
+      "load_before": [
+        14.283203125,
+        19.1650390625,
+        19.50732421875
+      ],
+      "options": {
+        "captions": true,
+        "game": "auto",
+        "max_duration": 30,
+        "mode": "nice",
+        "planner": true,
+        "privacy": false,
+        "profiles": true,
+        "reactions": true,
+        "social": true,
+        "style": "hype_montage",
+        "use_signals": true,
+        "window_scoring": true,
+        "preset": "vertical",
+        "audio_ai": true,
+        "sam": true,
+        "sam_reframe": true,
+        "music": true,
+        "beat_sync": true,
+        "transitions": true,
+        "cards": true,
+        "narration": true,
+        "full_experience": true,
+        "perf": true,
+        "fx": true
+      },
+      "status": "ok",
+      "output": {
+        "duration": 31.018,
+        "width": 1080,
+        "height": 1920,
+        "fps": 30.0,
+        "video_codec": "h264",
+        "audio_codec": "aac"
+      },
+      "seconds": 111.306,
+      "load_after": [
+        8.32080078125,
+        15.6484375,
+        18.20458984375
+      ],
+      "warnings": [
+        "SAM model unavailable: spotlight skipped; subject crop uses motion/contrast fallback"
+      ],
+      "timings": {
+        "music": 0.0863,
+        "subject_track": 2.5501,
+        "reactions_0": 1.4546,
+        "reactions_1": 3.821,
+        "reactions_2": 5.5779,
+        "reactions_3": 4.1449,
+        "render_v2": 100.0827,
+        "narration": 1.8986,
+        "social": 6.5289,
+        "render": 111.181
+      }
+    }
+  ]
+}
