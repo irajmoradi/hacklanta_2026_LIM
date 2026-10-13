@@ -40,7 +40,7 @@ export function EditSettings({ options, change, capabilities, legacy, preset, se
       onChange={e => change('clean', e.target.checked)} />Clean reactions (exclude explicit clips)</label>
     <button type="button" disabled={!supports("full_experience")} onClick={() => {
       change("full_experience", true);
-      for (const key of ["planner_v2", "audio_ai", "captions", "reactions", "sam", "sam_reframe", "beat_sync", "transitions", "cards", "narration", "share_kit", "gemini_image", "use_signals"] as const) change(key, true);
+      for (const key of ["planner_v2", "audio_ai", "captions", "reactions", "sam", "sam_reframe", "beat_sync", "transitions", "cards", "narration", "share_kit", "gemini_image", "window_scoring", "use_signals"] as const) change(key, true);
       change("privacy_blur", false); change("music", "energetic");
     }}>Full experience</button>
     <label>Game<select value={o.game} onChange={e => change("game", e.target.value)}>
