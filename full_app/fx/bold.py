@@ -46,8 +46,14 @@ for name, color in [('hitmarker_burst', 'white'), ('hitmarker_gold', 'gold'), ('
                     ('hitmarker_cyan', 'cyan'), ('hitmarker_lime', 'lime')]:
     add(name, 'eq=brightness=.13,'+word('X', color, '.42', '.19'), 'hit', HYPE)
 for name, color in [('damage_flash', 'red'), ('damage_pulse', '0xff3300')]:
-    add(name, 'vignette=PI/3,drawbox=x=0:y=0:w=iw:h=ih:c='+color+'@0.5:t=fill,'
-        'drawbox=x=0:y=0:w=iw:h=ih:c=red:t=18', 'hit', FAIL, 'roast')
+    # Force an opaque working pixel format before drawbox: on RGBA, drawbox
+    # can otherwise change alpha that a later overlay composites a second time.
+    # Nested translucent borders approximate a red edge vignette. Centre tint
+    # is only 10%, and even two simultaneous damage layers stay below 20%.
+    edges = [f'drawbox=x=0:y=0:w=iw:h=ih:c={color}@0.10:t=fill']
+    for fraction, alpha in ((.035, .28), (.07, .16), (.11, .10)):
+        edges.append(f'drawbox=x=0:y=0:w=iw:h=ih:c={color}@{alpha}:t=min(iw\\,ih)*{fraction}')
+    add(name, 'format=yuv420p,'+','.join(edges), 'hit', FAIL, 'roast', .4)
 
 # Original speed streaks, kept at the margins so the crosshair remains readable.
 streaks = []
@@ -64,7 +70,9 @@ for label in ('SHEESH', 'NO SHOT', 'BRUH', '-1000 AURA', '+1000 AURA', 'COOKED',
         'after', FAIL if roast else HYPE, 'roast' if roast else 'hype', 1.0, True)
 for label in ('ELIMINATED', 'SKILL ISSUE', 'CLIPPED'):
     add('banner_'+label.lower().replace(' ', '_'),
-        'drawbox=x=0:y=ih*.18:w=iw:h=ih*.22:c=black@0.8:t=fill,'+word(label, 'red', '.22', '.10'),
+        'format=yuv420p,drawbox=x=0:y=ih*.18:w=iw:h=ih*.22:c=black@0.65:t=fill,'
+        "drawtext=text='"+label+"':fontfile={fontpath}:fontsize=min(w\\,h)*.085:"
+        'fontcolor=red:borderw=2:bordercolor=black:x=(w-tw)/2:y=h*.29-th/2',
         'after', FAIL, 'roast', 1.2, True)
 add('fail_arrow', word('NEXT TIME  >>>', 'yellow', '.72', '.08'), 'after', FAIL, 'roast', 1.1, True)
 add('freeze', 'null', 'after', ALL, 'both', 1.0)

@@ -209,3 +209,56 @@ geometry and duration (including multiple speed settings and minterpolate), chec
 freeze hold/resume behavior, exercise composition and both other grade presets,
 reject invalid parameters, verify pure builders and JSON metadata, test optional
 RIFE success/fallback, and render the complete contact sheet. No paid calls occur.
+
+## Style-sensitive stacks (STYLE-1)
+
+`planner/stacks_style.py` defines the restrained styles; `planner/stacks.py`
+retains event-driven bold stacks for Hype and Meme. The policy runs after core
+decoration, so both fresh plans and `restack_saved_job` remove inherited editorial
+captions, meme reactions and flashes for Clean/Cinematic. Speech transcription
+is a separate caller-controlled feature. Source selection remains owned by the
+core planner: style does not override the user's nice/mean selection.
+
+* **Hype Montage:** three or four bold build/hit/aftermath effects per clip,
+  event-confirmed hitmarkers and two to five sounds, with louder climax hits.
+* **Meme Edit:** bold stacks plus sustained grayscale/desaturation on fails,
+  three to five sound attempts, fail sounds/banners/faces on lowlights and hype
+  effects on successes. Chaos varies choices within these boundaries.
+* **Clean Edit:** one sustained subtle sharpen/grain/vignette per clip, one brief
+  neutral climax title, no reactions, and one or two quiet impact/boom sounds
+  **across the entire montage**. Two sounds require at least four clips and
+  chaos >= 0.5. No meme effects, banners, emoji or flashes.
+* **Cinematic:** sustained vignette/dark mood/grain plus cold tension/warm victory
+  grades; one brief climax title; fades; only cinematic_boom/prowler/death_note.
+  Multi-clip hooks start without SFX, later sounds increase in gain. The music
+  energy curve remains intent metadata; the current adapter does not render it.
+
+Seed determinism is preserved. Repeat caps/adjacency apply to the varied bold
+stacks; restrained atmosphere deliberately persists across cuts. A one-clip
+cinematic plan combines hook and climax and receives a climax sound. Optional
+post-stack effect refinement is outside this policy stage and should be gated
+by its owner before enabling it with restrained styles.
+
+Damage flash/pulse now use a 10% red centre tint for 0.4s and nested translucent
+edge bands. Even overlapping damage layers retain at least 55% measured centre
+contrast. Banners use a 22%-high translucent band with text contained inside it;
+landscape/portrait pixel tests enforce <=30% affected frame height. Working in
+opaque YUV before compositing prevents alpha surprises. Other FX-3 full-width
+shapes (letterbox bars, speed streaks and scanlines) are bounded or translucent;
+the complete existing per-effect FFmpeg visibility/gating suite is retained.
+
+Reproduce without provider calls from the worktree root:
+
+```bash
+bash tools/remote_run.sh 'cd full_app && python -m pytest -q tests/test_style_stacks.py tests/test_style_readability.py tests/test_planner_stacks.py tests/test_vfx_bold.py tests/test_render_stacks.py'
+bash tools/remote_run.sh 'python demo_video/style1/render_demo.py && python demo_video/style1/verify.py'
+bash demo_video/style1/fetch.sh
+```
+
+The render script blocks network connections and reuses reviewed DEMO-02
+analysis. It produces 30s mean/Meme vertical, 60s nice/Hype landscape, and 30s
+Cinematic/Clean landscape under `/srv/demo_out/style1/`; fetching copies
+deliverables into ignored `demo_video/style1/out/`. Privacy, cards, reactions,
+transcription and music are off for this isolated style comparison. Discord
+copies must be below 20 MB; verification decodes every file, checks durations
+and audio peaks, and extracts hit/aftermath contact sheets.
