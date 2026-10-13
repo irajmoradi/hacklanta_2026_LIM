@@ -74,11 +74,17 @@ def test_effects_speed_peak_trims_and_styles(style):
         assert c.speed == 0.5 and "slow_motion" in names
     else:
         assert c.speed == 1 and "slow_motion" not in names
-    # FX-2 replaces fixed style effects with rich, seeded stacks in every style.
-    assert 1 <= len(names) <= 4
-    assert 2 <= len([s for s in plan.sfx if s.clip_id == c.id]) <= 5
+    # Cinematic layers sustained grades (vignette, grain, tints) on top of slow-motion.
+    assert 1 <= len(names) <= (5 if style == "cinematic" else 4)
+    if style == "clean edit":
+        # STYLE-1: Clean Edit keeps 1-2 tasteful SFX for the whole montage and no reactions.
+        assert 1 <= len(plan.sfx) <= 2
+        assert not plan.reactions
+    else:
+        assert 2 <= len([s for s in plan.sfx if s.clip_id == c.id]) <= 5
     assert all(r.position == "bottom_right" for r in plan.reactions)
-    assert plan.reactions[-1].start == pytest.approx(c.peak)
+    if plan.reactions:
+        assert plan.reactions[-1].start == pytest.approx(c.peak)
     assert all(e.name in VIDEO_EFFECTS for e in plan.effects)
     assert all(s.name in SOUND_EFFECTS for s in plan.sfx)
     assert plan.music.energy_curve[-2].energy == 1

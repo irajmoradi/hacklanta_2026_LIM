@@ -64,4 +64,5 @@ def test_native_planner_to_real_pipeline(tmp_path, monkeypatch, style):
     assert meta['audio_codec'] == 'aac'
     assert job['edit_plan'] == plan
     assert 'reactions_0' not in job['timings']
-    assert 'reactions_1' in job['timings']
+    # STYLE-1: Clean Edit and Cinematic plans carry no reactions.
+    assert ('reactions_1' in job['timings']) == (style not in ('clean edit', 'cinematic'))
