@@ -46,6 +46,12 @@ def main():
                 '-maxrate',str(bitrate),'-bufsize',str(bitrate*2),'-threads','2',
                 '-c:a','aac','-b:a','128k','-movflags','+faststart',str(discord)],check=True)
         assert discord.stat().st_size < 20_000_000
+        # Decode every delivered frame/audio packet, not just review samples.
+        for media in (master, discord):
+            subprocess.run(['ffmpeg','-v','error','-xerror','-threads','2','-i',str(media),
+                            '-f','null','-'], check=True, capture_output=True)
+        audio_streams = [s for s in info['streams'] if s['codec_type'] == 'audio']
+        assert audio_streams, 'Master must contain audio'
         plan, evidence = job['render_plan'], job['render_evidence']
         points = [(min(1,duration/2), 'intro')]
         for i, (segment, timing) in enumerate(zip(plan['segments'], evidence['timeline'])):
@@ -79,6 +85,7 @@ def main():
             ai_thumbnails=sum(c['provider']=='gemini' for c in candidates),
             warnings=job.get('warnings', []), event_samples=len(points),
             master_bytes=master.stat().st_size, discord_bytes=discord.stat().st_size,
+            decode_verified=True, audio_codec=audio_streams[0]['codec_name'],
             source_attribution=(ROOT/'ATTRIBUTION.txt').read_text() if directory.name.startswith('deadlock') else None)
         (directory/'verification.json').write_text(json.dumps(facts, indent=2))
         summary.append(f"| {directory.name} | {duration:.3f} / {cap} | {master.stat().st_size/1e6:.1f} / {discord.stat().st_size/1e6:.1f} | {', '.join(speakers)} | {len(evidence['sam'])} | {facts['ai_cards']}/2 | {facts['ai_thumbnails']}/{len(candidates)} |")

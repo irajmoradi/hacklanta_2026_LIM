@@ -17,6 +17,14 @@ if __name__ == '__main__':
     record = dict(sam_degraded=masks.degraded, sam_seconds=time.monotonic()-started,
                   samples=len(masks.times))
     WhisperModel('tiny', device='cpu', compute_type='int8')
+    # Decode too: merely loading weights misses PyAV API incompatibilities.
+    import subprocess
+    audio = Path('/srv/demo_out/final2/runtime.wav')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'lavfi', '-i',
+                    'sine=frequency=440:duration=1', str(audio)], check=True)
+    from render.captions import transcribe
+    transcribe(audio, 'tiny')
+    audio.unlink()
     record['whisper_cached'] = True
     Path('/srv/demo_out/final2/runtime.json').write_text(json.dumps(record, indent=2))
     print(record, flush=True)

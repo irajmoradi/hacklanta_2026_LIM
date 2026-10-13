@@ -2,6 +2,9 @@
 
 Branch: `ext/FINAL-2`. No push or merge.
 
+The earlier offline FINAL-1 replay remains documented in
+`demo_video/final/REPORT.md` and its `render_saved.py` / `verify.py` scripts.
+
 ## Implementation
 
 `60cb857` removes the full-frame red fill from both damage effects. Only three
@@ -29,7 +32,8 @@ over SSH stdin, never saving it. Vertex express is selected with
 `GOOGLE_GENAI_USE_VERTEXAI=true`.
 
 1. `bash tools/remote_run.sh "python demo_video/final2/prepare.py"`
-2. Install optional CPU Torch/SAM2 and faster-whisper in the runner venv, then run
+2. Install optional CPU Torch/SAM2 and faster-whisper in the runner venv, pinning
+   `av==18.0.0` for faster-whisper 1.2.1, then run
    `demo_video/final2/check_runtime.py` there.
 3. `python demo_video/final2/launch.py`
 4. On runner 1: `.venv/bin/python demo_video/final2/collect.py` from the worktree.
@@ -61,6 +65,12 @@ captions, reactions, cards, music/beat sync and share kits are enabled.
 - Runtime preflight: SAM degraded=false, two real model samples in 13.14 seconds;
   Whisper tiny cached; exit 0. This makes zero Gemini calls.
 - Full suite and final media audit: results will be recorded below when complete.
+
+The initial full-suite run exposed an optional-dependency incompatibility:
+faster-whisper 1.2.1 passes `metadata_errors` to PyAV; PyAV 19 removed that
+argument ([upstream changelog](https://pyav.basswood.io/docs/stable/development/changelog.html)).
+The runner venv uses PyAV 18.0.0; default application requirements are unchanged.
+Preflight now tests audio decoding as well as model loading.
 
 ## Artifacts and attribution
 
