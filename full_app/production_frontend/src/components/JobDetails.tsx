@@ -25,6 +25,7 @@ export function JobDetails({api, job, disabled, maxDuration, onImport, onRefresh
   async function apply() {
     setSaving(true); setError('');
     try {
+      if (!Number.isFinite(maxDuration) || maxDuration < 10 || maxDuration > 600) throw new Error('Max duration must be between 10 and 600 seconds.');
       const next = await api.importPlan(job.id, JSON.parse(draft), maxDuration);
       onImport(next); setModified(false);
     } catch (e) { setError((e as Error).message); }

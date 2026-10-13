@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import App from './App';
-import { EditorApi, normalizeJob, type Options } from './api';
+import { EditorApi, clipsFromPlan, normalizeJob, type Options } from './api';
 import { JobDetails } from './components/JobDetails';
 import { demoCapabilities } from './features';
 
@@ -82,4 +82,41 @@ it('validates import over PUT and does not turn duration or instruction edits in
   await api.get('job');
   await api.render('job', 'landscape', {...options, max_duration: 30, editing_instructions: 'Quiet'}, [], plan);
   expect(JSON.parse(fetcher.mock.lastCall![1].body)).not.toHaveProperty('edit_plan');
+});
+
+it('keeps distinct teaser/climax identities and preserves segment settings after a reorder', async () => {
+  const plan = {render_version: 2, segments: [
+    {source_start: 0, source_end: 2, speed: 1, title: 'Teaser'},
+    {source_start: 0, source_end: 5, speed: .5, title: 'Climax'},
+  ]};
+  const original = {id: 'source', start: 0, end: 5, caption: 'Save', score: 90, reaction: 'clutch', keep: true};
+  const clips = clipsFromPlan(plan, [original]);
+  expect(new Set(clips.map(c => c.id)).size).toBe(2);
+  const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({})});
+  vi.stubGlobal('fetch', fetcher);
+  await new EditorApi('jobs').render('job', 'landscape', options, clips.reverse(), plan, true);
+  expect(JSON.parse(fetcher.mock.lastCall![1].body).edit_plan.segments.map((s: {speed: number}) => s.speed)).toEqual([.5, 1]);
+});
+
+it('keeps imported clip ranges after a subsequent status snapshot', async () => {
+  let snapshot!: (job: ReturnType<typeof normalizeJob>) => void;
+  const original = normalizeJob({id: 'job', status: 'planned', meta: {duration: 20},
+    clips: [{id: 'source', start_seconds: 0, end_seconds: 10, caption: 'Original'}]});
+  const imported = {...original, plan: {render_version: 2, segments: [{source_start: 3, source_end: 5, title: 'Imported'}]}};
+  vi.spyOn(EditorApi.prototype, 'discover').mockResolvedValue(demoCapabilities);
+  vi.spyOn(EditorApi.prototype, 'create').mockResolvedValue(original);
+  vi.spyOn(EditorApi.prototype, 'watch').mockImplementation((_id, update) => {snapshot = update; return () => {};});
+  vi.spyOn(EditorApi.prototype, 'importPlan').mockResolvedValue(imported);
+  URL.createObjectURL = vi.fn().mockReturnValue('blob:test'); URL.revokeObjectURL = vi.fn();
+  const {unmount} = render(<App />);
+  await userEvent.upload(screen.getByLabelText('Upload gameplay'), new File(['fixture'], 'test.mp4', {type: 'video/mp4'}));
+  await userEvent.click(screen.getByText('Raw plan JSON'));
+  fireEvent.change(screen.getByLabelText('Plan JSON'), {target: {value: JSON.stringify(imported.plan)}});
+  await userEvent.click(screen.getByRole('button', {name: 'Validate & apply JSON'}));
+  expect(screen.getByLabelText('Caption 1')).toHaveValue('Imported');
+  const {act} = await import('@testing-library/react');
+  act(() => snapshot(original));
+  expect(screen.getByLabelText('Caption 1')).toHaveValue('Imported');
+  expect(screen.getByLabelText('Trim start 1')).toHaveValue('3');
+  unmount(); vi.restoreAllMocks();
 });

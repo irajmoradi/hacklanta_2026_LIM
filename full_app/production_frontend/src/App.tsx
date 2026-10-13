@@ -99,7 +99,7 @@ export default function App() {
       (next) => {
         setJob(next);
         if (next.plan && !directorPlan.current) lastPlan.current = next.plan;
-        if (!dirtyRef.current) setClips(next.clips);
+        if (!dirtyRef.current) setClips(directorPlan.current ? clipsFromPlan(directorPlan.current, next.clips) : next.clips);
       },
       setConnection,
       setError,
@@ -169,7 +169,7 @@ export default function App() {
     const next = await api.get(job!.id);
     setJob(next);
     if (next.plan && !directorPlan.current) lastPlan.current = next.plan;
-    if (!dirtyRef.current) setClips(next.clips);
+    if (!dirtyRef.current) setClips(directorPlan.current ? clipsFromPlan(directorPlan.current, next.clips) : next.clips);
   };
   const edit = (next: ReviewClip[]) => {
     dirtyRef.current = true;
@@ -180,7 +180,7 @@ export default function App() {
   const save = async () => {
     if (directorPlan.current) {
       const plan = {...directorPlan.current, segments: clips.flatMap((clip, index) => clip.keep ? [{
-        ...directorPlan.current!.segments[index], source_start: clip.start, source_end: clip.end, title: clip.caption,
+        ...directorPlan.current!.segments[clip.planIndex ?? index], source_start: clip.start, source_end: clip.end, title: clip.caption,
       }] : [])};
       const next = await api.importPlan(job!.id, plan, options.max_duration ?? (preset === 'landscape' ? 60 : 30));
       directorPlan.current = next.plan; lastPlan.current = next.plan; setJob(next);
@@ -280,7 +280,7 @@ export default function App() {
                 teamMode={options.team_mode ?? "best"} setTeamMode={v => option("team_mode", v)} />
               {filename && <p className="source-name" role="status">Source: {filename}</p>}
               {job && <dl className="metadata-grid" aria-label="Source metadata">
-                {Object.entries({Filename: filename, Size: sourceSize === undefined ? "Unavailable" : `${(sourceSize / 1024 ** 2).toFixed(2)} MB`,
+                {Object.entries({Filename: job.source_filename ?? filename, Size: (job.source_size ?? sourceSize) === undefined ? "Unavailable" : `${((job.source_size ?? sourceSize!) / 1024 ** 2).toFixed(2)} MB`,
                   Duration: `${job.duration.toFixed(2)} s`, Resolution: job.meta?.width ? `${job.meta.width} × ${job.meta.height}` : "Unavailable",
                   FPS: job.meta?.fps ?? "Unavailable", "Video codec": job.meta?.video_codec ?? "Unavailable", "Audio codec": job.meta?.audio_codec ?? "Unavailable"})
                   .map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{String(value)}</dd></div>)}

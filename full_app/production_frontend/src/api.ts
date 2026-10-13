@@ -17,6 +17,7 @@ export interface Options extends Partial<ExtensionOptions> {
   sam: boolean;
 }
 export interface ReviewClip {
+  planIndex?: number;
   id: string;
   start: number;
   end: number;
@@ -28,6 +29,8 @@ export interface ReviewClip {
   why?: string[];
 }
 export interface Job {
+  source_filename?: string;
+  source_size?: number;
   meta?: Record<string, unknown>;
   notes?: string[];
   seed?: number;
@@ -60,10 +63,14 @@ export class ApiError extends Error {
   constructor(message: string, public code?: string, public status?: number) { super(message); }
 }
 export function clipsFromPlan(plan: legacy.EditPlan, previous: ReviewClip[]): ReviewClip[] {
+  const used = new Set<string>();
   return plan.segments.map((s, i) => {
     const original = previous.find(c => c.id === String(s.clip_id ?? s.id))
       ?? previous.find(c => c.start < s.source_end && c.end > s.source_start);
-    return { ...original, id: String(s.clip_id ?? s.id ?? original?.id ?? `segment-${i}`),
+    let id = String(s.clip_id ?? s.id ?? original?.id ?? `segment-${i}`);
+    while (used.has(id)) id += `-${i}`;
+    used.add(id);
+    return { ...original, id, planIndex: i,
       start: s.source_start, end: s.source_end, caption: String(s.title ?? original?.caption ?? 'Edited moment'),
       score: original?.score ?? 0, reaction: original?.reaction ?? 'None', keep: true };
   });
@@ -114,6 +121,8 @@ export function normalizeJob(value: unknown): Job {
   const j = raw.job ? object(raw.job) : raw;
   return {
     meta: object(j.meta),
+    source_filename: text(j.source_filename),
+    source_size: typeof j.source_size === 'number' ? j.source_size : undefined,
     notes: list(object(j.planner_plan).notes).filter((v): v is string => typeof v === "string"),
     id: String(j.id ?? j.job_id),
     seed: typeof j.seed === 'number' ? j.seed : undefined,
@@ -423,7 +432,7 @@ export class EditorApi {
               segments: reviewed
                 .filter((c) => c.keep)
                 .map((c, index) => {
-                  const original = (authoritative ? plan?.segments[index] : undefined) ?? plan?.segments.find(
+                  const original = (authoritative ? plan?.segments[c.planIndex ?? index] : undefined) ?? plan?.segments.find(
                     (s) => s.source_start < c.end && s.source_end > c.start,
                   );
                   return {
