@@ -77,7 +77,11 @@ def main():
             started = time.monotonic()
             try:
                 Pipeline().render(job, None)
-                record.update(status='ok', output=probe_video(job['output']))
+                graphs = job.get('render_evidence', {}).get('filter_graphs', [])
+                joins = [g for g in graphs if 'xfade=' in g]
+                record.update(status='ok', output=probe_video(job['output']),
+                              transition_graphs=len(joins),
+                              transition_filters=sum(g.count('xfade=') for g in joins))
             except Exception as error:
                 record.update(status='failed', error=str(error), cause=str(error.__cause__))
             record.update(seconds=round(time.monotonic()-started, 3),

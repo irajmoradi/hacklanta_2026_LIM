@@ -232,7 +232,10 @@ xfade/acrossfade, and encodes one overlap. Body and boundary jobs have bounded
 parallelism. The validated concat demuxer copies compatible chunks together with
 explicit frame-quantized durations, avoiding cumulative AAC padding drift.
 Decoder threads are capped at two per input. No transition process opens the
-whole montage or buffers a long incoming stream. An incompatible codec signature
+whole montage on the windowed path or buffers a long incoming stream. Join chunks
+normalize pixels/range and color tags to limited-range SDR BT.709, so untagged
+cards and tagged gameplay/reaction footage produce matching H.264 headers.
+An incompatible codec signature
 falls back to balanced, two-input intermediate joins (slower but still bounded).
 `varied` transitions retain their original timeline boundary indices.
 

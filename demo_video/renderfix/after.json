@@ -1,0 +1,167 @@
+{
+  "live_calls": 0,
+  "privacy": false,
+  "memory_gib": 0,
+  "cores": 12,
+  "results": [
+    {
+      "preset": "landscape",
+      "target": 60,
+      "load_before": [
+        2.34033203125,
+        2.80908203125,
+        4.44580078125
+      ],
+      "options": {
+        "captions": true,
+        "game": "auto",
+        "max_duration": 60,
+        "mode": "nice",
+        "planner": true,
+        "privacy": false,
+        "profiles": true,
+        "reactions": true,
+        "social": true,
+        "style": "hype_montage",
+        "use_signals": true,
+        "window_scoring": true,
+        "preset": "landscape",
+        "audio_ai": true,
+        "sam": true,
+        "sam_reframe": true,
+        "music": true,
+        "beat_sync": true,
+        "transitions": true,
+        "cards": true,
+        "narration": true,
+        "full_experience": true,
+        "perf": true,
+        "fx": true
+      },
+      "idle_cpu_samples": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "plan_sha256": "ac5499050fb3bb8387c2907ac9057e137d86f680894d1ad60c3bab72b498181f",
+      "source_size": 1343686326,
+      "source_mtime_ns": 1791838126687753463,
+      "status": "ok",
+      "output": {
+        "duration": 60.621029,
+        "width": 1920,
+        "height": 1080,
+        "fps": 30.0,
+        "video_codec": "h264",
+        "audio_codec": "aac"
+      },
+      "transition_graphs": 8,
+      "transition_filters": 8,
+      "seconds": 89.322,
+      "load_after": [
+        5.09814453125,
+        3.76611328125,
+        4.64208984375
+      ],
+      "warnings": [
+        "SAM model unavailable: spotlight skipped; subject crop uses motion/contrast fallback"
+      ],
+      "timings": {
+        "music": 0.2123,
+        "subject_track": 12.6327,
+        "reactions_0": 1.552,
+        "reactions_1": 2.9347,
+        "reactions_2": 3.6809,
+        "reactions_3": 3.6095,
+        "reactions_4": 3.2284,
+        "reactions_5": 3.5323,
+        "reactions_6": 3.3214,
+        "render_v2": 68.9443,
+        "narration": 3.3885,
+        "social": 3.8584,
+        "render": 89.2118
+      }
+    },
+    {
+      "preset": "vertical",
+      "target": 30,
+      "load_before": [
+        4.689453125,
+        3.703125,
+        4.61669921875
+      ],
+      "options": {
+        "captions": true,
+        "game": "auto",
+        "max_duration": 30,
+        "mode": "nice",
+        "planner": true,
+        "privacy": false,
+        "profiles": true,
+        "reactions": true,
+        "social": true,
+        "style": "hype_montage",
+        "use_signals": true,
+        "window_scoring": true,
+        "preset": "vertical",
+        "audio_ai": true,
+        "sam": true,
+        "sam_reframe": true,
+        "music": true,
+        "beat_sync": true,
+        "transitions": true,
+        "cards": true,
+        "narration": true,
+        "full_experience": true,
+        "perf": true,
+        "fx": true
+      },
+      "idle_cpu_samples": [
+        0.0,
+        0.0,
+        0.0,
+        0.08,
+        0.0
+      ],
+      "plan_sha256": "ac4f04effaff222336159aa6dc76547af78ed9c2d26ba9c77999febf20d6db73",
+      "source_size": 1343686326,
+      "source_mtime_ns": 1791838126687753463,
+      "status": "ok",
+      "output": {
+        "duration": 31.021029,
+        "width": 1080,
+        "height": 1920,
+        "fps": 30.0,
+        "video_codec": "h264",
+        "audio_codec": "aac"
+      },
+      "transition_graphs": 5,
+      "transition_filters": 5,
+      "seconds": 73.705,
+      "load_after": [
+        4.36669921875,
+        3.81103515625,
+        4.58642578125
+      ],
+      "warnings": [
+        "SAM model unavailable: spotlight skipped; subject crop uses motion/contrast fallback"
+      ],
+      "timings": {
+        "music": 0.0865,
+        "subject_track": 1.9145,
+        "reactions_0": 1.2618,
+        "reactions_1": 2.9132,
+        "reactions_2": 3.4073,
+        "reactions_3": 3.4495,
+        "render_v2": 63.2242,
+        "narration": 1.9693,
+        "social": 6.3378,
+        "render": 73.5871
+      }
+    }
+  ],
+  "baseline_engine": null,
+  "pack_sha256": "8bfaeaf85876cfffac994b3bd60cbcc485b32259274982cda6180be0a573be85"
+}
