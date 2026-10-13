@@ -5,6 +5,28 @@ import random
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from contextvars import ContextVar
+
+# The extension hook runs before the legacy renderer constructs its selector.
+# Bind to its disposable render directory so failed/disabled renders cannot
+# affect a later standalone selector. ContextVars isolate concurrent jobs.
+_render_speakers = ContextVar('reaction_render_speakers', default=None)
+
+
+def configure_render_speakers(speakers, scratch):
+    _render_speakers.set((tuple(speakers), Path(scratch)))
+
+
+def available_speakers():
+    """Names from the configured, validated pack; never expose asset paths."""
+    import os
+    folder = os.getenv('REACTION_PACK')
+    if not folder:
+        return []
+    try:
+        return sorted({r.speaker for r in load_pack(folder)})
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
 
 LABELS = frozenset('sick_kill clutch bruh fail funny wholesome hype roast'.split())
 
@@ -66,8 +88,14 @@ def load_pack(folder: str | Path) -> list[Reaction]:
 
 class ReactionSelector:
     """Create one per montage/job; selection history is not shared between users."""
-    def __init__(self, reactions: Iterable[Reaction], seed: int | None = None, cover_speakers: bool = False, clean: bool = False) -> None:
-        self.reactions = list(reactions)
+    def __init__(self, reactions: Iterable[Reaction], seed: int | None = None, cover_speakers: bool = False, clean: bool = False,
+                 reaction_speakers: Iterable[str] | None = None) -> None:
+        pending = _render_speakers.get()
+        _render_speakers.set(None)
+        if reaction_speakers is None and pending and pending[1].is_dir():
+            reaction_speakers = pending[0]
+        selected = set(reaction_speakers or ())
+        self.reactions = [r for r in reactions if not selected or r.speaker in selected]
         self.rng = random.Random(seed)
         self.last_id = self.last_speaker = None
         self.counts: dict[str, int] = {}

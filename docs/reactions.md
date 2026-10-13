@@ -74,6 +74,20 @@ The pipeline enables speaker coverage: use unseen eligible speakers first, then
 balance speaker counts before matching labels. Short montages may have fewer
 slots than speakers. Repeated event labels vary across eligible labels.
 
+HTTP analyze/plan/render accepts `reaction_speakers: ["Iraj"]`. Omitted or empty
+lists allow everyone; exact pack names are validated, duplicates removed, and
+unknown names rejected. `/api/info` exposes available names under
+`frontend_capabilities.reaction_speakers` for Edit settings' multi-select.
+The filter applies before all label, clean-policy and speaker-coverage choices;
+fallback never escapes it. A singleton eligible take is skipped rather than
+repeated consecutively. Direct selectors accept `reaction_speakers=` too.
+
+The extension pre-render hook binds the names to the disposable render directory
+using a ContextVar, consumed when the existing renderer creates its selector.
+This keeps concurrent jobs isolated without changing the renderer interface.
+Failed/disabled renders expire when their scratch directory is removed; every
+new render replaces the binding, including an empty selection.
+
 Pack entries accept `explicit: true` and `style: "genalpha"`. Mean mode allows
 explicit clips; nice mode prefers available non-explicit clips. Both modes allow
 genalpha. HTTP `clean: true` excludes explicit clips entirely, including fallback

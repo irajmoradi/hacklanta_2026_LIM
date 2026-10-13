@@ -1,0 +1,179 @@
+{
+  "hype": {
+    "duration": 58.854362,
+    "width": 1920,
+    "height": 1080,
+    "master_bytes": 102705336,
+    "discord_bytes": 16744460,
+    "master_sha256": "f77ff9cd142708df052a2dcaa5905762e0873a84347d51d842baf1f297c52ec5",
+    "streams": {
+      "master": [
+        {
+          "type": "video",
+          "codec": "h264"
+        },
+        {
+          "type": "audio",
+          "codec": "aac"
+        }
+      ],
+      "discord": [
+        {
+          "type": "video",
+          "codec": "h264"
+        },
+        {
+          "type": "audio",
+          "codec": "aac"
+        }
+      ]
+    },
+    "reaction_count": 7,
+    "reaction_ids": [
+      "iraj-wholesome-v2-okay_that_was_actually_g",
+      "iraj-hype-v2-let_him_cook",
+      "iraj-wholesome",
+      "iraj-hype",
+      "iraj-clutch-v2-one_versus_three_sigma_b",
+      "iraj-hype-v2-let_him_cook",
+      "iraj-wholesome-v2-okay_that_was_actually_g"
+    ],
+    "speakers": [
+      "Iraj"
+    ],
+    "narration": false,
+    "new_gemini_calls": 0,
+    "decoded": true,
+    "cinematic_luma": [],
+    "warnings": [
+      "SAM model unavailable: spotlight skipped; subject crop uses motion/contrast fallback"
+    ]
+  },
+  "meme": {
+    "duration": 28.987696,
+    "width": 1080,
+    "height": 1920,
+    "master_bytes": 34251331,
+    "discord_bytes": 8230030,
+    "master_sha256": "afd6797bd9d651e922884f2136a966bbb7ca92124a16e8d5f68e8afe3c93f4b2",
+    "streams": {
+      "master": [
+        {
+          "type": "video",
+          "codec": "h264"
+        },
+        {
+          "type": "audio",
+          "codec": "aac"
+        }
+      ],
+      "discord": [
+        {
+          "type": "video",
+          "codec": "h264"
+        },
+        {
+          "type": "audio",
+          "codec": "aac"
+        }
+      ]
+    },
+    "reaction_count": 4,
+    "reaction_ids": [
+      "iraj-roast-v2-that_aim_is_from_ohio",
+      "iraj-bruh-v2-bro_what_was_that",
+      "iraj-fail",
+      "iraj-roast-v2-fanum_tax_on_your_kills_"
+    ],
+    "speakers": [
+      "Iraj"
+    ],
+    "narration": false,
+    "new_gemini_calls": 0,
+    "decoded": true,
+    "cinematic_luma": [],
+    "warnings": [
+      "SAM model unavailable: spotlight skipped; subject crop uses motion/contrast fallback"
+    ]
+  },
+  "cinematic": {
+    "duration": 43.654362,
+    "width": 1920,
+    "height": 1080,
+    "master_bytes": 56171162,
+    "discord_bytes": 12340583,
+    "master_sha256": "15559e963d07a5dca55b09e352a1100fbfd2be4e2f697bf43c2ece57faffd99a",
+    "streams": {
+      "master": [
+        {
+          "type": "video",
+          "codec": "h264"
+        },
+        {
+          "type": "audio",
+          "codec": "aac"
+        }
+      ],
+      "discord": [
+        {
+          "type": "video",
+          "codec": "h264"
+        },
+        {
+          "type": "audio",
+          "codec": "aac"
+        }
+      ]
+    },
+    "reaction_count": 6,
+    "reaction_ids": [
+      "iraj-wholesome-v2-okay_that_was_actually_g",
+      "iraj-hype-v2-let_him_cook",
+      "iraj-wholesome",
+      "iraj-hype",
+      "iraj-clutch-v2-one_versus_three_sigma_b",
+      "iraj-wholesome-v2-okay_that_was_actually_g"
+    ],
+    "speakers": [
+      "Iraj"
+    ],
+    "narration": false,
+    "new_gemini_calls": 0,
+    "decoded": true,
+    "cinematic_luma": [
+      {
+        "time": 4.233333333333333,
+        "before": 66.89,
+        "after": 124.98
+      },
+      {
+        "time": 6.733333333333333,
+        "before": 19.57,
+        "after": 67.92
+      },
+      {
+        "time": 12.333333333333334,
+        "before": 33.66,
+        "after": 82.03
+      },
+      {
+        "time": 20.516666666666666,
+        "before": 38.37,
+        "after": 88.87
+      },
+      {
+        "time": 29.033333333333335,
+        "before": 26.82,
+        "after": 61.29
+      },
+      {
+        "time": 36.733333333333334,
+        "before": 65.77,
+        "after": 122.06
+      }
+    ],
+    "warnings": [
+      "SAM model unavailable: spotlight skipped; subject crop uses motion/contrast fallback"
+    ]
+  }
+}

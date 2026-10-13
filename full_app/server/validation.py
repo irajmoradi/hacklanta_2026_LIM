@@ -145,7 +145,7 @@ def options_valid(data, styles):
     allowed = {'mode' , 'style', 'provider', 'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam',
                'prompt', 'editing_instructions', 'splits', 'max_duration', 'preset', 'generate_thumbnails', 'edit_plan',
                'attitude', 'edit_style', 'job_id', 'api_key', 'game', 'privacy_options',
-               'chat', 'team_mode', 'narration_persona', 'music_mood', 'chaos', 'seed', 'reaction_size', 'clean'} | EXTENSION_FLAGS
+               'chat', 'team_mode', 'narration_persona', 'music_mood', 'chaos', 'seed', 'reaction_size', 'reaction_speakers', 'clean'} | EXTENSION_FLAGS
     if set(data) - allowed:
         raise ValueError('unknown options: ' + ', '.join(sorted(set(data) - allowed)))
     result = {k: v for k, v in data.items() if k not in ('api_key', 'job_id', 'attitude', 'edit_style', 'edit_plan')}
@@ -165,6 +165,15 @@ def options_valid(data, styles):
         raise ValueError('seed must be an integer from 0 to 4294967295')
     if result.get('reaction_size', 'large') not in ('small', 'medium', 'large'):
         raise ValueError('reaction_size must be small, medium or large')
+    if 'reaction_speakers' in result:
+        speakers = result['reaction_speakers']
+        if (not isinstance(speakers, list) or len(speakers) > 100 or
+                any(not isinstance(s, str) or not s.strip() or len(s) > 100 for s in speakers)):
+            raise ValueError('reaction_speakers must be a list of at most 100 nonempty speaker names')
+        from reactions.pack import available_speakers
+        if set(speakers) - set(available_speakers()):
+            raise ValueError('unknown reaction_speakers for the configured pack')
+        result['reaction_speakers'] = list(dict.fromkeys(speakers))
     for name in EXTENSION_FLAGS | {'clean', 'use_signals', 'window_scoring', 'sam_reframe', 'captions', 'reactions', 'sam', 'generate_thumbnails'}:
         if name in result and not isinstance(result[name], bool):
             raise ValueError(f'{name} must be boolean')

@@ -217,6 +217,7 @@ export class EditorApi {
     const info = await request("/api/info");
     const c = object(info.frontend_capabilities);
     return (this.capabilities = {
+      reaction_speakers: Array.isArray(c.reaction_speakers) ? c.reaction_speakers.filter((s: unknown) => typeof s === 'string') : [],
       options: [...baseCapabilities.options, ...(Array.isArray(c.options) ? c.options.filter((s: unknown) => typeof s === "string") : [])],
       team_upload: c.team_upload === true, url_import: c.url_import === true,
       music_upload: c.music_upload === true, chat_upload: c.chat_upload === true,

@@ -7,12 +7,13 @@ def frontend_capabilities():
                ('profiles', 'audio_ai', 'planner', 'vjepa', 'social', 'ingest', 'fx',
                 'narration', 'privacy', 'multipov', 'music', 'perf', 'sam', 'reactions', 'signals')}
     controls = {'profiles': ['game', 'profiles'], 'planner': ['planner_v2', 'planner', 'chaos', 'seed', 'plan_refinement'],
-                'reactions': ['reactions', 'reaction_size', 'clean'],
+                'reactions': ['reactions', 'reaction_size', 'reaction_speakers', 'clean'],
                 'privacy': ['privacy_blur', 'privacy'], 'social': ['share_kit', 'social', 'gemini_image'],
                 'sam': ['sam', 'sam_reframe'], 'multipov': ['multipov', 'team_mode']}
     options = ['window_scoring', 'captions', 'full_experience', 'beat_sync', 'transitions', 'cards', 'narration_persona', 'music_mood']
     for module, available in modules.items():
         if available:
             options.extend(controls.get(module, [module]))
-    return dict(options=options, modules=modules, team_upload=modules['multipov'],
+    from reactions.pack import available_speakers
+    return dict(options=options, modules=modules, reaction_speakers=available_speakers(), team_upload=modules['multipov'],
                 url_import=False, music_upload=False, chat_upload=False)

@@ -130,9 +130,33 @@ it("applies full experience while keeping privacy off and editable", async () =>
   expect(screen.getByRole("checkbox", {name: /^Intro and outro/})).toBeChecked();
   expect(screen.getByRole("checkbox", {name: /^Varied transitions/})).toBeChecked();
   expect(screen.getByLabelText("Music bed")).toHaveValue("energetic");
+  const narration = screen.getByRole('checkbox', {name: /^AI narration/});
+  expect(narration).not.toBeChecked();
+  expect(screen.getByLabelText('Narration persona')).toBeDisabled();
+  await user.click(narration);
+  expect(screen.getByLabelText('Narration persona')).toBeEnabled();
   expect(privacy).not.toBeChecked();
   await user.click(privacy);
   expect(privacy).toBeChecked();
+});
+
+it('discovers and sends speaker selections and lets the owner clear them', async () => {
+  const fetcher = vi.fn().mockResolvedValue({ok: true, json: async () => ({
+    frontend_capabilities: {options: ['reaction_speakers'], reaction_speakers: ['Iraj', 'Alex']},
+  })});
+  vi.stubGlobal('fetch', fetcher);
+  const api = new EditorApi('jobs');
+  expect((await api.discover()).reaction_speakers).toEqual(['Iraj', 'Alex']);
+  await api.analyze('one', {...options, reaction_speakers: ['Iraj']});
+  expect(JSON.parse(fetcher.mock.calls[1][1].body).reaction_speakers).toEqual(['Iraj']);
+  window.history.replaceState({}, '', '/?mock=1');
+  const user = userEvent.setup(); render(<App />);
+  await user.selectOptions(screen.getByLabelText('Reaction speakers'), 'Iraj');
+  expect(screen.getByText('Only me: Iraj')).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText('Reaction speakers'), 'Alex');
+  expect(screen.getByLabelText('Reaction speakers')).toHaveValue(['Iraj', 'Alex']);
+  await user.click(screen.getByRole('button', {name: 'Use all speakers'}));
+  expect(screen.getByLabelText('Reaction speakers')).toHaveValue([]);
 });
 
 it('edits chaos, reaction size and clean policy independently', async () => {

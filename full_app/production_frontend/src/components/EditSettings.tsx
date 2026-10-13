@@ -36,11 +36,18 @@ export function EditSettings({ options, change, capabilities, legacy, preset, se
       onChange={e => change('reaction_size', e.target.value)}>
       <option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option>
     </select></label>
+    <label>Reaction speakers<select multiple disabled={!supports('reaction_speakers')}
+      value={o.reaction_speakers} onChange={e => change('reaction_speakers', Array.from(e.target.selectedOptions, option => option.value))}>
+      {(capabilities.reaction_speakers ?? []).map(speaker => <option key={speaker} value={speaker}>{speaker}</option>)}
+    </select></label>
+    <small>{o.reaction_speakers.length === 1 ? `Only me: ${o.reaction_speakers[0]}` : 'No selection uses everyone in the pack.'}</small>
+    <button type="button" disabled={!supports('reaction_speakers')} onClick={() => change('reaction_speakers', [])}>Use all speakers</button>
     <label><input type="checkbox" disabled={!supports('clean')} checked={o.clean}
       onChange={e => change('clean', e.target.checked)} />Clean reactions (exclude explicit clips)</label>
     <button type="button" disabled={!supports("full_experience")} onClick={() => {
       change("full_experience", true);
-      for (const key of ["planner_v2", "audio_ai", "captions", "reactions", "sam", "sam_reframe", "beat_sync", "transitions", "cards", "narration", "share_kit", "gemini_image", "window_scoring", "use_signals"] as const) change(key, true);
+      for (const key of ["planner_v2", "audio_ai", "captions", "reactions", "sam", "sam_reframe", "beat_sync", "transitions", "cards", "share_kit", "gemini_image", "window_scoring", "use_signals"] as const) change(key, true);
+      change("narration", false);
       change("privacy_blur", false); change("music", "energetic");
     }}>Full experience</button>
     <label>Game<select value={o.game} onChange={e => change("game", e.target.value)}>

@@ -107,6 +107,8 @@ def extra_signals(pipeline, job):
 
 def team_source(pipeline, job, scratch):
     """Compose aligned angles on each selected primary-source interval."""
+    from reactions.pack import configure_render_speakers
+    configure_render_speakers(job['options'].get('reaction_speakers', []), scratch)
     if not job['options'].get('multipov'):
         return None
     sources = job.get('sources', [job['source']])
@@ -302,6 +304,10 @@ def private_source(pipeline, job, source, scratch, suffix=''):
 
 
 def finish_output(pipeline, job, output, plan, scratch):
+    # A rerender starts with fresh audio; never report a previous narrator track.
+    job.pop('narration_track', None)
+    job.get('render_evidence', {}).pop('narration_graph', None)
+    job.get('timings', {}).pop('narration', None)
     if job['options'].get('narration'):
         build = pipeline.hook('narration', 'build', job)
         render = pipeline.hook('narration.render', 'render', job)
