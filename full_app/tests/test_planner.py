@@ -80,6 +80,9 @@ def test_effects_speed_peak_trims_and_styles(style):
         # STYLE-1: Clean Edit keeps 1-2 tasteful SFX for the whole montage and no reactions.
         assert 1 <= len(plan.sfx) <= 2
         assert not plan.reactions
+    elif style == "cinematic":
+        # Cinematic SFX only, sparse: a boom at the climax rather than a meme stack.
+        assert 1 <= len([s for s in plan.sfx if s.clip_id == c.id]) <= 3
     else:
         assert 2 <= len([s for s in plan.sfx if s.clip_id == c.id]) <= 5
     assert all(r.position == "bottom_right" for r in plan.reactions)

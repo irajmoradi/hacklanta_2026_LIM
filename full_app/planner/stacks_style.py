@@ -55,6 +55,10 @@ def restrained_stacks(plan, rng):
         plan.transitions.append(Transition(clip_id=last.id, name='fade_out',
                                            start=plan.duration-length, duration=length))
     if cinematic:
-        for point in plan.music.energy_curve:
+        curve = plan.music.energy_curve
+        for point in curve:
             point.energy = .1 if point.time == plan.duration else .15+.75*point.time/max(plan.duration, 1)
+        if len(curve) >= 2:
+            curve[-2].energy = 1  # quiet→escalation still lands on the climax
+
     return True
